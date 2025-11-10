@@ -13,21 +13,38 @@
  * - 15 تبويب مطور بالكامل
  * - جميع الحقول محسّنة
  */
-
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // 1. تعديل هذا السطر
-import { fetchEmployees, createEmployee, Employee } from '../../api/employeeApi'; // 2. تعديل هذا السطر
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  fetchEmployees,
+  createEmployee,
+  Employee,
+  updateEmployeePromotion,
+  updateEmployeeStatus,
+  fetchEmployeeAttendance,
+  fetchEmployeeLeaveRequests,
+  fetchEmployeeSkills,
+  fetchEmployeeCertifications,
+  EmployeeAttachment,
+  fetchEmployeeAttachments,
+  fetchEmployeePromotions,
+  EmployeePromotion,
+  fetchEmployeeEvaluations,
+  EmployeeEvaluation,
+  EmployeeCertification,
+  EmployeeSkill,
+  EmployeeLeaveRequest,
+  EmployeeAttendance,
+  uploadEmployeeAttachment,
+} from '../../api/employeeApi';
 import { Skeleton } from '../ui/skeleton';
-import { useForm, Controller } from "react-hook-form"; // 3. إضافة Form Hook
-import { toast } from "sonner"; // 4. إضافة إشعارات
-import { z } from "zod"; // 5. (اختياري: للتحقق المتقدم)
-import { Label } from '../ui/label'; // 6. (قد تكون موجودة، تأكد منها)
-import { Card, CardContent, CardHeader } from '../ui/card';
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { ScrollArea } from '../ui/scroll-area';
-import { Progress } from '../ui/progress';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
@@ -38,7 +55,8 @@ import {
   Settings, History, Archive, RefreshCw, Printer, Target, Award,
   TrendingUp, Paperclip, Shield, Bell, Phone, MapPin, Briefcase,
   GraduationCap, Star, UserCheck, Home, Globe, FileText, Lock, Unlock,
-  ArrowUp, ArrowDown, Ban, Snowflake, Key, UserX, TrendingDown
+  ArrowUp, ArrowDown, Ban, Snowflake, Key, UserX, TrendingDown,
+  CalendarIcon, AlertTriangle
 } from 'lucide-react';
 import { InputWithCopy, TextAreaWithCopy, SelectWithCopy } from '../InputWithCopy';
 import DateInputWithToday from '../DateInputWithToday';
@@ -93,152 +111,172 @@ const DEPARTMENTS = [
   'تقنية المعلومات'
 ];
 
-// بيانات تجريبية
-const SAMPLE_EMPLOYEES = [
-  {
-    id: '817-00123',
-    name: 'أحمد محمد علي',
-    nameEn: 'Ahmed Mohammed Ali',
-    nationalId: '1234567890',
-    type: 'full-time',
-    status: 'active',
-    department: 'الهندسة',
-    position: 'مهندس معماري',
-    email: 'ahmed@example.com',
-    phone: '0501234567',
-    hireDate: '2020-01-15',
-    baseSalary: 8000,
-    gosiNumber: 'GOSI-12345',
-    iqamaNumber: '',
-    nationality: 'سعودي',
-    permissionsCount: 156,
-    jobLevel: 5,
-    performanceRating: 4.7
-  },
-  {
-    id: '817-00124',
-    name: 'فاطمة خالد',
-    nameEn: 'Fatima Khalid',
-    nationalId: '9876543210',
-    type: 'freelancer',
-    status: 'active',
-    department: 'التعقيب',
-    position: 'معقب معاملات',
-    email: 'fatima@example.com',
-    phone: '0509876543',
-    hireDate: '2023-06-01',
-    baseSalary: 0,
-    gosiNumber: '',
-    iqamaNumber: '',
-    nationality: 'سعودي',
-    permissionsCount: 45,
-    jobLevel: 2,
-    performanceRating: 4.2
-  },
-  {
-    id: '817-00125',
-    name: 'سعد عبدالله',
-    nameEn: 'Saad Abdullah',
-    nationalId: '5555555555',
-    type: 'remote',
-    status: 'frozen-temp',
-    department: 'تقنية المعلومات',
-    position: 'مطور برمجيات',
-    email: 'saad@example.com',
-    phone: '0555555555',
-    hireDate: '2022-03-10',
-    baseSalary: 7000,
-    gosiNumber: 'GOSI-54321',
-    iqamaNumber: '',
-    nationality: 'سعودي',
-    permissionsCount: 89,
-    jobLevel: 4,
-    performanceRating: 4.5,
-    frozenUntil: '2025-02-28',
-    frozenReason: 'في إجازة طويلة بدون راتب'
-  }
-];
-
 const EmployeesManagement_Complete_817: React.FC = () => {
   const [activeTab, setActiveTab] = useState('817-01');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const { 
-    data: employeesData, // 'data' هو البيانات الراجعة
-    isLoading,         // حالة التحميل
-    isError,           // حالة الخطأ
-    error              // نص الخطأ
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+
+  const {
+    data: employeesData,
+    isLoading,
+    isError,
+    error
   } = useQuery<Employee[], Error>({
-    queryKey: ['employees'], // مفتاح فريد لتخزين البيانات
-    queryFn: fetchEmployees  // الوظيفة التي تقوم بالجلب
+    queryKey: ['employees'],
+    queryFn: fetchEmployees,
   });
 
-  // (مهم) مكتبة react-query قد ترجع 'undefined' أثناء التحميل
-  // لذلك نستخدم '?? []' لضمان أن 'employees' هي دائماً مصفوفة
   const employees = employeesData ?? [];
-  
-  // حالات النوافذ المنبثقة
-  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+  const queryClient = useQueryClient();
   const [showFreezeDialog, setShowFreezeDialog] = useState(false);
   const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [showDemoteDialog, setShowDemoteDialog] = useState(false);
   const [showTerminateDialog, setShowTerminateDialog] = useState(false);
   const [showPermissionsDialog, setShowPermissionsDialog] = useState(false);
-  const queryClient = useQueryClient();
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const { 
-  handleSubmit, 
-  formState: { errors }, 
-  reset, 
-  control // 1. أضفنا control
-} = useForm({
-  // 2. أضفنا القيم الافتراضية
-  defaultValues: {
-    name: "",
-    nameEn: "",
-    nationalId: "",
-    nationality: "سعودي", // قيمة افتراضية
-    email: "",
-    phone: "",
-    password: "",
-    type: "full-time",
-    department: "الهندسة",
-    position: "",
-    hireDate: "",
-    baseSalary: "",
-    gosiNumber: ""
-  }
-});
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset
+  } = useForm();
 
-  // إعداد (Mutation) لإرسال البيانات للـ Backend
+  // ================ START: HOOKS MOVED TO TOP LEVEL ================
+  // 817-07: الحضور والإجازات
+  const attendanceQuery = useQuery({
+    queryKey: ['employeeAttendance', selectedEmployeeId],
+    queryFn: () => fetchEmployeeAttendance(selectedEmployeeId!),
+    enabled: !!selectedEmployeeId && activeTab === '817-07',
+  });
+  const leaveQuery = useQuery({
+    queryKey: ['employeeLeaveRequests', selectedEmployeeId],
+    queryFn: () => fetchEmployeeLeaveRequests(selectedEmployeeId!),
+    enabled: !!selectedEmployeeId && activeTab === '817-07',
+  });
+
+  // 817-08: المهارات والشهادات
+  const skillsQuery = useQuery({
+    queryKey: ['employeeSkills', selectedEmployeeId],
+    queryFn: () => fetchEmployeeSkills(selectedEmployeeId!),
+    enabled: !!selectedEmployeeId && activeTab === '817-08',
+  });
+  const certsQuery = useQuery({
+    queryKey: ['employeeCertifications', selectedEmployeeId],
+    queryFn: () => fetchEmployeeCertifications(selectedEmployeeId!),
+    enabled: !!selectedEmployeeId && activeTab === '817-08',
+  });
+
+  // 817-09: التقييمات
+  const evaluationsQuery = useQuery({
+    queryKey: ['employeeEvaluations', selectedEmployeeId],
+    queryFn: () => fetchEmployeeEvaluations(selectedEmployeeId!),
+    enabled: !!selectedEmployeeId && activeTab === '817-09',
+  });
+
+  // 817-10: الترقيات
+  const promotionsQuery = useQuery({
+    queryKey: ['employeePromotions', selectedEmployeeId],
+    queryFn: () => fetchEmployeePromotions(selectedEmployeeId!),
+    enabled: !!selectedEmployeeId && activeTab === '817-10',
+  });
+
+  // 817-11: الوثائق
+  const attachmentsQuery = useQuery({
+    queryKey: ['employeeAttachments', selectedEmployeeId],
+    queryFn: () => fetchEmployeeAttachments(selectedEmployeeId!),
+    enabled: !!selectedEmployeeId && activeTab === '817-11',
+  });
+  // ================ END: HOOKS MOVED TO TOP LEVEL ================
+
   const createEmployeeMutation = useMutation({
-    mutationFn: createEmployee, // الوظيفة التي سترسل (من employeeApi.ts)
-    
-    // عند النجاح
+    mutationFn: createEmployee,
     onSuccess: (data) => {
       toast.success(`تم إنشاء الموظف "${data.employee.name}" بنجاح!`);
-      queryClient.invalidateQueries({ queryKey: ['employees'] }); // تحديث القائمة في تاب 817-01
-      reset(); // تفريغ الحقول
-      setActiveTab('817-01'); // الرجوع لقائمة الموظفين
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      reset();
+      setActiveTab('817-01');
     },
-    
-    // عند الفشل
     onError: (error) => {
       toast.error(error.message || 'فشل إنشاء الموظف');
     }
   });
 
-  // دالة الإرسال (عند ضغط زر الحفظ)
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ employeeId, statusData }: { employeeId: string; statusData: any }) =>
+      updateEmployeeStatus(employeeId, statusData),
+    onSuccess: (data) => {
+      toast.success(`تم تحديث حالة الموظف "${data.name}" إلى "${data.status}"`);
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setShowFreezeDialog(false);
+      setShowTerminateDialog(false);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'فشل تحديث حالة الموظف');
+    }
+  });
+
+  const updatePromotionMutation = useMutation({
+    mutationFn: ({ employeeId, promotionData }: { employeeId: string; promotionData: any }) =>
+      updateEmployeePromotion(employeeId, promotionData),
+    onSuccess: (data) => {
+      toast.success(`تم تحديث بيانات الموظف "${data.name}" بنجاح.`);
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setShowPromoteDialog(false);
+      setShowDemoteDialog(false);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'فشل تحديث بيانات الموظف');
+    }
+  });
+
+  // (بعد updatePromotionMutation)
+  const uploadAttachmentMutation = useMutation({
+    mutationFn: ({ file, employeeId }: { file: File; employeeId: string }) =>
+      uploadEmployeeAttachment(file, employeeId),
+    onSuccess: (data) => {
+      toast.success(`تم رفع الملف "${data.fileName}" بنجاح.`);
+      // تحديث قائمة المرفقات في تاب 11
+      queryClient.invalidateQueries({ queryKey: ['employeeAttachments', selectedEmployeeId] });
+      setShowUploadDialog(false);
+      setSelectedFile(null);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'فشل رفع الملف');
+    }
+  });
+
   const onSubmit = (data: any) => {
-    // تحويل الراتب إلى رقم
     data.baseSalary = parseFloat(data.baseSalary);
-    
-    // إرسال البيانات للـ Backend
     createEmployeeMutation.mutate(data);
   };
 
-  // إحصائيات الموظفين
+  const filteredEmployees = useMemo(() => {
+    return employees.filter(emp => {
+      if (activeTab === '817-03') return emp.type === 'full-time';
+      if (activeTab === '817-04') return emp.type === 'part-time';
+      if (activeTab === '817-05') return emp.type === 'freelancer';
+      if (activeTab === '817-06') return emp.type === 'remote';
+      if (activeTab === '817-14') return emp.status === 'terminated' || emp.status === 'inactive';
+
+      const matchesSearch = (
+        emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (emp.nameEn && emp.nameEn.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        emp.nationalId.includes(searchQuery) ||
+        emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.phone.includes(searchQuery)
+      );
+      const matchesType = filterType === 'all' || emp.type === filterType;
+      const matchesStatus = filterStatus === 'all' || emp.status === filterStatus;
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [employees, searchQuery, filterType, filterStatus, activeTab]);
+
   const statistics = useMemo(() => {
     return {
       total: employees.length,
@@ -248,9 +286,52 @@ const EmployeesManagement_Complete_817: React.FC = () => {
       freelancers: employees.filter(e => e.type === 'freelancer').length,
       remote: employees.filter(e => e.type === 'remote').length,
       saudis: employees.filter(e => e.nationality === 'سعودي').length,
-      nonSaudis: employees.filter(e => e.nationality !== 'سعودي').length
+      nonSaudis: employees.filter(e => e.nationality !== 'سعودي').length,
+      terminated: employees.filter(e => e.status === 'terminated' || e.status === 'inactive').length
     };
   }, [employees]);
+
+  const renderProtectedTabContent = (
+    employeeId: string | null,
+    query: { isLoading: boolean; isError: boolean; error: any; data: any },
+    title: string,
+    icon: React.ElementType,
+    renderFn: (data: any) => React.ReactNode
+  ) => {
+    const Icon = icon;
+    if (!employeeId) {
+      return (
+        <div className="text-center text-gray-500 py-20">
+          <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+          <h3 className="text-lg font-semibold">الرجاء اختيار موظف</h3>
+          <p className="text-sm">لعرض {title}، يرجى اختيار موظف من (تاب 817-01) أولاً.</p>
+        </div>
+      );
+    }
+
+    if (query.isLoading) {
+      return (
+        <div className="space-y-3">
+          <Skeleton className="h-8 w-1/3" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      );
+    }
+
+    if (query.isError) {
+      return (
+        <div className="text-center text-red-600 py-20">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold">خطأ في جلب البيانات</h3>
+          <p className="text-sm">{query.error?.message || 'فشل تحميل البيانات من السيرفر'}</p>
+        </div>
+      );
+    }
+
+    return renderFn(query.data);
+  };
 
   const renderTabContent = () => {
     const tab = TABS_CONFIG.find(t => t.id === activeTab);
@@ -259,8 +340,7 @@ const EmployeesManagement_Complete_817: React.FC = () => {
     switch (activeTab) {
       // 817-01: قائمة الموظفين
       case '817-01':
-
-      if (isLoading) {
+        if (isLoading) {
           return (
             <div className="universal-dense-tab-content space-y-2">
               <Skeleton className="h-12 w-full" />
@@ -270,7 +350,6 @@ const EmployeesManagement_Complete_817: React.FC = () => {
             </div>
           );
         }
-
         if (isError) {
           return (
             <div className="universal-dense-tab-content flex flex-col items-center justify-center min-h-[300px] text-red-600">
@@ -296,7 +375,6 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                {/* إحصائيات سريعة */}
                 <div className="dense-stats-grid gap-3 mb-4">
                   {[
                     { label: 'إجمالي الموظفين', value: statistics.total, icon: Users, color: 'blue' },
@@ -317,10 +395,7 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                     </div>
                   ))}
                 </div>
-
                 <Separator className="my-3" />
-
-                {/* البحث والفلترة */}
                 <div className="dense-grid dense-grid-3 gap-3 mb-4">
                   <div className="relative">
                     <Search className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -333,7 +408,6 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                       style={{ height: '32px', fontSize: '12px', paddingRight: '32px' }}
                     />
                   </div>
-                  
                   <select
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value)}
@@ -345,7 +419,6 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                       <option key={type.value} value={type.value}>{type.label}</option>
                     ))}
                   </select>
-
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
@@ -358,15 +431,12 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                     ))}
                   </select>
                 </div>
-
-                {/* قائمة الموظفين */}
                 <div className="space-y-2">
                   {employees.map((employee) => {
                     const typeInfo = EMPLOYEE_TYPES.find(t => t.value === employee.type);
                     const statusInfo = EMPLOYEE_STATUSES.find(s => s.value === employee.status);
-
                     return (
-                      <Card key={employee.id} className="dense-content-card hover:shadow-md transition-shadow">
+                      <Card key={employee.id} className="dense-content-card hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedEmployeeId(employee.id)}>
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
@@ -375,8 +445,7 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                             <div>
                               <div className="compact-title flex items-center gap-2">
                                 {employee.name}
-                                {/* أيقونة عدد الصلاحيات */}
-                                <button 
+                                <button
                                   onClick={() => {
                                     setSelectedEmployee(employee);
                                     setShowPermissionsDialog(true);
@@ -403,7 +472,6 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                             </Badge>
                           </div>
                         </div>
-
                         <div className="dense-grid dense-grid-4 gap-2 text-xs mb-2">
                           <div>
                             <span className="text-gray-600">القسم:</span>
@@ -422,7 +490,6 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                             <span className="font-medium mr-1 text-yellow-600">⭐ {employee.performanceRating}</span>
                           </div>
                         </div>
-
                         <div className="flex items-center gap-1">
                           <Button className="dense-action-btn" title="عرض">
                             <Eye className="h-3 w-3" />
@@ -430,8 +497,8 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                           <Button className="dense-action-btn" title="تعديل">
                             <Edit className="h-3 w-3" />
                           </Button>
-                          <Button 
-                            className="dense-action-btn" 
+                          <Button
+                            className="dense-action-btn"
                             title="ترقية"
                             onClick={() => {
                               setSelectedEmployee(employee);
@@ -440,8 +507,8 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                           >
                             <ArrowUp className="h-3 w-3 text-green-600" />
                           </Button>
-                          <Button 
-                            className="dense-action-btn" 
+                          <Button
+                            className="dense-action-btn"
                             title="تخفيض الدرجة"
                             onClick={() => {
                               setSelectedEmployee(employee);
@@ -450,8 +517,8 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                           >
                             <TrendingDown className="h-3 w-3 text-orange-600" />
                           </Button>
-                          <Button 
-                            className="dense-action-btn" 
+                          <Button
+                            className="dense-action-btn"
                             title="تجميد الحساب"
                             onClick={() => {
                               setSelectedEmployee(employee);
@@ -460,8 +527,8 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                           >
                             <Snowflake className="h-3 w-3 text-cyan-600" />
                           </Button>
-                          <Button 
-                            className="dense-action-btn" 
+                          <Button
+                            className="dense-action-btn"
                             title="إنهاء الخدمة"
                             onClick={() => {
                               setSelectedEmployee(employee);
@@ -483,7 +550,7 @@ const EmployeesManagement_Complete_817: React.FC = () => {
           </div>
         );
 
-      // 817-02: إضافة موظف (نسخة مصححة)
+      // 817-02: إضافة موظف
       case '817-02':
         return (
           <div className="universal-dense-tab-content">
@@ -494,7 +561,7 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                   إضافة موظف جديد
                 </h2>
                 <div className="dense-section-actions">
-                  <Button 
+                  <Button
                     className="dense-btn dense-btn-primary"
                     onClick={handleSubmit(onSubmit)}
                     disabled={createEmployeeMutation.isPending}
@@ -512,251 +579,440 @@ const EmployeesManagement_Complete_817: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                  
-                  {/* المعلومات الأساسية */}
                   <div>
                     <h3 className="compact-title mb-3" style={{ color: '#2563eb', fontWeight: 700 }}>
                       المعلومات الأساسية
                     </h3>
                     <div className="dense-grid dense-grid-2 gap-3">
-                      
-                      {/* رقم الموظف */}
                       <InputWithCopy
                         label="رقم الموظف (تلقائي)"
                         id="employeeId"
                         value="سيتم إنشاؤه تلقائياً"
                         disabled
                       />
-                      
-                      {/* الاسم بالعربي */}
-                      <Controller
-                        name="name"
-                        control={control}
-                        rules={{ required: "الاسم مطلوب" }}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="الاسم بالعربي *"
-                            id="nameAr"
-                            placeholder="الاسم الكامل بالعربي"
-                            {...field} // تمرير value, onChange, etc.
-                          />
-                        )}
+                      <InputWithCopy
+                        label="الاسم بالعربي *"
+                        id="nameAr"
+                        placeholder="الاسم الكامل بالعربي"
+                        {...register("name", { required: "الاسم مطلوب" })}
                       />
-
-                      {/* الاسم بالإنجليزي */}
-                      <Controller
-                        name="nameEn"
-                        control={control}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="الاسم بالإنجليزي"
-                            id="nameEn"
-                            placeholder="Full Name in English"
-                            {...field}
-                          />
-                        )}
+                      <InputWithCopy
+                        label="الاسم بالإنجليزي"
+                        id="nameEn"
+                        placeholder="Full Name in English"
+                        {...register("nameEn")}
                       />
-
-                      {/* رقم الهوية */}
-                      <Controller
-                        name="nationalId"
-                        control={control}
-                        rules={{ required: "رقم الهوية مطلوب" }}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="رقم الهوية / الإقامة *"
-                            id="nationalId"
-                            placeholder="1234567890"
-                            {...field}
-                          />
-                        )}
+                      <InputWithCopy
+                        label="رقم الهوية / الإقامة *"
+                        id="nationalId"
+                        placeholder="1234567890"
+                        {...register("nationalId", { required: "رقم الهوية مطلوب" })}
                       />
-
-                      {/* الجنسية */}
-                      <Controller
-                        name="nationality"
-                        control={control}
-                        render={({ field }) => (
-                          <SelectWithCopy
-                            label="الجنسية"
-                            id="nationality"
-                            value={field.value}
-                            onValueChange={field.onChange} // Select تستخدم onValueChange
-                            options={[
-                              { value: 'سعودي', label: 'سعودي' },
-                              { value: 'مصري', label: 'مصري' },
-                              { value: 'سوري', label: 'سوري' },
-                              { value: 'أردني', label: 'أردني' },
-                              { value: 'يمني', label: 'يمني' }
-                            ]}
-                          />
-                        )}
+                      <SelectWithCopy
+                        label="الجنسية"
+                        id="nationality"
+                        {...register("nationality")}
+                        options={[
+                          { value: 'سعودي', label: 'سعودي' },
+                          { value: 'مصري', label: 'مصري' },
+                          { value: 'سوري', label: 'سوري' },
+                          { value: 'أردني', label: 'أردني' },
+                          { value: 'يمني', label: 'يمني' }
+                        ]}
                       />
-
-                      {/* البريد الإلكتروني */}
-                      <Controller
-                        name="email"
-                        control={control}
-                        rules={{ required: "البريد مطلوب" }}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="البريد الإلكتروني *"
-                            id="email"
-                            type="email"
-                            placeholder="employee@example.com"
-                            {...field}
-                          />
-                        )}
+                      <InputWithCopy
+                        label="البريد الإلكتروني *"
+                        id="email"
+                        type="email"
+                        placeholder="employee@example.com"
+                        {...register("email", { required: "البريد مطلوب" })}
                       />
-
-                      {/* رقم الجوال */}
-                      <Controller
-                        name="phone"
-                        control={control}
-                        rules={{ required: "الجوال مطلوب" }}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="رقم الجوال *"
-                            id="phone"
-                            type="tel"
-                            placeholder="05xxxxxxxx"
-                            {...field}
-                          />
-                        )}
+                      <InputWithCopy
+                        label="رقم الجوال *"
+                        id="phone"
+                        type="tel"
+                        placeholder="05xxxxxxxx"
+                        {...register("phone", { required: "الجوال مطلوب" })}
                       />
-
-                      {/* كلمة المرور */}
-                      <Controller
-                        name="password"
-                        control={control}
-                        rules={{ required: "كلمة المرور مطلوبة" }}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="كلمة المرور *"
-                            id="password"
-                            type="password"
-                            placeholder="كلمة مرور قوية"
-                            {...field}
-                          />
-                        )}
+                      <InputWithCopy
+                        label="كلمة المرور *"
+                        id="password"
+                        type="password"
+                        placeholder="كلمة مرور قوية"
+                        {...register("password", { required: "كلمة المرور مطلوبة" })}
                       />
                     </div>
                   </div>
-
                   <Separator />
-
-                  {/* معلومات الوظيفة */}
                   <div>
                     <h3 className="compact-title mb-3" style={{ color: '#2563eb', fontWeight: 700 }}>
                       معلومات الوظيفة
                     </h3>
                     <div className="dense-grid dense-grid-2 gap-3">
-                      
-                      {/* نوع الموظف */}
-                      <Controller
-                        name="type"
-                        control={control}
-                        rules={{ required: "النوع مطلوب" }}
-                        render={({ field }) => (
-                          <SelectWithCopy
-                            label="نوع الموظف *"
-                            id="employeeType"
-                            value={field.value}
-                            onValueChange={field.onChange}
-                            options={EMPLOYEE_TYPES.map(t => ({ value: t.value, label: t.label }))}
-                          />
-                        )}
+                      <SelectWithCopy
+                        label="نوع الموظف *"
+                        id="employeeType"
+                        {...register("type", { required: "النوع مطلوب" })}
+                        options={EMPLOYEE_TYPES.map(t => ({ value: t.value, label: t.label }))}
                       />
-
-                      {/* القسم */}
-                      <Controller
-                        name="department"
-                        control={control}
-                        rules={{ required: "القسم مطلوب" }}
-                        render={({ field }) => (
-                          <SelectWithCopy
-                            label="القسم *"
-                            id="department"
-                            value={field.value}
-                            onValueChange={field.onChange}
-                            options={DEPARTMENTS.map(d => ({ value: d, label: d }))}
-                          />
-                        )}
+                      <SelectWithCopy
+                        label="القسم *"
+                        id="department"
+                        {...register("department", { required: "القسم مطلوب" })}
+                        options={DEPARTMENTS.map(d => ({ value: d, label: d }))}
                       />
-
-                      {/* المسمى الوظيفي */}
-                      <Controller
-                        name="position"
-                        control={control}
-                        rules={{ required: "المسمى مطلوب" }}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="المسمى الوظيفي *"
-                            id="position"
-                            placeholder="مثال: مهندس معماري"
-                            {...field}
-                          />
-                        )}
+                      <InputWithCopy
+                        label="المسمى الوظيفي *"
+                        id="position"
+                        placeholder="مثال: مهندس معماري"
+                        {...register("position", { required: "المسمى مطلوب" })}
                       />
-
-                      {/* تاريخ التعيين */}
-                      <Controller
-                        name="hireDate"
-                        control={control}
-                        rules={{ required: "التاريخ مطلوب" }}
-                        render={({ field }) => (
-                          <DateInputWithToday
-                            label="تاريخ التعيين *"
-                            id="hireDate"
-                            value={field.value}
-                            onChange={field.onChange}
-                          />
-                        )}
+                      <DateInputWithToday
+                        label="تاريخ التعيين *"
+                        id="hireDate"
+                        {...register("hireDate", { required: "التاريخ مطلوب" })}
                       />
-                      
-                      {/* الراتب الأساسي */}
-                      <Controller
-                        name="baseSalary"
-                        control={control}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="الراتب الأساسي (ر.س)"
-                            id="baseSalary"
-                            type="number"
-                            placeholder="0.00"
-                            {...field}
-                          />
-                        )}
+                      <InputWithCopy
+                        label="الراتب الأساسي (ر.س)"
+                        id="baseSalary"
+                        type="number"
+                        placeholder="0.00"
+                        {...register("baseSalary")}
                       />
-                      
-                      {/* رقم التأمينات */}
-                      <Controller
-                        name="gosiNumber"
-                        control={control}
-                        render={({ field }) => (
-                          <InputWithCopy
-                            label="رقم التأمينات (GOSI)"
-                            id="gosiNumber"
-                            placeholder="GOSI-12345"
-                            {...field}
-                          />
-                        )}
+                      <InputWithCopy
+                        label="رقم التأمينات (GOSI)"
+                        id="gosiNumber"
+                        placeholder="GOSI-12345"
+                        {...register("gosiNumber")}
                       />
                     </div>
                   </div>
-                  
-                  {/* عرض الأخطاء */}
                   {(errors.name || errors.nationalId || errors.email || errors.phone || errors.password) && (
                     <div className="text-red-600 text-sm p-3 bg-red-50 rounded-lg">
                       الرجاء تعبئة جميع الحقول الإلزامية (*).
                     </div>
                   )}
-
                 </form>
               </CardContent>
             </Card>
           </div>
         );
+
+      case '817-03':
+      case '817-04':
+      case '817-05':
+      case '817-06':
+      case '817-14':
+        const listTitle = tab.id === '817-03' ? `الموظفون الدائمون (${statistics.fullTime})`
+          : tab.id === '817-04' ? `الموظفون الجزئيون (${statistics.partTime})`
+            : tab.id === '817-05' ? `الفريلانسرز (${statistics.freelancers})`
+              : tab.id === '817-06' ? `العمل عن بعد (${statistics.remote})`
+                : `الأرشيف (${statistics.terminated})`;
+        return (
+          <div className="universal-dense-tab-content">
+            <Card className="dense-section">
+              <CardHeader className="dense-section-header">
+                <h2 className="dense-section-title"><tab.icon className="h-5 w-5" /> {listTitle}</h2>
+              </CardHeader>
+              <CardContent>
+                {filteredEmployees.length === 0 ? (
+                  <div className="text-center text-gray-500 py-10">
+                    <Users className="h-10 w-10 mx-auto mb-2 text-gray-400" />
+                    لا يوجد موظفون في هذا التصنيف.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredEmployees.map((employee) => {
+                      const typeInfo = EMPLOYEE_TYPES.find(t => t.value === employee.type);
+                      const statusInfo = EMPLOYEE_STATUSES.find(s => s.value === employee.status);
+                      return (
+                        <Card key={employee.id} className="dense-content-card">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Users className="h-8 w-8 text-blue-600" />
+                              <div>
+                                <div className="compact-title">{employee.name}</div>
+                                <div className="text-xs text-gray-600">{employee.employeeCode} - {employee.position}</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Badge className={typeInfo?.color}>{typeInfo?.label}</Badge>
+                              <Badge className={statusInfo?.color}>{statusInfo?.label}</Badge>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      // 817-07: الحضور والإجازات
+      case '817-07': {
+        const combinedQuery = {
+          isLoading: attendanceQuery.isLoading || leaveQuery.isLoading,
+          isError: attendanceQuery.isError || leaveQuery.isError,
+          error: attendanceQuery.error || leaveQuery.error,
+          data: { attendance: attendanceQuery.data, leave: leaveQuery.data }
+        };
+        return renderProtectedTabContent(selectedEmployeeId, combinedQuery, "الحضور والإجازات", CalendarIcon, (data) => (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>سجل الحضور اليومي</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>التاريخ</TableHead>
+                          <TableHead>الحالة</TableHead>
+                          <TableHead>الدخول</TableHead>
+                          <TableHead>الخروج</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(data.attendance || []).map((att: EmployeeAttendance) => (
+                          <TableRow key={att.id}>
+                            <TableCell>{att.date}</TableCell>
+                            <TableCell>{att.status}</TableCell>
+                            <TableCell>{att.checkIn || '---'}</TableCell>
+                            <TableCell>{att.checkOut || '---'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>طلبات الإجازات</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>النوع</TableHead>
+                          <TableHead>من</TableHead>
+                          <TableHead>إلى</TableHead>
+                          <TableHead>الحالة</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(data.leave || []).map((req: EmployeeLeaveRequest) => (
+                          <TableRow key={req.id}>
+                            <TableCell>{req.type}</TableCell>
+                            <TableCell>{req.startDate}</TableCell>
+                            <TableCell>{req.endDate}</TableCell>
+                            <TableCell>{req.status}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+              <div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>تقويم الموظف</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      className="rounded-md border"
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        ));
+      }
+
+      // 817-08: المهارات والشهادات
+      case '817-08': {
+        const combinedQuery = {
+          isLoading: skillsQuery.isLoading || certsQuery.isLoading,
+          isError: skillsQuery.isError || certsQuery.isError,
+          error: skillsQuery.error || certsQuery.error,
+          data: { skills: skillsQuery.data, certifications: certsQuery.data }
+        };
+        return renderProtectedTabContent(selectedEmployeeId, combinedQuery, "المهارات والشهادات", GraduationCap, (data) => (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader><CardTitle>المهارات</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>التصنيف</TableHead>
+                      <TableHead>المهارة</TableHead>
+                      <TableHead>المستوى</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(data.skills || []).map((skill: EmployeeSkill) => (
+                      <TableRow key={skill.id}>
+                        <TableCell>{skill.category}</TableCell>
+                        <TableCell>{skill.skill}</TableCell>
+                        <TableCell>{skill.level}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle>الشهادات</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>الشهادة</TableHead>
+                      <TableHead>الجهة المانحة</TableHead>
+                      <TableHead>تاريخ الإصدار</TableHead>
+                      <TableHead>تاريخ الانتهاء</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(data.certifications || []).map((cert: EmployeeCertification) => (
+                      <TableRow key={cert.id}>
+                        <TableCell>{cert.name}</TableCell>
+                        <TableCell>{cert.authority}</TableCell>
+                        <TableCell>{cert.issueDate}</TableCell>
+                        <TableCell>{cert.expiryDate || '---'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        ));
+      }
+
+      // 817-09: التقييمات
+      case '817-09': {
+        return renderProtectedTabContent(selectedEmployeeId, evaluationsQuery, "التقييمات", Star, (data: EmployeeEvaluation[]) => (
+          <Card>
+            <CardHeader><CardTitle>سجل التقييمات</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>التاريخ</TableHead>
+                    <TableHead>المُقيّم</TableHead>
+                    <TableHead>التقييم</TableHead>
+                    <TableHead>الملاحظات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(data || []).map((evalItem) => (
+                    <TableRow key={evalItem.id}>
+                      <TableCell>{evalItem.date}</TableCell>
+                      <TableCell>{evalItem.evaluator}</TableCell>
+                      <TableCell>{evalItem.rating} / 5</TableCell>
+                      <TableCell>{evalItem.comments}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ));
+      }
+
+      // 817-10: الترقيات
+      case '817-10': {
+        return renderProtectedTabContent(selectedEmployeeId, promotionsQuery, "الترقيات", Award, (data: EmployeePromotion[]) => (
+          <Card>
+            <CardHeader><CardTitle>سجل الترقيات</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>التاريخ</TableHead>
+                    <TableHead>من منصب</TableHead>
+                    <TableHead>إلى منصب</TableHead>
+                    <TableHead>من مستوى</TableHead>
+                    <TableHead>إلى مستوى</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(data || []).map((promo) => (
+                    <TableRow key={promo.id}>
+                      <TableCell>{promo.date}</TableCell>
+                      <TableCell>{promo.oldPosition}</TableCell>
+                      <TableCell>{promo.newPosition}</TableCell>
+                      <TableCell>{promo.oldLevel}</TableCell>
+                      <TableCell>{promo.newLevel}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ));
+      }
+
+      // 817-11: الوثائق
+      case '817-11': {
+        return renderProtectedTabContent(selectedEmployeeId, attachmentsQuery, "الوثائق", Paperclip, (data: EmployeeAttachment[]) => (
+          <Card>
+            <CardHeader className="dense-section-header">
+              <h2 className="dense-section-title">
+                <Paperclip className="h-5 w-5" /> وثائق الموظف: {selectedEmployee?.name}
+              </h2>
+              <Button 
+                className="dense-btn dense-btn-primary"
+                onClick={() => setShowUploadDialog(true)}
+              >
+                <Upload className="h-3 w-3" /> رفع وثيقة جديدة
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>اسم الملف</TableHead>
+                    <TableHead>النوع</TableHead>
+                    <TableHead>الحجم</TableHead>
+                    <TableHead>تاريخ الرفع</TableHead>
+                    <TableHead>إجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(data || []).map((att) => (
+                    <TableRow key={att.id}>
+                      <TableCell>{att.fileName}</TableCell>
+                      <TableCell>{att.fileType}</TableCell>
+                      <TableCell>{(att.fileSize / 1024).toFixed(1)} KB</TableCell>
+                      <TableCell>{new Date(att.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Button className="dense-action-btn" title="تحميل">
+                          <Download className="h-3 w-3" />
+                        </Button>
+                        <Button className="dense-action-btn" title="حذف" variant="destructive">
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ));
+      }
+
       // باقي التابات
       default:
         return (
@@ -768,9 +1024,7 @@ const EmployeesManagement_Complete_817: React.FC = () => {
                   <h2 className="dense-section-title">{tab.title}</h2>
                 </div>
                 <div className="dense-section-actions">
-                  <Button className="dense-btn dense-btn-primary">
-                    حفظ
-                  </Button>
+                  <Button className="dense-btn dense-btn-primary">حفظ</Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -836,14 +1090,11 @@ const EmployeesManagement_Complete_817: React.FC = () => {
 
       {/* المحتوى الرئيسي: السايد بار + المحتوى */}
       <div className="flex" style={{ gap: '4px', paddingTop: '16px' }}>
-        {/* السايد بار الموحد */}
         <UnifiedTabsSidebar
           tabs={TABS_CONFIG}
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
-        
-        {/* محتوى الشاشة */}
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 220px)' }}>
           <Card className="flex-1 flex flex-col min-h-0 card-rtl">
             <ScrollArea className="flex-1">
@@ -854,7 +1105,6 @@ const EmployeesManagement_Complete_817: React.FC = () => {
           </Card>
         </div>
       </div>
-
       
       {/* النوافذ المنبثقة */}
       <div style={{ visibility: 'hidden', position: 'absolute' }}>
@@ -957,6 +1207,59 @@ const EmployeesManagement_Complete_817: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* --- 4. أضف هذه النافذة المنبثقة --- */}
+    <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+      <DialogContent style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5 text-blue-600" />
+            رفع وثيقة جديدة للموظف
+          </DialogTitle>
+          <DialogDescription>
+            سيتم ربط هذا الملف بـ: {selectedEmployee?.name}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-10">
+            <input
+              type="file"
+              id="fileUpload"
+              className="hidden"
+              onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)}
+            />
+            <Button
+              variant="outline"
+              onClick={() => document.getElementById('fileUpload')?.click()}
+            >
+              <FileText className="h-4 w-4 ml-2" />
+              {selectedFile ? 'تغيير الملف' : 'اختيار ملف'}
+            </Button>
+            {selectedFile && (
+              <p className="text-sm text-gray-600 mt-3">
+                الملف المختار: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { setShowUploadDialog(false); setSelectedFile(null); }}>
+            إلغاء
+          </Button>
+          <Button
+            className="bg-blue-500 hover:bg-blue-600"
+            disabled={!selectedFile || !selectedEmployeeId || uploadAttachmentMutation.isPending}
+            onClick={() => {
+              if (selectedFile && selectedEmployeeId) {
+                uploadAttachmentMutation.mutate({ file: selectedFile, employeeId: selectedEmployeeId });
+              }
+            }}
+          >
+            {uploadAttachmentMutation.isPending ? 'جارِ الرفع...' : <><CheckCircle className="h-4 w-4 ml-1" /> تأكيد الرفع</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
       {/* نافذة تجميد الحساب */}
       <Dialog open={showFreezeDialog} onOpenChange={setShowFreezeDialog}>

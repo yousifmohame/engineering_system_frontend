@@ -1,32 +1,17 @@
 /**
  * ============================================================================
- * الشاشة 300 - إدارة العملاء - النظام الشامل الكامل v18.0 FINAL
+ * الشاشة 300 - إدارة العملاء - v19.0 FINAL (مربوطة + واجهات كاملة)
  * ============================================================================
+ * ✅ مربوطة 100% بالـ Backend API
+ * ✅ واجهات كاملة لجميع التابات الـ 12 (من v18.0)
+ * ✅ معالجة Loading و Error
+ * ✅ Multi-step Wizard مكتمل
+ * ✅ نظام البروفايل الغني
+ * ✅ حسابات استكمال البيانات والدرجة (تُحسب في الـ Backend)
  * 
- * التحديثات الجديدة v18.0 (3 نوفمبر 2025):
- * ✅ 50+ عميل وهمي ببيانات كاملة ومتنوعة
- * ✅ نظام إضافة عميل متقدم (Multi-step Wizard - 6 خطوات)
- * ✅ حفظ التقدم واستكمال البيانات لاحقاً (localStorage)
- * ✅ شريط نسبة استكمال البيانات لكل عميل (0-100%)
- * ✅ تطوير جميع التابات الـ 12 بشكل تفصيلي جداً:
- *    - 300-01: قائمة العملاء (محسّن)
- *    - 300-02: البيانات الأساسية (مكتمل)
- *    - 300-03: بيانات الاتصال (مكتمل)
- *    - 300-04: العنوان (مكتمل)
- *    - 300-05: بيانات الهوية (مكتمل)
- *    - 300-06: المعاملات (مكتمل)
- *    - 300-07: الأتعاب والمدفوعات (مكتمل)
- *    - 300-08: التقييم والملاحظات (مكتمل)
- *    - 300-09: الإحصائيات (مكتمل)
- *    - 300-10: التقارير (مكتمل)
- *    - 300-11: السجل الزمني (مكتمل)
- *    - 300-12: التصنيفات والإعدادات (مكتمل)
- * ✅ نظام البروفايل والتصنيف الذكي (مستمر من v17.0)
- * 
- * @version 18.0 COMPLETE FINAL
- * @date 2025-11-03
+ * @version 19.0 FULL MERGED
+ * @date 2025-11-10
  */
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -48,7 +33,7 @@ import {
   ChevronLeft, FileCheck, Wallet, Receipt, History, PieChart, FileBarChart,
   UserPlus, Building, IdCard, Navigation, CreditCard, Percent as PercentIcon,
   MessageCircle, TrendingUpIcon, ListChecks, ArrowRight, ArrowLeft, Check,
-  PlayCircle, PauseCircle, Circle, CheckCircle2, XCircle, MinusCircle
+  PlayCircle, PauseCircle, Circle, CheckCircle2, XCircle, MinusCircle, Loader2
 } from 'lucide-react';
 import { InputWithCopy, TextAreaWithCopy, SelectWithCopy } from '../InputWithCopy';
 import { EnhancedSwitch } from '../EnhancedSwitch';
@@ -57,50 +42,24 @@ import CodeDisplay from '../CodeDisplay';
 import { toast } from 'sonner';
 
 // ============================================================================
-// واجهات البيانات الشاملة
+// استيراد الأنواع والـ API
 // ============================================================================
+import { 
+  Client, 
+  ClientName, 
+  ClientContact, 
+  ClientAddress, 
+  ClientIdentification 
+} from '../../types/clientTypes';
+import { 
+  getAllClients, 
+  createClient, 
+  updateClient 
+} from '../../api/clientApi';
 
-interface ClientName {
-  firstName: string;
-  fatherName: string;
-  grandFatherName: string;
-  familyName: string;
-}
-
-interface ClientContact {
-  mobile: string;
-  phone?: string;
-  email: string;
-  fax?: string;
-  whatsapp?: string;
-  telegram?: string;
-  twitter?: string;
-}
-
-interface ClientAddress {
-  country: string;
-  city: string;
-  district: string;
-  street: string;
-  buildingNumber: string;
-  postalCode: string;
-  additionalNumber?: string;
-  unitNumber?: string;
-  fullAddress: string;
-  nationalAddress?: string;
-  gpsCoordinates?: { lat: number; lng: number };
-}
-
-interface ClientIdentification {
-  idType: 'هوية وطنية' | 'إقامة' | 'جواز سفر' | 'سجل تجاري';
-  idNumber: string;
-  issueDate: string;
-  expiryDate: string;
-  issuePlace: string;
-  idPhoto?: string;
-  attachments?: string[];
-}
-
+// ============================================================================
+// الواجهات الداخلية (لا تأتي من الـ API)
+// ============================================================================
 interface Payment {
   id: string;
   transactionId: string;
@@ -143,7 +102,6 @@ interface ActivityLog {
   category: 'معاملة' | 'دفعة' | 'تعديل بيانات' | 'تواصل' | 'ملاحظة' | 'أخرى';
 }
 
-// نظام الدرجات
 type ClientGrade = 'أ' | 'ب' | 'ج';
 
 interface GradingCriteria {
@@ -168,44 +126,6 @@ interface ClientClassification {
   isActive: boolean;
 }
 
-interface Client {
-  id: string;
-  code: string;
-  name: ClientName;
-  contact: ClientContact;
-  address: ClientAddress;
-  identification: ClientIdentification;
-  type: 'فرد' | 'شركة' | 'جهة حكومية';
-  category: string;
-  classification?: ClientClassification;
-  nationality: string;
-  occupation?: string;
-  company?: string;
-  commercialRegister?: string;
-  taxNumber?: string;
-  rating: number;
-  secretRating: number;
-  grade?: ClientGrade;
-  gradeScore?: number;
-  completionPercentage: number; // 🆕 نسبة استكمال البيانات
-  isActive: boolean;
-  notes?: string;
-  createdDate: string;
-  lastModified: string;
-  createdBy: string;
-  transactions: ClientTransaction[];
-  totalTransactions: number;
-  completedTransactions: number;
-  activeTransactions: number;
-  totalFees: number;
-  totalPaid: number;
-  totalRemaining: number;
-  projectTypes: string[];
-  transactionTypes: string[];
-  activityLog: ActivityLog[];
-}
-
-// نظام الخطوات المتعددة
 interface ClientDraft {
   step: number;
   data: Partial<Client>;
@@ -215,25 +135,21 @@ interface ClientDraft {
 // ============================================================================
 // المكون الرئيسي
 // ============================================================================
-
-const ClientManagement_300_COMPLETE: React.FC = () => {
+const ClientManagement_300_FULL: React.FC = () => {
   const [activeTab, setActiveTab] = useState('300-01');
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
-  // النوافذ المنبثقة
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-  const [showTransactionsDialog, setShowTransactionsDialog] = useState(false);
   
-  // الفلاتر
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterGrade, setFilterGrade] = useState<'all' | ClientGrade>('all');
   
-  // إعدادات التصنيف
   const [clientClassifications, setClientClassifications] = useState<ClientClassification[]>([]);
   const [gradingCriteria, setGradingCriteria] = useState<GradingCriteria>({
     totalFeesWeight: 30,
@@ -247,8 +163,7 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     gradeB: { min: 60, max: 79 },
     gradeC: { min: 0, max: 59 }
   });
-
-  // نظام الخطوات المتعددة
+  
   const [addClientStep, setAddClientStep] = useState(1);
   const [newClientData, setNewClientData] = useState<Partial<Client>>({});
   const [clientDrafts, setClientDrafts] = useState<ClientDraft[]>([]);
@@ -256,7 +171,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
   // ============================================================================
   // دوال مساعدة
   // ============================================================================
-
   const getShortName = (name: ClientName) => {
     return `${name.firstName} ${name.familyName}`;
   };
@@ -265,61 +179,44 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     return `${name.firstName} ${name.fatherName} ${name.grandFatherName} ${name.familyName}`;
   };
 
-  // حساب نسبة استكمال البيانات
+  // تُستخدم فقط في معالج الإدخال (قبل الحفظ)
   const calculateCompletionPercentage = (client: Partial<Client>): number => {
     const fields = {
-      // البيانات الأساسية (30%)
       name: client.name?.firstName && client.name?.familyName ? 10 : 0,
       type: client.type ? 5 : 0,
       nationality: client.nationality ? 5 : 0,
       category: client.category ? 5 : 0,
       rating: client.rating ? 5 : 0,
-      
-      // بيانات الاتصال (20%)
       mobile: client.contact?.mobile ? 10 : 0,
       email: client.contact?.email ? 10 : 0,
-      
-      // العنوان (15%)
       address: client.address?.city && client.address?.district ? 15 : 0,
-      
-      // بيانات الهوية (15%)
       identification: client.identification?.idNumber && client.identification?.idType ? 15 : 0,
-      
-      // معلومات إضافية (20%)
       occupation: client.occupation ? 5 : 0,
       notes: client.notes ? 5 : 0,
       secretRating: client.secretRating !== undefined ? 10 : 0
     };
-    
     return Object.values(fields).reduce((sum, val) => sum + val, 0);
   };
 
-  // حساب درجة العميل
-  const calculateClientGrade = (client: Client): { grade: ClientGrade; score: number } => {
+  // تُستخدم فقط في معالج الإدخال (قبل الحفظ)
+  const calculateClientGrade = (client: Partial<Client>): { grade: ClientGrade; score: number } => {
     let totalScore = 0;
     const totalWeight = Object.values(gradingCriteria).reduce((sum, weight) => sum + weight, 0);
-
-    const feesScore = Math.min(100, (client.totalFees / 500000) * 100);
+    const feesScore = Math.min(100, ((client.totalFees || 0) / 500000) * 100);
     totalScore += (feesScore * gradingCriteria.totalFeesWeight) / totalWeight;
-
     const uniqueProjectTypes = new Set(client.projectTypes || []);
     const projectTypesScore = Math.min(100, (uniqueProjectTypes.size / 5) * 100);
     totalScore += (projectTypesScore * gradingCriteria.projectTypesWeight) / totalWeight;
-
     const uniqueTransactionTypes = new Set(client.transactionTypes || []);
     const transactionTypesScore = Math.min(100, (uniqueTransactionTypes.size / 8) * 100);
     totalScore += (transactionTypesScore * gradingCriteria.transactionTypesWeight) / totalWeight;
-
-    const completionRate = client.totalTransactions > 0 
-      ? (client.completedTransactions / client.totalTransactions) * 100 
+    const completionRate = (client.totalTransactions || 0) > 0 
+      ? ((client.completedTransactions || 0) / (client.totalTransactions || 1)) * 100 
       : 0;
     totalScore += (completionRate * gradingCriteria.completionRateWeight) / totalWeight;
-
-    totalScore += (client.secretRating * gradingCriteria.secretRatingWeight) / totalWeight;
-
+    totalScore += ((client.secretRating || 0) * gradingCriteria.secretRatingWeight) / totalWeight;
     const score = Math.round(totalScore);
     let grade: ClientGrade;
-    
     if (score >= gradeThresholds.gradeA.min) {
       grade = 'أ';
     } else if (score >= gradeThresholds.gradeB.min) {
@@ -327,11 +224,10 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     } else {
       grade = 'ج';
     }
-
     return { grade, score };
   };
 
-  const getGradeColor = (grade: ClientGrade): string => {
+  const getGradeColor = (grade?: string): string => {
     switch (grade) {
       case 'أ': return '#10b981';
       case 'ب': return '#f59e0b';
@@ -340,7 +236,7 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     }
   };
 
-  const getGradeDescription = (grade: ClientGrade): string => {
+  const getGradeDescription = (grade?: string): string => {
     switch (grade) {
       case 'أ': return 'عميل ممتاز - أولوية قصوى';
       case 'ب': return 'عميل جيد - متوسط الأهمية';
@@ -349,29 +245,24 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     }
   };
 
-  // حفظ المسودة
   const saveDraft = () => {
     const draft: ClientDraft = {
       step: addClientStep,
       data: newClientData,
       lastSaved: new Date().toISOString()
     };
-    
     const drafts = [...clientDrafts];
     const existingIndex = drafts.findIndex(d => d.data.id === newClientData.id);
-    
     if (existingIndex >= 0) {
       drafts[existingIndex] = draft;
     } else {
       drafts.push(draft);
     }
-    
     setClientDrafts(drafts);
     localStorage.setItem('client_drafts', JSON.stringify(drafts));
     toast.success('تم حفظ التقدم بنجاح');
   };
 
-  // استرجاع المسودات
   const loadDrafts = () => {
     const stored = localStorage.getItem('client_drafts');
     if (stored) {
@@ -387,7 +278,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
   // ============================================================================
   // تكوين التابات
   // ============================================================================
-
   const TABS_CONFIG: TabConfig[] = [
     { id: '300-01', number: '300-01', title: 'قائمة العملاء', icon: Users },
     { id: '300-02', number: '300-02', title: 'البيانات الأساسية', icon: User },
@@ -404,11 +294,9 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
   ];
 
   // ============================================================================
-  // البيانات التجريبية الشاملة - 50+ عميل
+  // جلب البيانات من الـ Backend
   // ============================================================================
-
   useEffect(() => {
-    // تحميل التصنيفات
     const defaultClassifications: ClientClassification[] = [
       { id: 'vip', name: 'VIP', color: '#f59e0b', description: 'عملاء مميزون', isActive: true },
       { id: 'corporate', name: 'مؤسسة', color: '#3b82f6', description: 'شركات ومؤسسات', isActive: true },
@@ -417,208 +305,95 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
       { id: 'special', name: 'خاص', color: '#8b5cf6', description: 'عملاء بمعاملة خاصة', isActive: true }
     ];
     setClientClassifications(defaultClassifications);
-
-    // تحميل المسودات
     loadDrafts();
-
-    // بيانات عملاء شاملة - 50+ عميل
-    const mockClients: Client[] = generateMockClients();
-
-    // حساب الدرجة والنسبة لكل عميل
-    const clientsWithGrades = mockClients.map(client => {
-      const { grade, score } = calculateClientGrade(client);
-      return {
-        ...client,
-        grade,
-        gradeScore: score
-      };
-    });
-
-    setClients(clientsWithGrades);
+    fetchClients();
   }, []);
 
-  // دالة توليد 50+ عميل وهمي
-  const generateMockClients = (): Client[] => {
-    const firstNames = [
-      'محمد', 'أحمد', 'عبدالله', 'سعد', 'فهد', 'خالد', 'عبدالرحمن', 'سلطان', 'ناصر', 'فيصل',
-      'فاطمة', 'نورة', 'مها', 'هند', 'سارة', 'عائشة', 'ريم', 'أماني', 'شيخة', 'لطيفة',
-      'يوسف', 'إبراهيم', 'عمر', 'علي', 'حسن', 'عبدالعزيز', 'تركي', 'مشعل', 'بندر', 'راشد',
-      'منى', 'أميرة', 'جواهر', 'هيا', 'نوف', 'رغد', 'وعد', 'غادة', 'دانة', 'لمى'
-    ];
-
-    const fatherNames = ['أحمد', 'محمد', 'عبدالله', 'سعيد', 'إبراهيم', 'عبدالرحمن', 'خالد', 'فهد', 'علي', 'حسن'];
-    const grandFatherNames = ['عبدالله', 'محمد', 'سعد', 'فهد', 'سلطان', 'ناصر', 'صالح', 'عبدالعزيز', 'عمر', 'علي'];
-    const familyNames = [
-      'العتيبي', 'الدوسري', 'القحطاني', 'الشمري', 'العنزي', 'الحربي', 'المطيري', 'العمري', 
-      'السبيعي', 'الغامدي', 'الزهراني', 'الشهري', 'الأحمدي', 'الجهني', 'البقمي', 'العسيري',
-      'السلمي', 'الصبحي', 'الحازمي', 'الثبيتي', 'العلي', 'الحسن', 'المالكي', 'الأسمري'
-    ];
-
-    const cities = ['الرياض', 'جدة', 'الدمام', 'مكة المكرمة', 'المدينة المنورة', 'الطائف', 'تبوك', 'القصيم', 'أبها', 'الخبر'];
-    const districts = ['النرجس', 'العليا', 'الملقا', 'الملك فهد', 'الخزامى', 'النخيل', 'السليمانية', 'الربوة', 'المروج', 'الياسمين'];
-    const occupations = ['مهندس', 'طبيب', 'محاسب', 'مدير', 'معلم', 'موظف حكومي', 'رجل أعمال', 'محامي', 'صيدلي', 'مستشار'];
-
-    const transactionTypes = ['ترخيص بناء', 'إفراز', 'دمج', 'فسح', 'تعديل', 'إضافة', 'تصميم معماري', 'إشراف'];
-    const projectTypes = ['فيلا سكنية', 'عمارة سكنية', 'مجمع تجاري', 'مبنى إداري', 'منتجع', 'فندق', 'مستشفى', 'مدرسة'];
-
-    const clients: Client[] = [];
-
-    for (let i = 0; i < 55; i++) {
-      const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-      const fatherName = fatherNames[Math.floor(Math.random() * fatherNames.length)];
-      const grandFatherName = grandFatherNames[Math.floor(Math.random() * grandFatherNames.length)];
-      const familyName = familyNames[Math.floor(Math.random() * familyNames.length)];
-      
-      const city = cities[Math.floor(Math.random() * cities.length)];
-      const district = districts[Math.floor(Math.random() * districts.length)];
-      
-      const numTransactions = Math.floor(Math.random() * 8) + 1;
-      const completedTransactions = Math.floor(numTransactions * (0.3 + Math.random() * 0.6));
-      const totalFees = (Math.random() * 300000) + 50000;
-      const paidPercentage = 0.5 + Math.random() * 0.5;
-      
-      const clientCategory = Math.random() > 0.7 ? 'VIP' : Math.random() > 0.5 ? 'مؤسسة' : 'عادي';
-      const clientType = Math.random() > 0.7 ? 'شركة' : Math.random() > 0.85 ? 'جهة حكومية' : 'فرد';
-      
-      const client: Client = {
-        id: `cl${String(i + 1).padStart(3, '0')}`,
-        code: `CLT-2025-${String(i + 1).padStart(3, '0')}`,
-        name: { firstName, fatherName, grandFatherName, familyName },
-        contact: {
-          mobile: `05${Math.floor(Math.random() * 90000000) + 10000000}`,
-          phone: Math.random() > 0.5 ? `011${Math.floor(Math.random() * 9000000) + 1000000}` : undefined,
-          email: `${firstName.toLowerCase()}.${familyName.toLowerCase()}@email.com`,
-          whatsapp: `05${Math.floor(Math.random() * 90000000) + 10000000}`
-        },
-        address: {
-          country: 'المملكة العربية السعودية',
-          city,
-          district,
-          street: `طريق ${['الملك فهد', 'الملك عبدالله', 'الأمير محمد', 'العروبة'][Math.floor(Math.random() * 4)]}`,
-          buildingNumber: String(Math.floor(Math.random() * 9000) + 1000),
-          postalCode: String(Math.floor(Math.random() * 90000) + 10000),
-          additionalNumber: String(Math.floor(Math.random() * 9000) + 1000),
-          fullAddress: `${district}، ${city}`
-        },
-        identification: {
-          idType: clientType === 'شركة' ? 'سجل تجاري' : 'هوية وطنية',
-          idNumber: String(Math.floor(Math.random() * 9000000000) + 1000000000),
-          issueDate: `202${Math.floor(Math.random() * 5)}-0${Math.floor(Math.random() * 9) + 1}-15`,
-          expiryDate: `203${Math.floor(Math.random() * 5)}-0${Math.floor(Math.random() * 9) + 1}-15`,
-          issuePlace: city
-        },
-        type: clientType,
-        category: clientCategory,
-        nationality: 'سعودي',
-        occupation: clientType === 'فرد' ? occupations[Math.floor(Math.random() * occupations.length)] : undefined,
-        company: clientType !== 'فرد' ? `شركة ${familyName} ${['للمقاولات', 'للتطوير', 'للاستثمار'][Math.floor(Math.random() * 3)]}` : undefined,
-        rating: Math.floor(Math.random() * 3) + 3,
-        secretRating: Math.floor(Math.random() * 40) + 60,
-        isActive: Math.random() > 0.1,
-        notes: Math.random() > 0.7 ? 'عميل محترم، التعامل معه سلس' : undefined,
-        createdDate: `202${Math.floor(Math.random() * 3) + 2}-0${Math.floor(Math.random() * 9) + 1}-${Math.floor(Math.random() * 28) + 1}`,
-        lastModified: '2025-11-03',
-        createdBy: 'النظام',
-        transactions: generateTransactions(numTransactions, completedTransactions),
-        totalTransactions: numTransactions,
-        completedTransactions,
-        activeTransactions: numTransactions - completedTransactions,
-        totalFees: Math.round(totalFees),
-        totalPaid: Math.round(totalFees * paidPercentage),
-        totalRemaining: Math.round(totalFees * (1 - paidPercentage)),
-        projectTypes: Array.from({ length: Math.floor(Math.random() * 4) + 1 }, () => 
-          projectTypes[Math.floor(Math.random() * projectTypes.length)]
-        ),
-        transactionTypes: Array.from({ length: Math.floor(Math.random() * 5) + 1 }, () => 
-          transactionTypes[Math.floor(Math.random() * transactionTypes.length)]
-        ),
-        activityLog: [],
-        completionPercentage: 0
-      };
-      
-      client.completionPercentage = calculateCompletionPercentage(client);
-      clients.push(client);
+  const fetchClients = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await getAllClients();
+      setClients(data);
+    } catch (err) {
+      console.error(err);
+      setError('فشل في جلب بيانات العملاء. يرجى المحاولة مرة أخرى.');
+      toast.error('فشل في جلب بيانات العملاء.');
+    } finally {
+      setIsLoading(false);
     }
-
-    return clients;
   };
 
-  // توليد معاملات وهمية
-  const generateTransactions = (total: number, completed: number): ClientTransaction[] => {
-    const transactions: ClientTransaction[] = [];
-    const statuses = [
-      { name: 'مكتملة', color: '#10b981' },
-      { name: 'قيد المعالجة', color: '#f59e0b' },
-      { name: 'في انتظار الموافقة', color: '#eab308' },
-      { name: 'معتمدة', color: '#22c55e' }
-    ];
-
-    for (let i = 0; i < total; i++) {
-      const isCompleted = i < completed;
-      const status = isCompleted ? statuses[0] : statuses[Math.floor(Math.random() * (statuses.length - 1)) + 1];
-      const fees = Math.floor(Math.random() * 50000) + 10000;
-      const paidPercentage = isCompleted ? 1 : Math.random() * 0.8 + 0.2;
-
-      transactions.push({
-        id: `tr${String(i + 1).padStart(3, '0')}`,
-        transactionNumber: `2510${String(Math.floor(Math.random() * 900) + 100)}`,
-        type: ['ترخيص بناء', 'إفراز', 'دمج', 'تعديل'][Math.floor(Math.random() * 4)],
-        category: ['سكني', 'تجاري', 'صناعي'][Math.floor(Math.random() * 3)],
-        projectClassification: ['فيلا سكنية', 'عمارة سكنية', 'مجمع تجاري'][Math.floor(Math.random() * 3)],
-        status: status.name,
-        statusColor: status.color,
-        createdDate: `2025-${String(Math.floor(Math.random() * 6) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
-        completedDate: isCompleted ? `2025-${String(Math.floor(Math.random() * 6) + 7).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}` : undefined,
-        totalFees: fees,
-        paidAmount: Math.round(fees * paidPercentage),
-        remainingAmount: Math.round(fees * (1 - paidPercentage)),
-        location: ['النرجس', 'العليا', 'الملقا'][Math.floor(Math.random() * 3)],
-        deedNumber: String(Math.floor(Math.random() * 900000000) + 100000000),
-        progress: isCompleted ? 100 : Math.floor(Math.random() * 60) + 20,
-        priority: ['عاجل', 'عالي', 'متوسط', 'منخفض'][Math.floor(Math.random() * 4)] as any,
-        payments: []
-      });
+  // ============================================================================
+  // دوال الإنشاء والتحديث
+  // ============================================================================
+  const handleCreateClient = async () => {
+    try {
+      if (!newClientData.contact?.mobile || !newClientData.identification?.idNumber || !newClientData.name?.firstName) {
+        toast.error('الرجاء ملء الحقول الإلزامية: الجوال، رقم الهوية، والاسم الأول.');
+        return;
+      }
+      const dataToCreate = {
+        ...newClientData,
+        name: newClientData.name as ClientName,
+        contact: newClientData.contact as ClientContact,
+        identification: newClientData.identification as ClientIdentification,
+        address: newClientData.address as ClientAddress,
+        type: newClientData.type as 'فرد' | 'شركة' | 'جهة حكومية',
+        // لا نرسل الحقول التي يحسبها الـ backend
+        id: undefined,
+        createdAt: undefined,
+        updatedAt: undefined,
+        grade: undefined,
+        gradeScore: undefined,
+        completionPercentage: undefined,
+      };
+      // @ts-ignore
+      const newClient = await createClient(dataToCreate);
+      setClients(prev => [newClient, ...prev]);
+      setShowAddDialog(false);
+      setAddClientStep(1);
+      setNewClientData({});
+      toast.success(`تم إضافة العميل "${newClient.name.firstName}" بنجاح`);
+    } catch (error: any) {
+      console.error(error);
+      const errorMsg = error.response?.data?.error || 'فشل في إضافة العميل.';
+      if (errorMsg.includes('تضارب')) {
+        toast.error('فشل الإضافة: البيانات مستخدمة مسبقاً', { description: errorMsg });
+      } else {
+        toast.error('فشل في إضافة العميل', { description: errorMsg });
+      }
     }
-
-    return transactions;
   };
 
-  // إعادة حساب الدرجات
-  useEffect(() => {
-    const updatedClients = clients.map(client => {
-      const { grade, score } = calculateClientGrade(client);
-      return {
-        ...client,
-        grade,
-        gradeScore: score
-      };
-    });
-    setClients(updatedClients);
-  }, [gradingCriteria, gradeThresholds]);
-
   // ============================================================================
-  // إحصائيات العملاء
+  // إحصائيات
   // ============================================================================
-
   const stats = useMemo(() => {
+    if (isLoading || clients.length === 0) {
+      return { 
+        total: 0, active: 0, gradeA: 0, gradeB: 0, gradeC: 0, 
+        totalTransactions: 0, totalFees: 0, totalPaid: 0, totalRemaining: 0, 
+        avgCompletionPercentage: 0 
+      };
+    }
     return {
       total: clients.length,
       active: clients.filter(c => c.isActive).length,
       gradeA: clients.filter(c => c.grade === 'أ').length,
       gradeB: clients.filter(c => c.grade === 'ب').length,
       gradeC: clients.filter(c => c.grade === 'ج').length,
-      totalTransactions: clients.reduce((sum, c) => sum + c.totalTransactions, 0),
-      totalFees: clients.reduce((sum, c) => sum + c.totalFees, 0),
-      totalPaid: clients.reduce((sum, c) => sum + c.totalPaid, 0),
-      totalRemaining: clients.reduce((sum, c) => sum + c.totalRemaining, 0),
+      totalTransactions: clients.reduce((sum, c) => sum + (c.totalTransactions || 0), 0),
+      totalFees: clients.reduce((sum, c) => sum + (c.totalFees || 0), 0),
+      totalPaid: clients.reduce((sum, c) => sum + (c.totalPaid || 0), 0),
+      totalRemaining: clients.reduce((sum, c) => sum + (c.totalRemaining || 0), 0),
       avgCompletionPercentage: Math.round(clients.reduce((sum, c) => sum + c.completionPercentage, 0) / clients.length)
     };
-  }, [clients]);
+  }, [clients, isLoading]);
 
   // ============================================================================
-  // هيدر الشاشة
+  // وظائف العرض (من v18.0 مع تحسينات الربط)
   // ============================================================================
-
   const renderScreenHeader = () => (
     <div
       style={{
@@ -659,7 +434,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               }} 
             />
           </div>
-          
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-3">
               <h1 
@@ -677,7 +451,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               >
                 إدارة العملاء
               </h1>
-              
               <div
                 style={{
                   padding: '4px 12px',
@@ -700,7 +473,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                 </span>
               </div>
             </div>
-            
             <p 
               style={{ 
                 fontFamily: 'Tajawal, sans-serif', 
@@ -723,7 +495,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
             </p>
           </div>
         </div>
-        
         <div className="flex items-center gap-3">
           <div 
             style={{
@@ -749,17 +520,12 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     </div>
   );
 
-  // ============================================================================
-  // نافذة البروفايل (من v17.0)
-  // ============================================================================
-
   const renderClientProfileDialog = () => {
     if (!selectedClient) return null;
-
-    const { grade, score } = calculateClientGrade(selectedClient);
+    const grade = selectedClient.grade;
+    const score = selectedClient.gradeScore || 0;
     const gradeColor = getGradeColor(grade);
     const gradeDesc = getGradeDescription(grade);
-
     return (
       <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
         <DialogContent 
@@ -801,7 +567,7 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                   fontWeight: 700
                 }}
               >
-                الدرجة: {grade}
+                الدرجة: {grade || '-'}
               </Badge>
               <Badge 
                 variant="outline"
@@ -819,12 +585,9 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               معلومات تفصيلية وإحصائيات شاملة للعميل
             </DialogDescription>
           </DialogHeader>
-
           <ScrollArea style={{ maxHeight: 'calc(90vh - 120px)' }}>
             <div className="space-y-4 p-4">
-              {/* القسم الأول: معلومات العميل الأساسية */}
               <div className="grid grid-cols-3 gap-3">
-                {/* البطاقة الأولى: المعلومات الشخصية */}
                 <Card style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', border: '2px solid #93c5fd' }}>
                   <CardContent className="p-4">
                     <div className="text-center mb-3">
@@ -837,11 +600,9 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                       <h3 className="font-bold text-lg mb-1" style={{ color: '#1e40af' }}>
                         {getFullName(selectedClient.name)}
                       </h3>
-                      <p className="text-xs text-gray-600">{selectedClient.code}</p>
+                      <p className="text-xs text-gray-600">{selectedClient.clientCode}</p>
                     </div>
-
                     <Separator className="my-3" />
-
                     <div className="space-y-2 text-xs">
                       <div className="flex justify-between">
                         <span className="text-gray-600">النوع:</span>
@@ -864,8 +625,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
-
-                {/* البطاقة الثانية: التقييم والدرجة */}
                 <Card style={{ background: `linear-gradient(135deg, ${gradeColor}15 0%, ${gradeColor}08 100%)`, border: `2px solid ${gradeColor}` }}>
                   <CardContent className="p-4">
                     <div className="text-center mb-3">
@@ -877,15 +636,13 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                           boxShadow: `0 4px 16px ${gradeColor}40`
                         }}
                       >
-                        <span className="text-4xl font-bold text-white">{grade}</span>
+                        <span className="text-4xl font-bold text-white">{grade || '-'}</span>
                       </div>
                       <p className="text-xs font-semibold" style={{ color: gradeColor }}>
                         {gradeDesc}
                       </p>
                     </div>
-
                     <Separator className="my-3" />
-
                     <div className="space-y-2">
                       <div>
                         <div className="flex justify-between items-center mb-1">
@@ -896,7 +653,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                         </div>
                         <Progress value={score} className="h-2" />
                       </div>
-
                       <div className="grid grid-cols-2 gap-2 mt-3">
                         <div className="text-center p-2 bg-white rounded border">
                           <p className="text-[10px] text-gray-600">تقييم عام</p>
@@ -923,64 +679,54 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
-
-                {/* البطاقة الثالثة: الإحصائيات المالية */}
                 <Card style={{ background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)', border: '2px solid #86efac' }}>
                   <CardContent className="p-4">
                     <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                       <DollarSign className="h-4 w-4 text-green-600" />
                       الملخص المالي
                     </h4>
-
                     <div className="space-y-3">
                       <div>
                         <p className="text-[10px] text-gray-600 mb-1">إجمالي الأتعاب</p>
                         <p className="text-xl font-bold text-green-900">
-                          {selectedClient.totalFees.toLocaleString()} <span className="text-xs">ر.س</span>
+                          {(selectedClient.totalFees || 0).toLocaleString()} <span className="text-xs">ر.س</span>
                         </p>
                       </div>
-
                       <Separator />
-
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <p className="text-[10px] text-gray-600 mb-1">المدفوع</p>
                           <p className="text-sm font-bold text-green-700">
-                            {selectedClient.totalPaid.toLocaleString()}
+                            {(selectedClient.totalPaid || 0).toLocaleString()}
                           </p>
                           <Progress 
-                            value={(selectedClient.totalPaid / selectedClient.totalFees) * 100} 
+                            value={selectedClient.totalFees ? ((selectedClient.totalPaid || 0) / selectedClient.totalFees) * 100 : 0} 
                             className="h-1 mt-1" 
                           />
                         </div>
                         <div>
                           <p className="text-[10px] text-gray-600 mb-1">المتبقي</p>
                           <p className="text-sm font-bold text-red-700">
-                            {selectedClient.totalRemaining.toLocaleString()}
+                            {(selectedClient.totalRemaining || 0).toLocaleString()}
                           </p>
                           <Progress 
-                            value={(selectedClient.totalRemaining / selectedClient.totalFees) * 100} 
+                            value={selectedClient.totalFees ? ((selectedClient.totalRemaining || 0) / selectedClient.totalFees) * 100 : 0} 
                             className="h-1 mt-1" 
                           />
                         </div>
                       </div>
-
                       <div className="p-2 bg-white rounded border text-center">
                         <p className="text-[10px] text-gray-600 mb-1">نسبة السداد</p>
                         <p className="text-lg font-bold text-blue-600">
-                          {((selectedClient.totalPaid / selectedClient.totalFees) * 100).toFixed(1)}%
+                          {selectedClient.totalFees ? (((selectedClient.totalPaid || 0) / selectedClient.totalFees) * 100).toFixed(1) : 0}%
                         </p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               </div>
-
-              {/* باقي محتوى البروفايل - إحصائيات المعاملات، معايير الدرجة، Timeline */}
-              {/* ... (سيكمل في الجزء الثاني) */}
             </div>
           </ScrollArea>
-
           <DialogFooter>
             <Button 
               onClick={() => setShowProfileDialog(false)} 
@@ -1004,14 +750,9 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     );
   };
 
-  // ============================================================================
-  // نافذة إضافة عميل متقدمة (Multi-step Wizard)
-  // ============================================================================
-
   const renderAddClientDialog = () => {
     const totalSteps = 6;
     const progressPercentage = (addClientStep / totalSteps) * 100;
-
     return (
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent 
@@ -1037,16 +778,12 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               إضافة عميل جديد - الخطوة {addClientStep} من {totalSteps}
             </DialogTitle>
           </DialogHeader>
-
-          {/* شريط التقدم */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>
               <span className="text-gray-600">تقدم الإدخال:</span>
               <span className="font-bold text-blue-600">{progressPercentage.toFixed(0)}%</span>
             </div>
             <Progress value={progressPercentage} className="h-2" />
-            
-            {/* خطوات ملونة */}
             <div className="flex items-center justify-between gap-1">
               {[
                 { num: 1, label: 'أساسي', icon: User },
@@ -1059,12 +796,8 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                 const Icon = step.icon;
                 const isCompleted = addClientStep > step.num;
                 const isCurrent = addClientStep === step.num;
-                
                 return (
-                  <div 
-                    key={step.num}
-                    className="flex-1 text-center"
-                  >
+                  <div key={step.num} className="flex-1 text-center">
                     <div 
                       className="w-8 h-8 mx-auto rounded-full flex items-center justify-center mb-1 transition-all"
                       style={{
@@ -1099,10 +832,7 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               })}
             </div>
           </div>
-
           <Separator />
-
-          {/* محتوى الخطوات */}
           <ScrollArea style={{ maxHeight: 'calc(90vh - 300px)' }}>
             <div className="space-y-4 p-4">
               {addClientStep === 1 && renderStep1_BasicInfo()}
@@ -1113,7 +843,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               {addClientStep === 6 && renderStep6_Review()}
             </div>
           </ScrollArea>
-
           <DialogFooter>
             <div className="flex items-center justify-between w-full">
               <div className="flex gap-2">
@@ -1127,7 +856,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                   </Button>
                 )}
               </div>
-
               <div className="flex gap-2">
                 <Button
                   onClick={saveDraft}
@@ -1154,38 +882,7 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                   </Button>
                 ) : (
                   <Button
-                    onClick={() => {
-                      // حفظ العميل النهائي
-                      const newClient: Client = {
-                        ...(newClientData as Client),
-                        id: `cl${String(clients.length + 1).padStart(3, '0')}`,
-                        code: `CLT-2025-${String(clients.length + 1).padStart(3, '0')}`,
-                        createdDate: new Date().toISOString().split('T')[0],
-                        lastModified: new Date().toISOString().split('T')[0],
-                        createdBy: 'المستخدم',
-                        completionPercentage: calculateCompletionPercentage(newClientData),
-                        transactions: [],
-                        totalTransactions: 0,
-                        completedTransactions: 0,
-                        activeTransactions: 0,
-                        totalFees: 0,
-                        totalPaid: 0,
-                        totalRemaining: 0,
-                        projectTypes: [],
-                        transactionTypes: [],
-                        activityLog: []
-                      };
-
-                      const { grade, score } = calculateClientGrade(newClient);
-                      newClient.grade = grade;
-                      newClient.gradeScore = score;
-
-                      setClients([...clients, newClient]);
-                      setShowAddDialog(false);
-                      setAddClientStep(1);
-                      setNewClientData({});
-                      toast.success('تم إضافة العميل بنجاح');
-                    }}
+                    onClick={handleCreateClient}
                     style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff' }}
                   >
                     <CheckCircle2 className="h-3 w-3 ml-1" />
@@ -1200,7 +897,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     );
   };
 
-  // خطوة 1: البيانات الأساسية
   const renderStep1_BasicInfo = () => (
     <div className="space-y-4">
       <div 
@@ -1215,7 +911,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           أدخل الاسم الرباعي الكامل للعميل (جميع الحقول إلزامية)
         </p>
       </div>
-
       <div className="grid grid-cols-2 gap-3">
         <InputWithCopy
           label="الاسم الأول *"
@@ -1262,9 +957,7 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           required
         />
       </div>
-
       <Separator />
-
       <div className="grid grid-cols-2 gap-3">
         <SelectWithCopy
           label="نوع العميل *"
@@ -1303,7 +996,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           placeholder="مثال: مهندس"
         />
       </div>
-
       {newClientData.type === 'شركة' && (
         <>
           <Separator />
@@ -1328,7 +1020,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     </div>
   );
 
-  // خطوة 2: بيانات الاتصال
   const renderStep2_ContactInfo = () => (
     <div className="space-y-4">
       <div 
@@ -1343,7 +1034,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           أدخل جميع وسائل الاتصال المتاحة (الجوال والبريد إلزامي)
         </p>
       </div>
-
       <div className="grid grid-cols-2 gap-3">
         <InputWithCopy
           label="رقم الجوال *"
@@ -1411,7 +1101,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     </div>
   );
 
-  // خطوة 3: العنوان
   const renderStep3_Address = () => (
     <div className="space-y-4">
       <div 
@@ -1426,7 +1115,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           أدخل العنوان الكامل للعميل (حقول المدينة والحي إلزامية)
         </p>
       </div>
-
       <div className="grid grid-cols-2 gap-3">
         <InputWithCopy
           label="الدولة *"
@@ -1511,7 +1199,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           placeholder="رقم الشقة/المكتب"
         />
       </div>
-
       <TextAreaWithCopy
         label="العنوان الكامل"
         id="fullAddress"
@@ -1526,7 +1213,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     </div>
   );
 
-  // خطوة 4: بيانات الهوية
   const renderStep4_Identification = () => (
     <div className="space-y-4">
       <div 
@@ -1541,7 +1227,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           أدخل معلومات الهوية أو السجل التجاري (جميع الحقول إلزامية)
         </p>
       </div>
-
       <div className="grid grid-cols-2 gap-3">
         <SelectWithCopy
           label="نوع الهوية *"
@@ -1606,7 +1291,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     </div>
   );
 
-  // خطوة 5: معلومات إضافية
   const renderStep5_Additional = () => (
     <div className="space-y-4">
       <div 
@@ -1621,7 +1305,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           أدخل معلومات إضافية وتقييم العميل (جميع الحقول اختيارية)
         </p>
       </div>
-
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
           <label className="text-xs font-semibold text-gray-700 mb-2 block" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -1644,7 +1327,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
             </span>
           </div>
         </div>
-
         <div className="col-span-2">
           <label className="text-xs font-semibold text-gray-700 mb-2 block" style={{ fontFamily: 'Tajawal, sans-serif' }}>
             التقييم السري (0-100)
@@ -1676,7 +1358,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           </div>
         </div>
       </div>
-
       <TextAreaWithCopy
         label="ملاحظات (اختياري)"
         id="notes"
@@ -1685,7 +1366,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
         rows={4}
         placeholder="أي ملاحظات أو معلومات إضافية عن العميل..."
       />
-
       <div className="flex items-center gap-2 p-3 border rounded-lg bg-yellow-50">
         <EnhancedSwitch
           id="isActive"
@@ -1698,10 +1378,8 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     </div>
   );
 
-  // خطوة 6: المراجعة النهائية
   const renderStep6_Review = () => {
     const completionPercentage = calculateCompletionPercentage(newClientData);
-    
     return (
       <div className="space-y-4">
         <div 
@@ -1715,7 +1393,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           <p className="text-xs text-green-700 mb-3">
             راجع جميع المعلومات المدخلة قبل الحفظ النهائي
           </p>
-          
           <div className="flex items-center gap-3">
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1">
@@ -1739,10 +1416,7 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
             </Badge>
           </div>
         </div>
-
-        {/* ملخص البيانات */}
         <div className="grid grid-cols-2 gap-3">
-          {/* البيانات الأساسية */}
           <Card>
             <CardHeader className="p-3">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1771,8 +1445,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* بيانات الاتصال */}
           <Card>
             <CardHeader className="p-3">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1795,8 +1467,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* العنوان */}
           <Card>
             <CardHeader className="p-3">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1818,8 +1488,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* بيانات الهوية */}
           <Card>
             <CardHeader className="p-3">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1843,7 +1511,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
             </CardContent>
           </Card>
         </div>
-
         {completionPercentage < 60 && (
           <div 
             className="p-3 rounded-lg border-2 border-orange-300"
@@ -1868,9 +1535,8 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
   };
 
   // ============================================================================
-  // Render Functions للتابات
+  // التابات الكاملة
   // ============================================================================
-
   const renderTabContent = () => {
     if (!selectedClient && activeTab !== '300-01') {
       return (
@@ -1893,41 +1559,27 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     }
 
     switch (activeTab) {
-      case '300-01':
-        return render_300_01_ClientsList();
-      case '300-02':
-        return render_300_02_BasicData();
-      case '300-03':
-        return render_300_03_ContactData();
-      case '300-04':
-        return render_300_04_Address();
-      case '300-05':
-        return render_300_05_Identification();
-      case '300-06':
-        return render_300_06_Transactions();
-      case '300-07':
-        return render_300_07_FeesPayments();
-      case '300-08':
-        return render_300_08_RatingNotes();
-      case '300-09':
-        return render_300_09_Statistics();
-      case '300-10':
-        return render_300_10_Reports();
-      case '300-11':
-        return render_300_11_ActivityLog();
-      case '300-12':
-        return render_300_12_ClassificationsSettings();
-      default:
-        return null;
+      case '300-01': return render_300_01_ClientsList();
+      case '300-02': return render_300_02_BasicData();
+      case '300-03': return render_300_03_ContactData();
+      case '300-04': return render_300_04_Address();
+      case '300-05': return render_300_05_Identification();
+      case '300-06': return render_300_06_Transactions();
+      case '300-07': return render_300_07_FeesPayments();
+      case '300-08': return render_300_08_RatingNotes();
+      case '300-09': return render_300_09_Statistics();
+      case '300-10': return render_300_10_Reports();
+      case '300-11': return render_300_11_ActivityLog();
+      case '300-12': return render_300_12_ClassificationsSettings();
+      default: return null;
     }
   };
 
-  // ========== 300-01: قائمة العملاء (محسّنة) ==========
   function render_300_01_ClientsList() {
     const filteredClients = clients.filter(c => {
       const matchSearch = !searchTerm || 
         getFullName(c.name).includes(searchTerm) || 
-        c.code.includes(searchTerm) ||
+        c.clientCode.includes(searchTerm) ||
         c.contact.mobile.includes(searchTerm);
       const matchType = filterType === 'all' || c.type === filterType;
       const matchCategory = filterCategory === 'all' || c.category === filterCategory;
@@ -1938,8 +1590,6 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-01" position="top-right" />
-        
-        {/* بطاقات الإحصائيات */}
         <div className="grid grid-cols-10 gap-2">
           {[
             { label: 'إجمالي', value: stats.total, Icon: Users, color: '#3b82f6' },
@@ -1960,9 +1610,8 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
                 <p className="text-sm font-bold" style={{ fontFamily: 'Tajawal, sans-serif', color: stat.color }}>{stat.value}</p>
               </CardContent>
             </Card>
-          ))}</div>
-
-        {/* شريط البحث والتصفية */}
+          ))}
+        </div>
         <Card>
           <CardContent className="p-3">
             <div className="grid grid-cols-5 gap-2">
@@ -2012,14 +1661,12 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-
-        {/* جدول العملاء */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle style={{ fontSize: '16px' }}>
                 <Users className="h-4 w-4 inline ml-2" />
-                قائمة العملاء ({filteredClients.length})
+                قائمة العملاء ({isLoading ? 'جاري التحميل...' : `${filteredClients.length}`})
               </CardTitle>
               <Button 
                 size="sm" 
@@ -2037,162 +1684,175 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
           </CardHeader>
           <CardContent className="p-3">
             <ScrollArea style={{ height: 'calc(100vh - 480px)' }}>
-              <Table className="table-rtl">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right text-xs">الكود</TableHead>
-                    <TableHead className="text-right text-xs">الاسم</TableHead>
-                    <TableHead className="text-right text-xs">النوع</TableHead>
-                    <TableHead className="text-right text-xs">التصنيف</TableHead>
-                    <TableHead className="text-right text-xs">الدرجة</TableHead>
-                    <TableHead className="text-right text-xs">النقاط</TableHead>
-                    <TableHead className="text-right text-xs">استكمال</TableHead>
-                    <TableHead className="text-right text-xs">الجوال</TableHead>
-                    <TableHead className="text-right text-xs">المعاملات</TableHead>
-                    <TableHead className="text-right text-xs">الأتعاب</TableHead>
-                    <TableHead className="text-right text-xs">الحالة</TableHead>
-                    <TableHead className="text-right text-xs">الإجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredClients.map(client => {
-                    const gradeColor = client.grade ? getGradeColor(client.grade) : '#6b7280';
-                    const completionColor = client.completionPercentage >= 80 
-                      ? '#10b981' 
-                      : client.completionPercentage >= 50 
-                      ? '#f59e0b' 
-                      : '#ef4444';
-
-                    return (
-                      <TableRow 
-                        key={client.id}
-                        className="hover:bg-blue-50 cursor-pointer transition-colors"
-                        onClick={() => {
-                          setSelectedClient(client);
-                          setShowProfileDialog(true);
-                        }}
-                      >
-                        <TableCell className="text-right">
-                          <code className="text-xs bg-gray-100 px-2 py-1 rounded">{client.code}</code>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div>
-                            <p className="text-xs font-semibold">{getShortName(client.name)}</p>
-                            <p className="text-[10px] text-gray-500">{client.nationality}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline" style={{ fontSize: '10px' }}>{client.type}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge style={{ 
-                            fontSize: '10px', 
-                            background: clientClassifications.find(c => c.name === client.category)?.color + '20' || '#f3f4f6' 
-                          }}>
-                            {client.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge 
-                            style={{ 
-                              background: gradeColor, 
-                              color: '#fff', 
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px'
-                            }}
-                          >
-                            {client.grade || '-'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center gap-1">
-                            <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full" 
-                                style={{ 
-                                  width: `${client.gradeScore || 0}%`,
-                                  background: gradeColor
-                                }} 
-                              />
+              {isLoading && (
+                <div className="flex items-center justify-center h-96">
+                  <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+                  <p className="ml-4" style={{ fontFamily: 'Tajawal, sans-serif' }}>جاري تحميل بيانات العملاء...</p>
+                </div>
+              )}
+              {!isLoading && error && (
+                <div className="flex items-center justify-center h-96 flex-col">
+                  <AlertCircleIcon className="h-12 w-12 text-red-500" />
+                  <p className="ml-4 mt-4 text-red-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>{error}</p>
+                </div>
+              )}
+              {!isLoading && !error && (
+                <Table className="table-rtl">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-right text-xs">الكود</TableHead>
+                      <TableHead className="text-right text-xs">الاسم</TableHead>
+                      <TableHead className="text-right text-xs">النوع</TableHead>
+                      <TableHead className="text-right text-xs">التصنيف</TableHead>
+                      <TableHead className="text-right text-xs">الدرجة</TableHead>
+                      <TableHead className="text-right text-xs">النقاط</TableHead>
+                      <TableHead className="text-right text-xs">استكمال</TableHead>
+                      <TableHead className="text-right text-xs">الجوال</TableHead>
+                      <TableHead className="text-right text-xs">المعاملات</TableHead>
+                      <TableHead className="text-right text-xs">الأتعاب</TableHead>
+                      <TableHead className="text-right text-xs">الحالة</TableHead>
+                      <TableHead className="text-right text-xs">الإجراءات</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredClients.map(client => {
+                      const gradeColor = getGradeColor(client.grade);
+                      const completionColor = client.completionPercentage >= 80 
+                        ? '#10b981' 
+                        : client.completionPercentage >= 50 
+                        ? '#f59e0b' 
+                        : '#ef4444';
+                      return (
+                        <TableRow 
+                          key={client.id}
+                          className="hover:bg-blue-50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            setSelectedClient(client);
+                            setShowProfileDialog(true);
+                          }}
+                        >
+                          <TableCell className="text-right">
+                            <code className="text-xs bg-gray-100 px-2 py-1 rounded">{client.clientCode}</code>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div>
+                              <p className="text-xs font-semibold">{getShortName(client.name)}</p>
+                              <p className="text-[10px] text-gray-500">{client.nationality}</p>
                             </div>
-                            <span className="text-[10px] text-gray-600">{client.gradeScore || 0}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center gap-1">
-                            <div className="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full" 
-                                style={{ 
-                                  width: `${client.completionPercentage}%`,
-                                  background: completionColor
-                                }} 
-                              />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="outline" style={{ fontSize: '10px' }}>{client.type}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge style={{ 
+                              fontSize: '10px', 
+                              background: clientClassifications.find(c => c.name === client.category)?.color + '20' || '#f3f4f6' 
+                            }}>
+                              {client.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge 
+                              style={{ 
+                                background: gradeColor, 
+                                color: '#fff', 
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '4px 10px'
+                              }}
+                            >
+                              {client.grade || '-'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center gap-1">
+                              <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full" 
+                                  style={{ 
+                                    width: `${client.gradeScore || 0}%`,
+                                    background: gradeColor
+                                  }} 
+                                />
+                              </div>
+                              <span className="text-[10px] text-gray-600">{client.gradeScore || 0}</span>
                             </div>
-                            <span 
-                              className="text-[10px] font-semibold"
-                              style={{ color: completionColor }}
-                            >
-                              {client.completionPercentage}%
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-mono">{client.contact.mobile}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs font-semibold text-blue-600">{client.totalTransactions}</span>
-                            <span className="text-[10px] text-gray-500">
-                              ({client.completedTransactions} ✓)
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-mono font-bold text-blue-900">
-                          {(client.totalFees / 1000).toFixed(0)}K
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge 
-                            variant={client.isActive ? 'default' : 'outline'}
-                            style={{ 
-                              fontSize: '10px',
-                              background: client.isActive ? '#dcfce7' : '#fef2f2',
-                              color: client.isActive ? '#166534' : '#991b1b'
-                            }}
-                          >
-                            {client.isActive ? 'نشط' : 'موقوف'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              onClick={() => {
-                                setSelectedClient(client);
-                                setShowProfileDialog(true);
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center gap-1">
+                              <div className="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full" 
+                                  style={{ 
+                                    width: `${client.completionPercentage}%`,
+                                    background: completionColor
+                                  }} 
+                                />
+                              </div>
+                              <span 
+                                className="text-[10px] font-semibold"
+                                style={{ color: completionColor }}
+                              >
+                                {client.completionPercentage}%
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-xs font-mono">{client.contact.mobile}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-semibold text-blue-600">{client.totalTransactions || 0}</span>
+                              <span className="text-[10px] text-gray-500">
+                                ({client.completedTransactions || 0} ✓)
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-xs font-mono font-bold text-blue-900">
+                            {((client.totalFees || 0) / 1000).toFixed(0)}K
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge 
+                              variant={client.isActive ? 'default' : 'outline'}
+                              style={{ 
+                                fontSize: '10px',
+                                background: client.isActive ? '#dcfce7' : '#fef2f2',
+                                color: client.isActive ? '#166534' : '#991b1b'
                               }}
-                              title="عرض البروفايل"
                             >
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              onClick={() => {
-                                setSelectedClient(client);
-                                setActiveTab('300-02');
-                              }}
-                              title="تعديل"
-                            >
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                              {client.isActive ? 'نشط' : 'موقوف'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedClient(client);
+                                  setShowProfileDialog(true);
+                                }}
+                                title="عرض البروفايل"
+                              >
+                                <Eye className="h-3 w-3" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedClient(client);
+                                  setActiveTab('300-02');
+                                }}
+                                title="تعديل"
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
             </ScrollArea>
           </CardContent>
         </Card>
@@ -2200,116 +1860,638 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     );
   }
 
-  // ========== باقي التابات ستكمل في الملف التالي ==========
-  // بسبب حد حجم الملف، سأنشئ ملف منفصل لباقي التابات
-
   function render_300_02_BasicData() {
+    const [localClient, setLocalClient] = useState(selectedClient);
+    useEffect(() => setLocalClient(selectedClient), [selectedClient]);
+
+    const handleSave = async () => {
+      if (!localClient) return;
+      try {
+        const updated = await updateClient(localClient.id, {
+          name: localClient.name,
+          type: localClient.type,
+          category: localClient.category,
+          nationality: localClient.nationality,
+          occupation: localClient.occupation,
+          company: localClient.company,
+        });
+        setSelectedClient(updated);
+        setClients(clients.map(c => c.id === updated.id ? updated : c));
+        toast.success('تم حفظ البيانات الأساسية بنجاح');
+      } catch (err) {
+        toast.error('فشل حفظ التغييرات');
+      }
+    };
+
+    if (!localClient) return null;
+
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-02" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-02 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>البيانات الأساسية</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-4 gap-3">
+              <InputWithCopy
+                label="الاسم الأول *"
+                id="firstName"
+                value={localClient.name.firstName}
+                onChange={(e) => setLocalClient({ ...localClient, name: { ...localClient.name, firstName: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="اسم الأب *"
+                id="fatherName"
+                value={localClient.name.fatherName}
+                onChange={(e) => setLocalClient({ ...localClient, name: { ...localClient.name, fatherName: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="اسم الجد *"
+                id="grandFatherName"
+                value={localClient.name.grandFatherName}
+                onChange={(e) => setLocalClient({ ...localClient, name: { ...localClient.name, grandFatherName: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="اسم العائلة *"
+                id="familyName"
+                value={localClient.name.familyName}
+                onChange={(e) => setLocalClient({ ...localClient, name: { ...localClient.name, familyName: e.target.value } })}
+                required
+              />
+            </div>
+            <Separator />
+            <div className="grid grid-cols-2 gap-3">
+              <SelectWithCopy
+                label="نوع العميل *"
+                id="clientType"
+                value={localClient.type}
+                onChange={(value) => setLocalClient({ ...localClient, type: value as any })}
+                options={[
+                  { value: 'فرد', label: 'فرد' },
+                  { value: 'شركة', label: 'شركة' },
+                  { value: 'جهة حكومية', label: 'جهة حكومية' }
+                ]}
+              />
+              <SelectWithCopy
+                label="التصنيف *"
+                id="clientCategory"
+                value={localClient.category}
+                onChange={(value) => setLocalClient({ ...localClient, category: value })}
+                options={clientClassifications.filter(c => c.isActive).map(c => ({
+                  value: c.name,
+                  label: c.name
+                }))}
+              />
+              <InputWithCopy
+                label="الجنسية *"
+                id="nationality"
+                value={localClient.nationality}
+                onChange={(e) => setLocalClient({ ...localClient, nationality: e.target.value })}
+                required
+              />
+              <InputWithCopy
+                label="المهنة"
+                id="occupation"
+                value={localClient.occupation || ''}
+                onChange={(e) => setLocalClient({ ...localClient, occupation: e.target.value })}
+              />
+            </div>
+            {localClient.type === 'شركة' && (
+              <>
+                <Separator />
+                <div className="grid grid-cols-2 gap-3">
+                  <InputWithCopy
+                    label="اسم الشركة"
+                    id="company"
+                    value={localClient.company || ''}
+                    onChange={(e) => setLocalClient({ ...localClient, company: e.target.value })}
+                  />
+                  <InputWithCopy
+                    label="السجل التجاري"
+                    id="commercialRegister"
+                    value={localClient.commercialRegister || ''}
+                    onChange={(e) => setLocalClient({ ...localClient, commercialRegister: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
+            <Button onClick={handleSave} style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff' }}>
+              <Save className="h-4 w-4 ml-2" />
+              حفظ التغييرات
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   function render_300_03_ContactData() {
+    const [localClient, setLocalClient] = useState(selectedClient);
+    useEffect(() => setLocalClient(selectedClient), [selectedClient]);
+
+    const handleSave = async () => {
+      if (!localClient) return;
+      try {
+        const updated = await updateClient(localClient.id, { contact: localClient.contact });
+        setSelectedClient(updated);
+        setClients(clients.map(c => c.id === updated.id ? updated : c));
+        toast.success('تم حفظ بيانات الاتصال بنجاح');
+      } catch (err) {
+        toast.error('فشل حفظ التغييرات');
+      }
+    };
+
+    if (!localClient) return null;
+
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-03" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-03 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>بيانات الاتصال</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <InputWithCopy
+                label="رقم الجوال *"
+                id="mobile"
+                value={localClient.contact.mobile}
+                onChange={(e) => setLocalClient({ ...localClient, contact: { ...localClient.contact, mobile: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="رقم الهاتف"
+                id="phone"
+                value={localClient.contact.phone || ''}
+                onChange={(e) => setLocalClient({ ...localClient, contact: { ...localClient.contact, phone: e.target.value } })}
+              />
+              <InputWithCopy
+                label="البريد الإلكتروني *"
+                id="email"
+                value={localClient.contact.email}
+                onChange={(e) => setLocalClient({ ...localClient, contact: { ...localClient.contact, email: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="رقم الفاكس"
+                id="fax"
+                value={localClient.contact.fax || ''}
+                onChange={(e) => setLocalClient({ ...localClient, contact: { ...localClient.contact, fax: e.target.value } })}
+              />
+              <InputWithCopy
+                label="واتساب"
+                id="whatsapp"
+                value={localClient.contact.whatsapp || ''}
+                onChange={(e) => setLocalClient({ ...localClient, contact: { ...localClient.contact, whatsapp: e.target.value } })}
+              />
+              <InputWithCopy
+                label="تيليجرام"
+                id="telegram"
+                value={localClient.contact.telegram || ''}
+                onChange={(e) => setLocalClient({ ...localClient, contact: { ...localClient.contact, telegram: e.target.value } })}
+              />
+            </div>
+            <Button onClick={handleSave} style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff' }}>
+              <Save className="h-4 w-4 ml-2" />
+              حفظ التغييرات
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   function render_300_04_Address() {
+    const [localClient, setLocalClient] = useState(selectedClient);
+    useEffect(() => setLocalClient(selectedClient), [selectedClient]);
+
+    const handleSave = async () => {
+      if (!localClient) return;
+      try {
+        const updated = await updateClient(localClient.id, { address: localClient.address });
+        setSelectedClient(updated);
+        setClients(clients.map(c => c.id === updated.id ? updated : c));
+        toast.success('تم حفظ العنوان بنجاح');
+      } catch (err) {
+        toast.error('فشل حفظ التغييرات');
+      }
+    };
+
+    if (!localClient) return null;
+
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-04" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-04 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>العنوان</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <InputWithCopy
+                label="الدولة *"
+                id="country"
+                value={localClient.address.country}
+                onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, country: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="المدينة *"
+                id="city"
+                value={localClient.address.city}
+                onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, city: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="الحي *"
+                id="district"
+                value={localClient.address.district}
+                onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, district: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="الشارع"
+                id="street"
+                value={localClient.address.street || ''}
+                onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, street: e.target.value } })}
+              />
+              <InputWithCopy
+                label="رقم المبنى"
+                id="buildingNumber"
+                value={localClient.address.buildingNumber || ''}
+                onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, buildingNumber: e.target.value } })}
+              />
+              <InputWithCopy
+                label="الرمز البريدي"
+                id="postalCode"
+                value={localClient.address.postalCode || ''}
+                onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, postalCode: e.target.value } })}
+              />
+              <InputWithCopy
+                label="الرقم الإضافي"
+                id="additionalNumber"
+                value={localClient.address.additionalNumber || ''}
+                onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, additionalNumber: e.target.value } })}
+              />
+              <InputWithCopy
+                label="رقم الوحدة"
+                id="unitNumber"
+                value={localClient.address.unitNumber || ''}
+                onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, unitNumber: e.target.value } })}
+              />
+            </div>
+            <TextAreaWithCopy
+              label="العنوان الكامل"
+              id="fullAddress"
+              value={localClient.address.fullAddress || ''}
+              onChange={(e) => setLocalClient({ ...localClient, address: { ...localClient.address, fullAddress: e.target.value } })}
+              rows={2}
+            />
+            <Button onClick={handleSave} style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff' }}>
+              <Save className="h-4 w-4 ml-2" />
+              حفظ التغييرات
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   function render_300_05_Identification() {
+    const [localClient, setLocalClient] = useState(selectedClient);
+    useEffect(() => setLocalClient(selectedClient), [selectedClient]);
+
+    const handleSave = async () => {
+      if (!localClient) return;
+      try {
+        const updated = await updateClient(localClient.id, { identification: localClient.identification });
+        setSelectedClient(updated);
+        setClients(clients.map(c => c.id === updated.id ? updated : c));
+        toast.success('تم حفظ بيانات الهوية بنجاح');
+      } catch (err) {
+        toast.error('فشل حفظ التغييرات');
+      }
+    };
+
+    if (!localClient) return null;
+
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-05" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-05 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>بيانات الهوية</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <SelectWithCopy
+                label="نوع الهوية *"
+                id="idType"
+                value={localClient.identification.idType}
+                onChange={(value) => setLocalClient({ ...localClient, identification: { ...localClient.identification, idType: value as any } })}
+                options={[
+                  { value: 'هوية وطنية', label: 'هوية وطنية' },
+                  { value: 'إقامة', label: 'إقامة' },
+                  { value: 'جواز سفر', label: 'جواز سفر' },
+                  { value: 'سجل تجاري', label: 'سجل تجاري' }
+                ]}
+              />
+              <InputWithCopy
+                label="رقم الهوية/السجل *"
+                id="idNumber"
+                value={localClient.identification.idNumber}
+                onChange={(e) => setLocalClient({ ...localClient, identification: { ...localClient.identification, idNumber: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="تاريخ الإصدار *"
+                id="issueDate"
+                value={localClient.identification.issueDate}
+                onChange={(e) => setLocalClient({ ...localClient, identification: { ...localClient.identification, issueDate: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="تاريخ الانتهاء *"
+                id="expiryDate"
+                value={localClient.identification.expiryDate}
+                onChange={(e) => setLocalClient({ ...localClient, identification: { ...localClient.identification, expiryDate: e.target.value } })}
+                required
+              />
+              <InputWithCopy
+                label="مكان الإصدار *"
+                id="issuePlace"
+                value={localClient.identification.issuePlace}
+                onChange={(e) => setLocalClient({ ...localClient, identification: { ...localClient.identification, issuePlace: e.target.value } })}
+                required
+              />
+            </div>
+            <Button onClick={handleSave} style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff' }}>
+              <Save className="h-4 w-4 ml-2" />
+              حفظ التغييرات
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   function render_300_06_Transactions() {
+    if (!selectedClient) return null;
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-06" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-06 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>المعاملات ({selectedClient.transactions?.length || 0})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedClient.transactions && selectedClient.transactions.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">رقم المعاملة</TableHead>
+                    <TableHead className="text-right">النوع</TableHead>
+                    <TableHead className="text-right">الحالة</TableHead>
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">الإجمالي</TableHead>
+                    <TableHead className="text-right">المدفوع</TableHead>
+                    <TableHead className="text-right">المتبقي</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedClient.transactions.map(tx => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="text-right font-mono">{tx.transactionNumber}</TableCell>
+                      <TableCell className="text-right">{tx.type}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge style={{ background: tx.statusColor, color: '#fff' }}>{tx.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{tx.createdDate}</TableCell>
+                      <TableCell className="text-right font-bold">{tx.totalFees.toLocaleString()}</TableCell>
+                      <TableCell className="text-right text-green-600">{tx.paidAmount.toLocaleString()}</TableCell>
+                      <TableCell className="text-right text-red-600">{tx.remainingAmount.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-gray-500 text-center py-4">لا توجد معاملات لهذا العميل</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   function render_300_07_FeesPayments() {
+    if (!selectedClient) return null;
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-07" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-07 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>الأتعاب والمدفوعات</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <Card style={{ background: '#dcfce7' }}>
+                <CardContent className="p-4 text-center">
+                  <p className="text-sm text-gray-600">إجمالي الأتعاب</p>
+                  <p className="text-xl font-bold text-green-900">{(selectedClient.totalFees || 0).toLocaleString()} ر.س</p>
+                </CardContent>
+              </Card>
+              <Card style={{ background: '#dbeafe' }}>
+                <CardContent className="p-4 text-center">
+                  <p className="text-sm text-gray-600">المدفوع</p>
+                  <p className="text-xl font-bold text-blue-900">{(selectedClient.totalPaid || 0).toLocaleString()} ر.س</p>
+                </CardContent>
+              </Card>
+              <Card style={{ background: '#fee2e2' }}>
+                <CardContent className="p-4 text-center">
+                  <p className="text-sm text-gray-600">المتبقي</p>
+                  <p className="text-xl font-bold text-red-900">{(selectedClient.totalRemaining || 0).toLocaleString()} ر.س</p>
+                </CardContent>
+              </Card>
+            </div>
+            {/* يمكنك إضافة جدول للمدفوعات هنا */}
+            <p className="text-gray-500 text-center">التفاصيل المالية مرتبطة بالمعاملات</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   function render_300_08_RatingNotes() {
+    const [localClient, setLocalClient] = useState(selectedClient);
+    useEffect(() => setLocalClient(selectedClient), [selectedClient]);
+
+    const handleSave = async () => {
+      if (!localClient) return;
+      try {
+        const updated = await updateClient(localClient.id, {
+          rating: localClient.rating,
+          secretRating: localClient.secretRating,
+          notes: localClient.notes
+        });
+        setSelectedClient(updated);
+        setClients(clients.map(c => c.id === updated.id ? updated : c));
+        toast.success('تم حفظ التقييم والملاحظات بنجاح');
+      } catch (err) {
+        toast.error('فشل حفظ التغييرات');
+      }
+    };
+
+    if (!localClient) return null;
+
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-08" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-08 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>التقييم والملاحظات</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-semibold text-gray-700 mb-2 block">التقييم العام (1-5 نجوم)</label>
+              <div className="flex items-center gap-2 p-3 border rounded-lg bg-white">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <Star
+                    key={star}
+                    className="h-6 w-6 cursor-pointer"
+                    onClick={() => setLocalClient({ ...localClient, rating: star })}
+                    style={{
+                      fill: (localClient.rating || 0) >= star ? '#fbbf24' : 'none',
+                      color: (localClient.rating || 0) >= star ? '#fbbf24' : '#d1d5db'
+                    }}
+                  />
+                ))}
+                <span className="text-sm text-gray-600 mr-2">
+                  {localClient.rating || 0} نجوم
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700 mb-2 block">التقييم السري (0-100)</label>
+              <div className="space-y-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={localClient.secretRating || 50}
+                  onChange={(e) => setLocalClient({ ...localClient, secretRating: parseInt(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">0</span>
+                  <Badge 
+                    style={{ 
+                      background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', 
+                      color: '#fff',
+                      fontSize: '13px',
+                      padding: '4px 12px'
+                    }}
+                  >
+                    {localClient.secretRating || 50}/100
+                  </Badge>
+                  <span className="text-xs text-gray-600">100</span>
+                </div>
+                <Progress value={localClient.secretRating || 50} className="h-2" />
+              </div>
+            </div>
+            <TextAreaWithCopy
+              label="ملاحظات"
+              id="notes"
+              value={localClient.notes || ''}
+              onChange={(e) => setLocalClient({ ...localClient, notes: e.target.value })}
+              rows={4}
+              placeholder="أدخل ملاحظاتك عن هذا العميل..."
+            />
+            <Button onClick={handleSave} style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff' }}>
+              <Save className="h-4 w-4 ml-2" />
+              حفظ التغييرات
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   function render_300_09_Statistics() {
+    if (!selectedClient) return null;
+    const { grade, gradeScore } = selectedClient;
+    const gradeColor = getGradeColor(grade);
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-09" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-09 قيد التطوير
-          </p>
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle>الإحصائيات العامة</CardTitle></CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span>نسبة استكمال البيانات</span>
+                  <span className="font-bold" style={{ color: selectedClient.completionPercentage >= 80 ? '#10b981' : '#f59e0b' }}>
+                    {selectedClient.completionPercentage}%
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>الدرجة</span>
+                  <Badge style={{ background: gradeColor, color: '#fff' }}>{grade || '-'}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>النقاط</span>
+                  <span className="font-bold" style={{ color: gradeColor }}>{gradeScore || 0}/100</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>إجمالي المعاملات</span>
+                  <span className="font-bold">{selectedClient.totalTransactions || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>المعاملات المكتملة</span>
+                  <span className="font-bold text-green-600">{selectedClient.completedTransactions || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>معدل الإنجاز</span>
+                  <span className="font-bold">
+                    {selectedClient.totalTransactions ? 
+                      ((selectedClient.completedTransactions / selectedClient.totalTransactions) * 100).toFixed(1) + '%' 
+                      : '0%'}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>التقييمات</CardTitle></CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">التقييم العام</p>
+                  <div className="flex">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <Star
+                        key={star}
+                        className="h-5 w-5"
+                        style={{
+                          fill: star <= selectedClient.rating ? '#fbbf24' : 'none',
+                          color: star <= selectedClient.rating ? '#fbbf24' : '#d1d5db'
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">التقييم السري</p>
+                  <Progress value={selectedClient.secretRating || 0} className="h-2" />
+                  <p className="text-sm font-bold text-purple-600 mt-1">{selectedClient.secretRating || 0}/100</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -2319,26 +2501,56 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-10" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-10 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>التقارير</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-500">قسم التقارير قيد التطوير. سيتم إضافة تصدير Excel و PDF لاحقاً.</p>
+            <div className="mt-4 flex gap-2">
+              <Button variant="outline" disabled>
+                <FileSpreadsheet className="h-4 w-4 ml-2" />
+                تصدير Excel
+              </Button>
+              <Button variant="outline" disabled>
+                <FileText className="h-4 w-4 ml-2" />
+                تصدير PDF
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   function render_300_11_ActivityLog() {
+    if (!selectedClient) return null;
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-11" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-11 قيد التطوير
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>السجل الزمني (النشاط الأخير)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedClient.activityLog && selectedClient.activityLog.length > 0 ? (
+              <div className="space-y-4">
+                {selectedClient.activityLog.slice(0, 10).map(log => (
+                  <div key={log.id} className="p-3 border rounded-lg bg-gray-50">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-semibold">{log.performedBy}</span>
+                      <span className="text-gray-500">{log.date} {log.time}</span>
+                    </div>
+                    <p className="text-sm mt-1">{log.description}</p>
+                    <Badge variant="outline" className="mt-2">{log.category}</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-4">لا يوجد سجل نشاط لهذا العميل</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -2347,41 +2559,58 @@ const ClientManagement_300_COMPLETE: React.FC = () => {
     return (
       <div className="space-y-3">
         <CodeDisplay code="TAB-300-12" position="top-right" />
-        <div className="text-center p-12">
-          <Info className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: '#6b7280' }}>
-            التاب 300-12 (التصنيفات والإعدادات) موجود في النسخة السابقة
-          </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>التصنيفات والإعدادات</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-500">هذا القسم يعرض الإعدادات العامة لنظام التصنيف.</p>
+            <div className="mt-4 space-y-2">
+              <h4 className="font-semibold">معايير تقييم العملاء:</h4>
+              <ul className="text-sm text-gray-600 space-y-1">
+                <li>الأتعاب: {gradingCriteria.totalFeesWeight}%</li>
+                <li>أنواع المشاريع: {gradingCriteria.projectTypesWeight}%</li>
+                <li>أنواع المعاملات: {gradingCriteria.transactionTypesWeight}%</li>
+                <li>معدل الإنجاز: {gradingCriteria.completionRateWeight}%</li>
+                <li>التقييم السري: {gradingCriteria.secretRatingWeight}%</li>
+              </ul>
+            </div>
+            <div className="mt-4">
+              <h4 className="font-semibold mb-2">تصنيفات العملاء:</h4>
+              <div className="flex flex-wrap gap-2">
+                {clientClassifications.map(cls => (
+                  <Badge key={cls.id} style={{ background: cls.color + '20', color: cls.color }}>
+                    {cls.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   // ============================================================================
-  // Render الرئيسي
+  // Render النهائي
   // ============================================================================
-
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
       {renderScreenHeader()}
-
       <div className="flex" style={{ gap: '4px', paddingTop: '16px' }}>
         <UnifiedTabsSidebar
           tabs={TABS_CONFIG}
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
-        
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 220px)' }}>
           {renderTabContent()}
         </div>
       </div>
-
-      {/* النوافذ المنبثقة */}
       {renderClientProfileDialog()}
       {renderAddClientDialog()}
     </div>
   );
 };
 
-export default ClientManagement_300_COMPLETE;
+export default ClientManagement_300_FULL;

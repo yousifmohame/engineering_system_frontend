@@ -1,5 +1,5 @@
 // Frontend/src/api/clientApi.ts
-import apiClient from './axiosConfig';
+import api from './axiosConfig';
 
 // 1. تعريف الواجهات (Interfaces) كما هي في شاشة v19
 export interface ClientName {
@@ -95,7 +95,7 @@ interface ClientPayload {
 // 2. وظيفة جلب جميع العملاء
 export const fetchClients = async (): Promise<Client[]> => {
   try {
-    const { data } = await apiClient.get('/clients');
+    const { data } = await api.get('/clients');
     // Prisma تعيد الـ Json ككائنات، جاهزة للاستخدام
     return data;
   } catch (error: any) {
@@ -143,7 +143,7 @@ export const createClient = async (clientData: any): Promise<Client> => {
   
   try {
     // 3.2. إرسال الـ payload المعالج
-    const { data } = await apiClient.post('/clients', payload);
+    const { data } = await api.post('/clients', payload);
     return data;
   } catch (error: any) {
     throw new Error(error.response?.data?.message || 'فشل في إنشاء العميل');

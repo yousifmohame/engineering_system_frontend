@@ -2,13 +2,13 @@
 import axios from 'axios';
 
 // إنشاء نسخة (instance) من axios
-const apiClient = axios.create({
+const api = axios.create({
   baseURL: 'http://localhost:5000/api', // عنوان الـ Backend API
 });
 
 // *** أهم جزء ***
 // هذا هو "المعترض" (Interceptor) الذي يضيف التوكن لكل طلب
-apiClient.interceptors.request.use(
+api.interceptors.request.use(
   (config) => {
     // جلب التوكن من الـ localStorage (حيث سنقوم بتخزينه)
     const token = localStorage.getItem('token');
@@ -23,4 +23,4 @@ apiClient.interceptors.request.use(
   }
 );
 
-export default apiClient;
+export default api;

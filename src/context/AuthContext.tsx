@@ -1,6 +1,6 @@
 // Frontend/src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import apiClient from '../api/axiosConfig'; // استيراد Axios المُعد
+import api from '../api/axiosConfig'; // استيراد Axios المُعد
 
 // تعريف شكل بيانات الموظف والـ Context
 interface Employee {
@@ -42,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (emailOrPhone: string, password: string) => {
     try {
       // (يمكنك استخدام 'email' أو 'phone' لتسجيل الدخول)
-      const response = await apiClient.post('/auth/login', {
+      const response = await api.post('/auth/login', {
         email: emailOrPhone, 
         password: password,
       });
