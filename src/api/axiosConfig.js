@@ -3,7 +3,8 @@ import axios from 'axios';
 
 // إنشاء نسخة (instance) من axios
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api', // عنوان الـ Backend API
+  baseURL: 'http://localhost:5000/api',
+  // baseURL: 'https://bravocode.shop/api', 
 });
 
 // *** أهم جزء ***

@@ -1,9 +1,15 @@
 /**
  * الشاشة 903 - إدارة الأدوار الوظيفية - v10.0 WITH PERMISSIONS SYSTEM
- * جميع التابات الـ 15 مكتملة + نظام الصلاحيات المتقدم ✅
+ * (الإصدار الديناميكي الكامل - لا يعتمد على أي بيانات تجريبية)
+ * * هذا الملف هو الحاوية الرئيسية (Container) الذي:
+ * 1. يجلب جميع البيانات المطلوبة باستخدام react-query.
+ * 2. يدير الحالة المركزية (مثل `selectedRoleId`).
+ * 3. يعرض التبويب المناسب بناءً على `activeTab`.
+ * 4. يمرر البيانات والدوال (props) إلى التبويبات الفرعية.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -15,17 +21,37 @@ import { Checkbox } from '../ui/checkbox';
 import {
   UserCheck, Users, Shield, Settings, Activity, BarChart3,
   Plus, Edit, Eye, Download, Layers, History, Archive,
-  ArrowRightLeft, ClipboardCheck, CheckSquare, Bell, Trash2,
-  Copy, FileText, Calendar, Clock, TrendingUp, AlertCircle,
-  Search, Filter, X, Check, ChevronRight, UserPlus, UserMinus,
-  ChevronDown, ChevronUp
+  ArrowRightLeft, ClipboardCheck, CheckSquare, Bell,
+  FileText, X, Check, ChevronRight, UserPlus,
+  ChevronDown, ChevronUp, AlertCircle, Loader2, Search, UserMinus,
+  ShieldCheck
 } from 'lucide-react';
 import CodeDisplay from '../CodeDisplay';
 import UnifiedTabsSidebar, { TabConfig } from '../UnifiedTabsSidebar';
 import { InputWithCopy, SelectWithCopy, TextAreaWithCopy } from '../InputWithCopy';
 import { EnhancedSwitch } from '../EnhancedSwitch';
 import { toast } from 'sonner';
+import { Skeleton } from '../ui/skeleton';
+import { Input } from '../ui/input';
 
+// --- استيراد دوال الـ API ---
+import * as roleApi from '../../api/roleApi';
+import * as permApi from '../../api/permissionApi';
+import * as empApi from '../../api/employeeApi';
+import * as dashApi from '../../api/dashboardApi';
+
+// --- استيراد الواجهات (Interfaces) ---
+import { JobRole, RoleChange, AssignmentList, Notification, RoleDetails } from '../../api/roleApi';
+import { Permission, PermissionGroup } from '../../api/permissionApi';
+import { Employee } from '../../api/employeeApi';
+import { RoleDashboardStats } from '../../api/dashboardApi';
+
+// --- استيراد مكونات التبويبات الفرعية ---
+// (تأكد من أن هذه الملفات موجودة في المسار الصحيح)
+import RolePermissionsTab from './tabs/RolePermissionsTab'; 
+import PermissionCreationTab from './tabs/PermissionCreationTab';
+
+// --- قائمة التبويبات (مع التبويب 16) ---
 const TABS_CONFIG: TabConfig[] = [
   { id: '903-01', number: '903-01', title: 'نظرة عامة', icon: Activity },
   { id: '903-02', number: '903-02', title: 'جميع الأدوار', icon: UserCheck },
@@ -42,384 +68,15 @@ const TABS_CONFIG: TabConfig[] = [
   { id: '903-13', number: '903-13', title: 'الإشعارات', icon: Bell },
   { id: '903-14', number: '903-14', title: 'الأرشيف', icon: Archive },
   { id: '903-15', number: '903-15', title: 'الإعدادات', icon: Settings },
+  { id: '903-16', number: '903-16', title: 'إنشاء صلاحيات', icon: ShieldCheck },
 ];
 
-// ==================== الواجهات ====================
-
-interface JobRole {
-  id: string;
-  code: string;
-  name: string;
-  nameEn: string;
-  department: string;
-  level: number;
-  employeesCount: number;
-  status: 'active' | 'inactive' | 'archived';
-  permissions: number;
-  createdDate: string;
-  createdBy: string;
-  description: string;
-  responsibilities: string[];
-  requirements: string[];
-  isArchived: boolean;
-  permissionGroups?: string[];      // 🆕 مجموعات الصلاحيات
-  specificPermissions?: string[];   // 🆕 صلاحيات محددة
-}
-
-interface Employee {
-  id: string;
-  code: string;
-  name: string;
-  currentRole: string;
-  department: string;
-  joinDate: string;
-  email: string;
-  phone: string;
-}
-
-interface RoleChange {
-  id: string;
-  employeeName: string;
-  oldRole: string;
-  newRole: string;
-  changeDate: string;
-  changedBy: string;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected';
-}
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'role_change' | 'permission_update' | 'employee_assigned' | 'role_created';
-  date: string;
-  isRead: boolean;
-  relatedRole: string;
-}
-
-interface AssignmentList {
-  id: string;
-  name: string;
-  description: string;
-  rolesCount: number;
-  employeesCount: number;
-  createdDate: string;
-  isActive: boolean;
-}
-
-// 🆕 واجهات الصلاحيات
-interface PermissionGroup {
-  id: string;
-  name: string;
-  description: string;
-  permissionsCount: number;
-  permissions: string[];
-}
-
-interface Permission {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  category: string;
-  isActive: boolean;
-}
-
-// ==================== البيانات الوهمية ====================
-
-const MOCK_ROLES: JobRole[] = [
-  {
-    id: 'ROLE-001', code: 'MGR-GEN', name: 'مدير عام', nameEn: 'General Manager',
-    department: 'الإدارة', level: 1, employeesCount: 3, status: 'active',
-    permissions: 2450, createdDate: '2024-01-15', createdBy: 'أحمد السعيد',
-    description: 'مسؤول عن الإدارة العامة وتوجيه جميع الأقسام',
-    responsibilities: ['اتخاذ القرارات الاستراتيجية', 'الإشراف على جميع الأقسام', 'وضع الخطط طويلة المدى'],
-    requirements: ['خبرة 15+ سنة', 'شهادة ماجستير في الإدارة', 'مهارات قيادية عالية'],
-    isArchived: false,
-    permissionGroups: ['إدارة عليا', 'مالية كاملة'],
-    specificPermissions: ['VIEW_ALL_SCREENS', 'EDIT_SYSTEM_SETTINGS', 'MANAGE_USERS']
-  },
-  {
-    id: 'ROLE-002', code: 'MGR-PRJ', name: 'مدير مشاريع', nameEn: 'Project Manager',
-    department: 'المشاريع', level: 2, employeesCount: 8, status: 'active',
-    permissions: 1850, createdDate: '2024-02-10', createdBy: 'محمد العتيبي',
-    description: 'إدارة المشاريع الهندسية من البداية للنهاية',
-    responsibilities: ['إدارة فرق العمل', 'متابعة الجداول الزمنية', 'التواصل مع العملاء'],
-    requirements: ['خبرة 10+ سنوات', 'PMP أو ما يعادلها', 'مهارات تنظيمية قوية'],
-    isArchived: false,
-    permissionGroups: ['إدارة وسطى', 'مشاريع'],
-    specificPermissions: ['VIEW_PROJECTS', 'EDIT_PROJECTS', 'ASSIGN_TASKS']
-  },
-  {
-    id: 'ROLE-003', code: 'ENG-ARC', name: 'مهندس معماري', nameEn: 'Architect',
-    department: 'الهندسة', level: 3, employeesCount: 15, status: 'active',
-    permissions: 1200, createdDate: '2024-03-05', createdBy: 'سارة الأحمد',
-    description: 'تصميم المباني والمخططات المعمارية',
-    responsibilities: ['إعداد التصاميم المعمارية', 'مراجعة المخططات', 'التنسيق مع الفرق الهندسية'],
-    requirements: ['بكالوريوس عمارة', 'عضوية الهيئة السعودية للمهندسين', 'خبرة 5+ سنوات'],
-    isArchived: false,
-    permissionGroups: ['هندسة'],
-    specificPermissions: ['VIEW_DRAWINGS', 'EDIT_DRAWINGS', 'APPROVE_DESIGNS']
-  },
-  {
-    id: 'ROLE-004', code: 'ENG-STR', name: 'مهندس إنشائي', nameEn: 'Structural Engineer',
-    department: 'الهندسة', level: 3, employeesCount: 12, status: 'active',
-    permissions: 1150, createdDate: '2024-03-20', createdBy: 'خالد المطيري',
-    description: 'تصميم الهياكل الإنشائية والحسابات الإنشائية',
-    responsibilities: ['الحسابات الإنشائية', 'مراجعة المخططات الإنشائية', 'الإشراف على التنفيذ'],
-    requirements: ['بكالوريوس هندسة مدنية', 'خبرة 5+ سنوات', 'إتقان البرامج الإنشائية'],
-    isArchived: false,
-    permissionGroups: ['هندسة'],
-    specificPermissions: ['VIEW_STRUCTURAL', 'EDIT_STRUCTURAL', 'APPROVE_STRUCTURAL']
-  },
-  {
-    id: 'ROLE-005', code: 'ENG-MEP', name: 'مهندس كهروميكانيك', nameEn: 'MEP Engineer',
-    department: 'الهندسة', level: 3, employeesCount: 10, status: 'active',
-    permissions: 1100, createdDate: '2024-04-01', createdBy: 'فهد الشمري',
-    description: 'تصميم أنظمة الكهرباء والميكانيكا والسباكة',
-    responsibilities: ['تصميم الأنظمة الكهربائية', 'تصميم أنظمة التكييف', 'تصميم أنظمة السباكة'],
-    requirements: ['بكالوريوس هندسة كهربائية أو ميكانيكية', 'خبرة 4+ سنوات', 'معرفة بالأكواد السعودية'],
-    isArchived: false,
-    permissionGroups: ['هندسة'],
-    specificPermissions: ['VIEW_MEP', 'EDIT_MEP']
-  },
-  {
-    id: 'ROLE-006', code: 'ACC-MGR', name: 'مدير مالي', nameEn: 'Finance Manager',
-    department: 'المالية', level: 2, employeesCount: 5, status: 'active',
-    permissions: 1650, createdDate: '2024-04-15', createdBy: 'نورة القحطاني',
-    description: 'إدارة العمليات المالية والمحاسبية',
-    responsibilities: ['إعداد التقارير المالية', 'إدارة الميزانيات', 'مراجعة القيود المحاسبية'],
-    requirements: ['بكالوريوس محاسبة', 'CPA أو CMA', 'خبرة 8+ سنوات'],
-    isArchived: false,
-    permissionGroups: ['مالية', 'محاسبة'],
-    specificPermissions: ['VIEW_FINANCES', 'EDIT_FINANCES', 'APPROVE_PAYMENTS']
-  },
-  {
-    id: 'ROLE-007', code: 'ACC-ACC', name: 'محاسب', nameEn: 'Accountant',
-    department: 'المالية', level: 4, employeesCount: 7, status: 'active',
-    permissions: 850, createdDate: '2024-05-01', createdBy: 'عبدالله الزهراني',
-    description: 'القيام بالعمليات المحاسبية اليومية',
-    responsibilities: ['تسجيل القيود', 'إعداد التقارير الشهرية', 'متابعة الحسابات'],
-    requirements: ['بكالوريوس محاسبة', 'خبرة 3+ سنوات', 'إتقان برامج المحاسبة'],
-    isArchived: false,
-    permissionGroups: ['محاسبة'],
-    specificPermissions: ['VIEW_ACCOUNTS', 'EDIT_ACCOUNTS']
-  },
-  {
-    id: 'ROLE-008', code: 'HR-MGR', name: 'مدير موارد بشرية', nameEn: 'HR Manager',
-    department: 'الموارد البشرية', level: 2, employeesCount: 4, status: 'active',
-    permissions: 1550, createdDate: '2024-05-15', createdBy: 'ريم العنزي',
-    description: 'إدارة شؤون الموظفين والتوظيف',
-    responsibilities: ['إدارة التوظيف', 'إدارة الرواتب', 'تطوير السياسات'],
-    requirements: ['بكالوريوس موارد بشرية', 'SHRM أو CIPD', 'خبرة 7+ سنوات'],
-    isArchived: false,
-    permissionGroups: ['موارد بشرية'],
-    specificPermissions: ['VIEW_EMPLOYEES', 'EDIT_EMPLOYEES', 'MANAGE_PAYROLL']
-  },
-  {
-    id: 'ROLE-009', code: 'IT-MGR', name: 'مدير تقنية المعلومات', nameEn: 'IT Manager',
-    department: 'تقنية المعلومات', level: 2, employeesCount: 6, status: 'active',
-    permissions: 1750, createdDate: '2024-06-01', createdBy: 'عمر الدوسري',
-    description: 'إدارة البنية التحتية التقنية والأنظمة',
-    responsibilities: ['إدارة الأنظمة', 'الأمن السيبراني', 'الدعم الفني'],
-    requirements: ['بكالوريوس حاسب آلي', 'شهادات تقنية', 'خبرة 8+ سنوات'],
-    isArchived: false,
-    permissionGroups: ['تقنية معلومات', 'إدارة النظام'],
-    specificPermissions: ['VIEW_SYSTEM', 'EDIT_SYSTEM', 'MANAGE_SECURITY']
-  },
-  {
-    id: 'ROLE-010', code: 'MKT-MGR', name: 'مدير تسويق', nameEn: 'Marketing Manager',
-    department: 'التسويق', level: 2, employeesCount: 5, status: 'active',
-    permissions: 1450, createdDate: '2024-06-15', createdBy: 'لينا السلمي',
-    description: 'إدارة الأنشطة التسويقية والعلاقات العامة',
-    responsibilities: ['وضع الخطط التسويقية', 'إدارة الحملات', 'تحليل السوق'],
-    requirements: ['بكالوريوس تسويق', 'خبرة 6+ سنوات', 'مهارات تواصل ممتازة'],
-    isArchived: false,
-    permissionGroups: ['تسويق'],
-    specificPermissions: ['VIEW_MARKETING', 'EDIT_CAMPAIGNS']
-  },
-  // 🆕 الدور الجديد: شريك ملكية
-  {
-    id: 'ROLE-011', code: 'PTR-OWN', name: 'شريك ملكية', nameEn: 'Ownership Partner',
-    department: 'الملكية والشراكة', level: 1, employeesCount: 2, status: 'active',
-    permissions: 1850, createdDate: '2025-01-07', createdBy: 'إدارة النظام',
-    description: 'شريك في ملكية المكتب مع صلاحيات إدارية واستشارية',
-    responsibilities: ['المشاركة في القرارات الاستراتيجية', 'مراجعة التقارير المالية', 'الموافقة على العقود الكبرى'],
-    requirements: ['شراكة رسمية مسجلة', 'خبرة في المجال', 'مؤهل مهني مناسب'],
-    isArchived: false,
-    permissionGroups: ['إدارة عليا', 'مالية محدودة', 'عقود'],
-    specificPermissions: ['VIEW_FINANCES', 'VIEW_CONTRACTS', 'APPROVE_MAJOR_CONTRACTS', 'VIEW_REPORTS']
-  }
-];
-
-// 🆕 مجموعات الصلاحيات
-const PERMISSION_GROUPS: PermissionGroup[] = [
-  {
-    id: 'PG-001',
-    name: 'إدارة عليا',
-    description: 'صلاحيات كاملة للإدارة العليا',
-    permissionsCount: 450,
-    permissions: ['VIEW_ALL_SCREENS', 'EDIT_SYSTEM_SETTINGS', 'MANAGE_USERS', 'APPROVE_ALL', 'VIEW_FINANCES', 'DELETE_RECORDS']
-  },
-  {
-    id: 'PG-002',
-    name: 'إدارة وسطى',
-    description: 'صلاحيات الإدارة الوسطى والإشرافية',
-    permissionsCount: 320,
-    permissions: ['VIEW_DEPARTMENT_SCREENS', 'EDIT_DEPARTMENT_DATA', 'ASSIGN_TASKS', 'APPROVE_DEPARTMENT', 'VIEW_REPORTS']
-  },
-  {
-    id: 'PG-003',
-    name: 'محاسبة',
-    description: 'صلاحيات المحاسبة والمالية',
-    permissionsCount: 280,
-    permissions: ['VIEW_ACCOUNTS', 'EDIT_ACCOUNTS', 'CREATE_INVOICES', 'VIEW_FINANCES', 'EDIT_VOUCHERS', 'VIEW_REPORTS']
-  },
-  {
-    id: 'PG-004',
-    name: 'موارد بشرية',
-    description: 'صلاحيات إدارة الموظفين والرواتب',
-    permissionsCount: 250,
-    permissions: ['VIEW_EMPLOYEES', 'EDIT_EMPLOYEES', 'MANAGE_PAYROLL', 'VIEW_ATTENDANCE', 'MANAGE_LEAVES']
-  },
-  {
-    id: 'PG-005',
-    name: 'هندسة',
-    description: 'صلاحيات الأعمال الهندسية',
-    permissionsCount: 380,
-    permissions: ['VIEW_DRAWINGS', 'EDIT_DRAWINGS', 'APPROVE_DESIGNS', 'VIEW_PROJECTS', 'EDIT_PROJECTS']
-  },
-  {
-    id: 'PG-006',
-    name: 'مالية كاملة',
-    description: 'صلاحيات مالية شاملة',
-    permissionsCount: 320,
-    permissions: ['VIEW_ALL_FINANCES', 'EDIT_FINANCES', 'APPROVE_PAYMENTS', 'VIEW_BUDGETS', 'EDIT_BUDGETS']
-  },
-  {
-    id: 'PG-007',
-    name: 'مالية محدودة',
-    description: 'صلاحيات مالية للمراجعة فقط',
-    permissionsCount: 120,
-    permissions: ['VIEW_FINANCES', 'VIEW_REPORTS', 'VIEW_BUDGETS']
-  },
-  {
-    id: 'PG-008',
-    name: 'مبيعات',
-    description: 'صلاحيات قسم المبيعات',
-    permissionsCount: 180,
-    permissions: ['VIEW_CLIENTS', 'EDIT_CLIENTS', 'CREATE_QUOTATIONS', 'VIEW_CONTRACTS']
-  },
-  {
-    id: 'PG-009',
-    name: 'عقود',
-    description: 'صلاحيات إدارة العقود',
-    permissionsCount: 220,
-    permissions: ['VIEW_CONTRACTS', 'EDIT_CONTRACTS', 'APPROVE_CONTRACTS', 'CREATE_CONTRACTS']
-  },
-  {
-    id: 'PG-010',
-    name: 'تقنية معلومات',
-    description: 'صلاحيات تقنية وإدارة النظام',
-    permissionsCount: 400,
-    permissions: ['VIEW_SYSTEM', 'EDIT_SYSTEM', 'MANAGE_SECURITY', 'VIEW_LOGS', 'BACKUP_SYSTEM']
-  },
-  {
-    id: 'PG-011',
-    name: 'إدارة النظام',
-    description: 'صلاحيات إدارة النظام الكاملة',
-    permissionsCount: 500,
-    permissions: ['FULL_SYSTEM_ACCESS', 'MANAGE_ALL_USERS', 'SYSTEM_CONFIGURATION', 'DATABASE_ACCESS']
-  },
-  {
-    id: 'PG-012',
-    name: 'مشاريع',
-    description: 'صلاحيات إدارة المشاريع',
-    permissionsCount: 290,
-    permissions: ['VIEW_PROJECTS', 'EDIT_PROJECTS', 'ASSIGN_TASKS', 'VIEW_TIMELINE', 'MANAGE_RESOURCES']
-  }
-];
-
-// 🆕 الصلاحيات المنفردة (عينة)
-const INDIVIDUAL_PERMISSIONS: Permission[] = [
-  // صلاحيات العرض
-  { id: 'P001', code: 'VIEW_ALL_SCREENS', name: 'عرض جميع الشاشات', description: 'السماح بعرض جميع شاشات النظام', category: 'عرض', isActive: true },
-  { id: 'P002', code: 'VIEW_FINANCES', name: 'عرض المعلومات المالية', description: 'السماح بعرض البيانات المالية', category: 'عرض', isActive: true },
-  { id: 'P003', code: 'VIEW_EMPLOYEES', name: 'عرض الموظفين', description: 'السماح بعرض بيانات الموظفين', category: 'عرض', isActive: true },
-  { id: 'P004', code: 'VIEW_CLIENTS', name: 'عرض العملاء', description: 'السماح بعرض بيانات العملاء', category: 'عرض', isActive: true },
-  { id: 'P005', code: 'VIEW_PROJECTS', name: 'عرض المشاريع', description: 'السماح بعرض المشاريع', category: 'عرض', isActive: true },
-  
-  // صلاحيات التعديل
-  { id: 'P010', code: 'EDIT_SYSTEM_SETTINGS', name: 'تعديل إعدادات النظام', description: 'السماح بتعديل إعدادات النظام', category: 'تعديل', isActive: true },
-  { id: 'P011', code: 'EDIT_FINANCES', name: 'تعديل المعلومات المالية', description: 'السماح بتعديل البيانات المالية', category: 'تعديل', isActive: true },
-  { id: 'P012', code: 'EDIT_EMPLOYEES', name: 'تعديل بيانات الموظفين', description: 'السماح بتعديل معلومات الموظفين', category: 'تعديل', isActive: true },
-  { id: 'P013', code: 'EDIT_CLIENTS', name: 'تعديل بيانات العملاء', description: 'السماح بتعديل معلومات العملاء', category: 'تعديل', isActive: true },
-  { id: 'P014', code: 'EDIT_PROJECTS', name: 'تعديل المشاريع', description: 'السماح بتعديل بيانات المشاريع', category: 'تعديل', isActive: true },
-  
-  // صلاحيات الاعتماد
-  { id: 'P020', code: 'APPROVE_ALL', name: 'اعتماد جميع العمليات', description: 'السماح باعتماد جميع العمليات', category: 'اعتماد', isActive: true },
-  { id: 'P021', code: 'APPROVE_PAYMENTS', name: 'اعتماد المدفوعات', description: 'السماح باعتماد المدفوعات', category: 'اعتماد', isActive: true },
-  { id: 'P022', code: 'APPROVE_CONTRACTS', name: 'اعتماد العقود', description: 'السماح باعتماد العقود', category: 'اعتماد', isActive: true },
-  { id: 'P023', code: 'APPROVE_MAJOR_CONTRACTS', name: 'اعتماد العقود الكبرى', description: 'اعتماد العقود الكبرى فقط', category: 'اعتماد', isActive: true },
-  
-  // صلاحيات الإدارة
-  { id: 'P030', code: 'MANAGE_USERS', name: 'إدارة المستخدمين', description: 'السماح بإدارة حسابات المستخدمين', category: 'إدارة', isActive: true },
-  { id: 'P031', code: 'MANAGE_PAYROLL', name: 'إدارة الرواتب', description: 'السماح بإدارة رواتب الموظفين', category: 'إدارة', isActive: true },
-  { id: 'P032', code: 'MANAGE_SECURITY', name: 'إدارة الأمان', description: 'السماح بإدارة إعدادات الأمان', category: 'إدارة', isActive: true },
-  { id: 'P033', code: 'ASSIGN_TASKS', name: 'تعيين المهام', description: 'السماح بتعيين المهام للموظفين', category: 'إدارة', isActive: true },
-  
-  // صلاحيات الحذف
-  { id: 'P040', code: 'DELETE_RECORDS', name: 'حذف السجلات', description: 'السماح بحذف السجلات', category: 'حذف', isActive: true },
-  
-  // صلاحيات التقارير
-  { id: 'P050', code: 'VIEW_REPORTS', name: 'عرض التقارير', description: 'السماح بعرض التقارير', category: 'تقارير', isActive: true },
-  { id: 'P051', code: 'CREATE_REPORTS', name: 'إنشاء تقارير', description: 'السماح بإنشاء تقارير مخصصة', category: 'تقارير', isActive: true }
-];
-
-const MOCK_EMPLOYEES: Employee[] = [
-  { id: 'EMP-001', code: 'E001', name: 'أحمد محمد السعيد', currentRole: 'مدير عام', department: 'الإدارة', joinDate: '2020-01-15', email: 'ahmed.s@company.com', phone: '0501234567' },
-  { id: 'EMP-002', code: 'E002', name: 'محمد علي العتيبي', currentRole: 'مدير مشاريع', department: 'المشاريع', joinDate: '2020-03-10', email: 'mohammed.a@company.com', phone: '0501234568' },
-  { id: 'EMP-003', code: 'E003', name: 'سارة خالد الأحمد', currentRole: 'مهندس معماري', department: 'الهندسة', joinDate: '2021-02-01', email: 'sara.k@company.com', phone: '0501234569' },
-  { id: 'EMP-004', code: 'E004', name: 'خالد فهد المطيري', currentRole: 'مهندس إنشائي', department: 'الهندسة', joinDate: '2021-04-15', email: 'khaled.f@company.com', phone: '0501234570' },
-  { id: 'EMP-005', code: 'E005', name: 'فهد عبدالله الشمري', currentRole: 'مهندس كهروميكانيك', department: 'الهندسة', joinDate: '2021-06-01', email: 'fahad.a@company.com', phone: '0501234571' },
-  { id: 'EMP-006', code: 'E006', name: 'نورة سعد القحطاني', currentRole: 'مدير مالي', department: 'المالية', joinDate: '2020-07-10', email: 'noura.s@company.com', phone: '0501234572' },
-  { id: 'EMP-007', code: 'E007', name: 'عبدالله أحمد الزهراني', currentRole: 'محاسب', department: 'المالية', joinDate: '2022-01-05', email: 'abdullah.a@company.com', phone: '0501234573' },
-  { id: 'EMP-008', code: 'E008', name: 'ريم محمد العنزي', currentRole: 'مدير موارد بشرية', department: 'الموارد البشرية', joinDate: '2020-09-01', email: 'reem.m@company.com', phone: '0501234574' },
-  { id: 'EMP-009', code: 'E009', name: 'عمر خالد الدوسري', currentRole: 'مدير تقنية المعلومات', department: 'تقنية المعلومات', joinDate: '2021-01-15', email: 'omar.k@company.com', phone: '0501234575' },
-  { id: 'EMP-010', code: 'E010', name: 'لينا أحمد السلمي', currentRole: 'مدير تسويق', department: 'التسويق', joinDate: '2021-03-20', email: 'lina.a@company.com', phone: '0501234576' },
-  // 🆕 موظفان بدور شريك ملكية
-  { id: 'EMP-011', code: 'E011', name: 'عبدالرحمن صالح المالك', currentRole: 'شريك ملكية', department: 'الملكية والشراكة', joinDate: '2019-01-01', email: 'abdulrahman.m@company.com', phone: '0501234577' },
-  { id: 'EMP-012', code: 'E012', name: 'فيصل محمد الشريك', currentRole: 'شريك ملكية', department: 'الملكية والشراكة', joinDate: '2019-01-01', email: 'faisal.s@company.com', phone: '0501234578' }
-];
-
-const MOCK_ROLE_CHANGES: RoleChange[] = [
-  { id: 'CHG-001', employeeName: 'أحمد محمد السعيد', oldRole: 'مدير مشاريع', newRole: 'مدير عام', changeDate: '2025-01-05', changedBy: 'محمد العتيبي', reason: 'ترقية لتولي مسؤوليات أكبر', status: 'approved' },
-  { id: 'CHG-002', employeeName: 'سارة خالد الأحمد', oldRole: 'مهندس تصميم', newRole: 'مهندس معماري', changeDate: '2025-01-10', changedBy: 'أحمد السعيد', reason: 'استكمال المتطلبات المهنية', status: 'approved' },
-  { id: 'CHG-003', employeeName: 'خالد فهد المطيري', oldRole: 'مهندس تصميم', newRole: 'مهندس إنشائي', changeDate: '2025-01-15', changedBy: 'محمد العتيبي', reason: 'تخصص في المجال الإنشائي', status: 'pending' },
-  { id: 'CHG-004', employeeName: 'فهد عبدالله الشمري', oldRole: 'مهندس كهرباء', newRole: 'مهندس كهروميكانيك', changeDate: '2025-01-20', changedBy: 'أحمد السعيد', reason: 'توسع في التخصص', status: 'pending' },
-  { id: 'CHG-005', employeeName: 'نورة سعد القحطاني', oldRole: 'محاسب رئيسي', newRole: 'مدير مالي', changeDate: '2024-12-15', changedBy: 'أحمد السعيد', reason: 'ترقية لتولي الإدارة المالية', status: 'approved' }
-];
-
-const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: 'NOT-001', title: 'دور جديد تم إنشاؤه', message: 'تم إنشاء دور "مهندس جودة" بنجاح', type: 'role_created', date: '2025-01-25 10:30', isRead: false, relatedRole: 'مهندس جودة' },
-  { id: 'NOT-002', title: 'تحديث صلاحيات', message: 'تم تحديث صلاحيات دور "مدير مشاريع"', type: 'permission_update', date: '2025-01-24 14:20', isRead: false, relatedRole: 'مدير مشاريع' },
-  { id: 'NOT-003', title: 'موظف جديد تم تعيينه', message: 'تم تعيين "علي أحمد" في دور "مهندس معماري"', type: 'employee_assigned', date: '2025-01-23 09:15', isRead: true, relatedRole: 'مهندس معماري' },
-  { id: 'NOT-004', title: 'تغيير دور موظف', message: 'تم نقل "خالد المطيري" من "مهندس تصميم" إلى "مهندس إنشائي"', type: 'role_change', date: '2025-01-22 11:45', isRead: true, relatedRole: 'مهندس إنشائي' },
-  { id: 'NOT-005', title: 'دور جديد تم إنشاؤه', message: 'تم إنشاء دور "مدير مبيعات" بنجاح', type: 'role_created', date: '2025-01-21 16:00', isRead: true, relatedRole: 'مدير مبيعات' }
-];
-
-const MOCK_ASSIGNMENT_LISTS: AssignmentList[] = [
-  { id: 'LIST-001', name: 'قائمة المناصب الإدارية', description: 'جميع المناصب الإدارية العليا', rolesCount: 5, employeesCount: 25, createdDate: '2024-01-15', isActive: true },
-  { id: 'LIST-002', name: 'قائمة المهندسين', description: 'جميع التخصصات الهندسية', rolesCount: 8, employeesCount: 62, createdDate: '2024-02-10', isActive: true },
-  { id: 'LIST-003', name: 'قائمة الموظفين الماليين', description: 'المحاسبة والمالية', rolesCount: 4, employeesCount: 18, createdDate: '2024-03-05', isActive: true },
-  { id: 'LIST-004', name: 'قائمة الدعم الإداري', description: 'موظفو الدعم والخدمات', rolesCount: 6, employeesCount: 28, createdDate: '2024-04-20', isActive: true },
-  { id: 'LIST-005', name: 'قائمة القيادات', description: 'المدراء ورؤساء الأقسام', rolesCount: 10, employeesCount: 35, createdDate: '2024-05-15', isActive: false }
-];
 
 const JobRoles_Complete_903_v10: React.FC = () => {
   const [activeTab, setActiveTab] = useState('903-01');
-  
+  const queryClient = useQueryClient();
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+
   // States للإعدادات
   const [autoAssign, setAutoAssign] = useState(false);
   const [notifyOnChange, setNotifyOnChange] = useState(true);
@@ -430,11 +87,9 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   const [showRoleDialog, setShowRoleDialog] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showTransferDialog, setShowTransferDialog] = useState(false);
-  const [showPermissionsDialog, setShowPermissionsDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<JobRole | null>(null);
   
-  // 🆕 States لنظام الصلاحيات
+  // States لنظام الصلاحيات (في نموذج الإنشاء)
   const [permissionMode, setPermissionMode] = useState<'groups' | 'individual'>('groups');
   const [selectedPermissionGroups, setSelectedPermissionGroups] = useState<string[]>([]);
   const [selectedIndividualPermissions, setSelectedIndividualPermissions] = useState<string[]>([]);
@@ -461,13 +116,145 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   
   const [transfer, setTransfer] = useState({
     employeeId: '',
-    fromRole: '',
+    fromRole: '', // سيتم جلبه من الموظف
     toRole: '',
     effectiveDate: '',
     reason: ''
   });
+
+  // ==================== جلب البيانات (Data Fetching) ====================
   
-  // دوال المساعدة
+  // (903-01) جلب إحصائيات النظرة العامة
+  const { data: overviewStats, isLoading: isLoadingStats } = useQuery<RoleDashboardStats>(
+    'roleDashboardStats', 
+    dashApi.fetchRoleDashboardStats
+  );
+
+  // (903-02) جلب جميع الأدوار
+  const { data: roles, isLoading: isLoadingRoles } = useQuery<JobRole[]>(
+    'roles', 
+    roleApi.fetchRoles
+  );
+
+  // (903-03 / 903-04) جلب جميع الموظفين (للاختيار)
+  const { data: employees, isLoading: isLoadingEmployees } = useQuery<Employee[]>(
+    'employees',
+    empApi.fetchEmployees
+  );
+  
+  // (903-03 / 903-06 / 903-16) جلب مجموعات الصلاحيات
+  const { data: permissionGroups, isLoading: isLoadingPermGroups } = useQuery<PermissionGroup[]>(
+    'permissionGroups',
+    permApi.fetchPermissionGroups
+  );
+
+  // (903-03 / 903-06 / 903-16) جلب الصلاحيات المنفردة
+  const { data: individualPermissions, isLoading: isLoadingIndivPerms } = useQuery<Permission[]>(
+    'individualPermissions',
+    permApi.fetchIndividualPermissions
+  );
+  
+  // (903-10) جلب سجل التغييرات
+  const { data: roleChanges, isLoading: isLoadingRoleChanges } = useQuery<RoleChange[]>(
+    'roleChanges',
+    roleApi.fetchRoleChanges,
+    { enabled: activeTab === '903-10' } // جلب فقط عند فتح التاب
+  );
+
+  // (903-12) جلب قوائم الإسناد
+  const { data: assignmentLists, isLoading: isLoadingAssignLists } = useQuery<AssignmentList[]>(
+    'assignmentLists',
+    roleApi.fetchAssignmentLists,
+    { enabled: activeTab === '903-12' } // جلب فقط عند فتح التاب
+  );
+  
+  // (903-13) جلب الإشعارات
+  const { data: notifications, isLoading: isLoadingNotifications } = useQuery<Notification[]>(
+    'roleNotifications',
+    roleApi.fetchRoleNotifications,
+    { enabled: activeTab === '903-13' } // جلب فقط عند فتح التاب
+  );
+
+  // (Tabs 06-14) جلب تفاصيل الدور المحدد
+  const { data: selectedRoleDetails, isLoading: isLoadingRoleDetails } = useQuery<RoleDetails>(
+    ['roleDetails', selectedRoleId], // مفتاح الكاش يعتمد على ID الدور
+    () => roleApi.fetchRoleById(selectedRoleId!),
+    {
+      enabled: !!selectedRoleId, // لا تقم بالطلب إلا إذا كان هناك ID محدد
+      onError: () => {
+        toast.error('فشل جلب تفاصيل الدور');
+        setSelectedRoleId(null); // إلغاء التحديد عند الخطأ
+      }
+    }
+  );
+
+  // ==================== عمليات الحفظ (Mutations) ====================
+
+  // (903-03) إنشاء دور جديد
+  const createRoleMutation = useMutation(roleApi.createRole, {
+    onSuccess: (newRoleData) => {
+      toast.success(`تم إنشاء الدور "${newRoleData.name}" بنجاح`);
+      queryClient.invalidateQueries('roles'); // تحديث قائمة الأدوار
+      queryClient.invalidateQueries('roleDashboardStats'); // تحديث الإحصائيات
+      setShowRoleDialog(false);
+      setNewRole({
+        code: '', name: '', nameEn: '', department: '', level: '3',
+        description: '', responsibilities: '', requirements: ''
+      });
+      setSelectedPermissionGroups([]);
+      setSelectedIndividualPermissions([]);
+    },
+    onError: (error: any) => {
+      toast.error(`فشل إنشاء الدور: ${error.message || 'خطأ غير معروف'}`);
+    }
+  });
+
+  // (903-04) تعيين موظف
+  const assignEmployeeMutation = useMutation(roleApi.assignEmployeeToRole, {
+    onSuccess: () => {
+      toast.success('تم تعيين الموظف في الدور بنجاح');
+      queryClient.invalidateQueries('employees'); // تحديث قائمة الموظفين
+      queryClient.invalidateQueries('roles'); // تحديث عدد الموظفين في الدور
+      setShowAssignDialog(false);
+      setAssignment({ employeeId: '', roleId: '', startDate: '', notes: '' });
+    },
+    onError: (error: any) => {
+      toast.error(`فشل التعيين: ${error.message || 'خطأ غير معروف'}`);
+    }
+  });
+
+  // (903-05) نقل موظف
+  const transferEmployeeMutation = useMutation(roleApi.transferEmployeeRole, {
+    onSuccess: () => {
+      toast.success('تم إرسال طلب النقل للاعتماد');
+      queryClient.invalidateQueries('employees');
+      queryClient.invalidateQueries('roleChanges'); // تحديث سجل التغييرات
+      setShowTransferDialog(false);
+      setTransfer({ employeeId: '', fromRole: '', toRole: '', effectiveDate: '', reason: '' });
+    },
+    onError: (error: any) => {
+      toast.error(`فشل النقل: ${error.message || 'خطأ غير معروف'}`);
+    }
+  });
+
+  // (903-06) تحديث صلاحيات الدور
+  const updatePermissionsMutation = useMutation(
+    ({ roleId, permissionIds }: { roleId: string, permissionIds: string[] }) => 
+      roleApi.updateRolePermissions(roleId, permissionIds),
+    {
+      onSuccess: () => {
+        toast.success('تم تحديث الصلاحيات بنجاح');
+        queryClient.invalidateQueries(['roleDetails', selectedRoleId]);
+      },
+      onError: () => {
+        toast.error('فشل تحديث الصلاحيات');
+      }
+    }
+  );
+
+  
+  // ==================== دوال المساعدة ====================
+  
   const getStatusBadge = (status: string) => {
     switch(status) {
       case 'active':
@@ -504,13 +291,13 @@ const JobRoles_Complete_903_v10: React.FC = () => {
     }
   };
   
-  // 🆕 دوال نظام الصلاحيات
+  // دوال نظام الصلاحيات (لنموذج الإنشاء)
   const getTotalSelectedPermissions = () => {
     let total = 0;
     
     if (permissionMode === 'groups') {
       selectedPermissionGroups.forEach(groupId => {
-        const group = PERMISSION_GROUPS.find(g => g.id === groupId);
+        const group = (permissionGroups || []).find(g => g.id === groupId);
         if (group) total += group.permissionsCount;
       });
     } else {
@@ -521,38 +308,43 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   };
   
   const togglePermissionGroup = (groupId: string) => {
-    if (selectedPermissionGroups.includes(groupId)) {
-      setSelectedPermissionGroups(selectedPermissionGroups.filter(id => id !== groupId));
-    } else {
-      setSelectedPermissionGroups([...selectedPermissionGroups, groupId]);
-    }
+    setSelectedPermissionGroups(prev =>
+      prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]
+    );
   };
   
   const toggleIndividualPermission = (permissionId: string) => {
-    if (selectedIndividualPermissions.includes(permissionId)) {
-      setSelectedIndividualPermissions(selectedIndividualPermissions.filter(id => id !== permissionId));
-    } else {
-      setSelectedIndividualPermissions([...selectedIndividualPermissions, permissionId]);
-    }
+    setSelectedIndividualPermissions(prev =>
+      prev.includes(permissionId) ? prev.filter(id => id !== permissionId) : [...prev, permissionId]
+    );
   };
   
   const toggleCategory = (category: string) => {
-    if (expandedCategories.includes(category)) {
-      setExpandedCategories(expandedCategories.filter(c => c !== category));
-    } else {
-      setExpandedCategories([...expandedCategories, category]);
-    }
+    setExpandedCategories(prev =>
+      prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+    );
   };
   
-  const getPermissionsByCategory = () => {
-    const categories = ['عرض', 'تعديل', 'اعتماد', 'إدارة', 'حذف', 'تقارير'];
-    return categories.map(category => ({
+  const permissionsByCategory = useMemo(() => {
+    if (!individualPermissions) return [];
+    const categoriesMap: Record<string, Permission[]> = {};
+    
+    individualPermissions.forEach(perm => {
+      const category = perm.category || 'غير مصنف';
+      if (!categoriesMap[category]) {
+        categoriesMap[category] = [];
+      }
+      categoriesMap[category].push(perm);
+    });
+    
+    return Object.entries(categoriesMap).map(([category, permissions]) => ({
       category,
-      permissions: INDIVIDUAL_PERMISSIONS.filter(p => p.category === category)
+      permissions
     }));
-  };
+  }, [individualPermissions]);
   
-  // دوال الإجراءات
+  // ==================== دوال الإجراءات (Handlers) ====================
+
   const handleCreateRole = () => {
     if (!newRole.code || !newRole.name) {
       toast.error('يرجى ملء جميع الحقول المطلوبة');
@@ -568,17 +360,20 @@ const JobRoles_Complete_903_v10: React.FC = () => {
       toast.error('يرجى اختيار صلاحية واحدة على الأقل');
       return;
     }
-    
-    const totalPerms = getTotalSelectedPermissions();
-    toast.success(`تم إنشاء الدور "${newRole.name}" مع ${totalPerms} صلاحية بنجاح`);
-    setShowRoleDialog(false);
-    // Reset form
-    setNewRole({
-      code: '', name: '', nameEn: '', department: '', level: '3',
-      description: '', responsibilities: '', requirements: ''
-    });
-    setSelectedPermissionGroups([]);
-    setSelectedIndividualPermissions([]);
+
+    const roleDataPayload = {
+      ...newRole,
+      level: parseInt(newRole.level, 10),
+      responsibilities: newRole.responsibilities.split('\n').filter(Boolean),
+      requirements: newRole.requirements.split('\n').filter(Boolean),
+      permissionsConfig: {
+        mode: permissionMode,
+        groups: selectedPermissionGroups,
+        individual: selectedIndividualPermissions,
+      }
+    };
+
+    createRoleMutation.mutate(roleDataPayload);
   };
   
   const handleAssignEmployee = () => {
@@ -586,9 +381,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
       toast.error('يرجى اختيار الموظف والدور');
       return;
     }
-    toast.success('تم تعيين الموظف في الدور بنجاح');
-    setShowAssignDialog(false);
-    setAssignment({ employeeId: '', roleId: '', startDate: '', notes: '' });
+    assignEmployeeMutation.mutate(assignment);
   };
   
   const handleTransferEmployee = () => {
@@ -596,20 +389,197 @@ const JobRoles_Complete_903_v10: React.FC = () => {
       toast.error('يرجى إكمال جميع البيانات المطلوبة');
       return;
     }
-    toast.success('تم إرسال طلب النقل للاعتماد');
-    setShowTransferDialog(false);
-    setTransfer({ employeeId: '', fromRole: '', toRole: '', effectiveDate: '', reason: '' });
+    const emp = (employees || []).find(e => e.id === transfer.employeeId);
+    
+    const transferPayload = {
+      ...transfer,
+      fromRole: emp?.currentRole || 'غير محدد',
+    };
+    
+    transferEmployeeMutation.mutate(transferPayload);
   };
   
-  const handleViewDetails = (role: JobRole) => {
-    setSelectedRole(role);
-    setShowDetailsDialog(true);
+  const handleViewDetails = () => {
+    if(selectedRoleId) {
+        // البيانات موجودة في selectedRoleDetails
+        setShowDetailsDialog(true);
+    }
   };
   
+  const handleSavePermissions = (newPermissionIds: string[]) => {
+    if (!selectedRoleId) return;
+    updatePermissionsMutation.mutate({ roleId: selectedRoleId, permissionIds: newPermissionIds });
+  };
+
+  // ==================== عرض المحتوى (Render) ====================
+
+  const renderLoading = (message: string = 'جاري تحميل البيانات...') => (
+    <div className="flex items-center justify-center h-96">
+      <div className="text-center">
+        <Loader2 className="h-12 w-12 mx-auto text-blue-500 animate-spin mb-4" />
+        <p className="text-lg text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>{message}</p>
+      </div>
+    </div>
+  );
+  
+  const RoleDataPlaceholder: React.FC<{ tabId: string; role?: RoleDetails; data?: any; isLoading?: boolean }> = ({ tabId, role, data, isLoading }) => {
+    if (isLoading) return renderLoading();
+    
+    let content = (
+      <pre className="text-xs" dir="ltr" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+        {JSON.stringify(role || data || { message: "لا توجد بيانات لعرضها" }, null, 2)}
+      </pre>
+    );
+    
+    const currentTab = TABS_CONFIG.find(t => t.id === tabId);
+
+    // تخصيص العرض للتبويبات
+    switch(tabId) {
+      case '903-08': // التسلسل الوظيفي
+        content = (
+          <div className="space-y-4">
+            <Card>
+              <CardHeader><CardTitle>الدور الأب (المدير المباشر)</CardTitle></CardHeader>
+              <CardContent>
+                {role?.parentRole ? (
+                  <p>{role.parentRole.nameAr} (Code: {role.parentRole.code})</p>
+                ) : (
+                  <p className="text-gray-500">لا يوجد دور أب (هذا هو الدور الأعلى)</p>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle>الأدوار الفرعية (المرؤوسين)</CardTitle></CardHeader>
+              <CardContent>
+                {role?.childRoles && role.childRoles.length > 0 ? (
+                  <ul className="list-disc pr-5">
+                    {role.childRoles.map(child => (
+                      <li key={child.id}>{child.nameAr} (Code: {child.code})</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-500">لا يوجد أدوار فرعية لهذا الدور</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+        break;
+      case '903-10': // سجل التغييرات
+        content = (
+          <Table>
+            <TableHeader><TableRow><TableHead>موظف</TableHead><TableHead>من دور</TableHead><TableHead>إلى دور</TableHead><TableHead>تاريخ</TableHead><TableHead>الحالة</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {(roleChanges || []).length === 0 ? (
+                 <TableRow><TableCell colSpan={5} className="text-center">لا يوجد سجلات</TableCell></TableRow>
+              ) : (roleChanges || []).map(chg => (
+                <TableRow key={chg.id}>
+                  <TableCell>{chg.employeeName}</TableCell>
+                  <TableCell>{chg.oldRole}</TableCell>
+                  <TableCell>{chg.newRole}</TableCell>
+                  <TableCell>{new Date(chg.changeDate).toLocaleDateString()}</TableCell>
+                  <TableCell>{getChangeStatusBadge(chg.status)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        );
+        break;
+      case '903-12': // قوائم الإسناد
+        content = (
+          <Table>
+            <TableHeader><TableRow><TableHead>اسم القائمة</TableHead><TableHead>الوصف</TableHead><TableHead>عدد الأدوار</TableHead><TableHead>عدد الموظفين</TableHead></TableRow></TableHeader>
+            <TableBody>
+            {(assignmentLists || []).length === 0 ? (
+                 <TableRow><TableCell colSpan={4} className="text-center">لا يوجد قوائم</TableCell></TableRow>
+              ) : (assignmentLists || []).map(list => (
+                <TableRow key={list.id}>
+                  <TableCell>{list.name}</TableCell>
+                  <TableCell>{list.description}</TableCell>
+                  <TableCell>{list.rolesCount}</TableCell>
+                  <TableCell>{list.employeesCount}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        );
+        break;
+      case '903-13': // الإشعارات
+        content = (
+           <div className="space-y-2">
+            {(notifications || []).length === 0 ? (
+                 <p className="text-center text-gray-500 py-4">لا توجد إشعارات</p>
+              ) : (notifications || []).map(notif => (
+              <div key={notif.id} className={`p-3 border rounded-lg flex items-start gap-3 ${notif.isRead ? 'bg-gray-50' : 'bg-blue-50'}`}>
+                <div className="pt-1">{getNotificationIcon(notif.type)}</div>
+                <div className="flex-1">
+                  <p className={`text-sm ${!notif.isRead && 'font-bold'}`}>{notif.title}</p>
+                  <p className="text-xs text-gray-600">{notif.message}</p>
+                </div>
+                <div className="text-xs text-gray-500">{new Date(notif.date).toLocaleString()}</div>
+              </div>
+            ))}
+           </div>
+        );
+        break;
+      // (أضف باقي التابات هنا)
+    }
+
+    return (
+      <div className="space-y-3">
+        <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+          {currentTab?.icon && React.createElement(currentTab.icon, { className: 'inline-block h-5 w-5 mr-2' })}
+          {currentTab?.title}
+        </h2>
+        
+        {/* رسالة توضيحية للتبويبات غير المكتملة */}
+        {['903-05', '903-07', '903-11', '903-14'].includes(tabId) && (
+            <p className="text-sm text-gray-600 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                هذا عرض أولي للبيانات الخاصة بالدور المحدد: <strong>{role?.nameAr || ''}</strong>.
+                <br/>
+                المحتوى المعروض هو بيانات JSON مؤقتة.
+            </p>
+        )}
+        
+        <Card className="card-element card-rtl">
+          <CardContent className="p-4">
+            {content}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+
   const renderTabContent = () => {
+    // --- فحص إذا كان يجب عرض رسالة "الرجاء اختيار دور" ---
+    const requiresRole = !['903-01', '903-02', '903-03', '903-04', '903-15', '903-16'].includes(activeTab);
+    
+    if (requiresRole && !selectedRoleId) {
+      return (
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <UserCheck className="h-16 w-16 mx-auto text-blue-400 mb-4" />
+            <p className="text-lg text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+              الرجاء اختيار دور
+            </p>
+            <p className="text-sm text-gray-500 mt-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+              اختر دوراً من تبويب "جميع الأدوار" (903-02) لعرض تفاصيله هنا.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // --- فحص إذا كانت التفاصيل قيد التحميل ---
+    if (requiresRole && isLoadingRoleDetails) {
+      return renderLoading('جاري تحميل تفاصيل الدور...');
+    }
+
     switch (activeTab) {
-      // ==================== 903-01: نظرة عامة ====================
       case '903-01':
+        if (isLoadingStats) return renderLoading('جاري تحميل الإحصائيات...');
+        if (!overviewStats) return <p>لم يتم العثور على بيانات.</p>;
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -618,38 +588,36 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 <Download className="h-3 w-3 ml-1" />تصدير
               </Button>
             </div>
-
             <div className="grid grid-cols-4 gap-2">
               <Card className="card-element card-rtl">
                 <CardContent className="p-3 text-center">
                   <UserCheck className="h-6 w-6 mx-auto text-blue-600 mb-1" />
-                  <p className="text-2xl text-blue-600 mb-1">{MOCK_ROLES.length}</p>
+                  <p className="text-2xl text-blue-600 mb-1">{overviewStats.totalRoles}</p>
                   <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي الأدوار</p>
                 </CardContent>
               </Card>
               <Card className="card-element card-rtl">
                 <CardContent className="p-3 text-center">
                   <Users className="h-6 w-6 mx-auto text-green-600 mb-1" />
-                  <p className="text-2xl text-green-600 mb-1">{MOCK_EMPLOYEES.length}</p>
+                  <p className="text-2xl text-green-600 mb-1">{overviewStats.totalEmployees}</p>
                   <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>الموظفون المعينون</p>
                 </CardContent>
               </Card>
               <Card className="card-element card-rtl">
                 <CardContent className="p-3 text-center">
                   <Shield className="h-6 w-6 mx-auto text-purple-600 mb-1" />
-                  <p className="text-2xl text-purple-600 mb-1">2,450</p>
+                  <p className="text-2xl text-purple-600 mb-1">{overviewStats.totalPermissions.toLocaleString()}</p>
                   <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي الصلاحيات</p>
                 </CardContent>
               </Card>
               <Card className="card-element card-rtl">
                 <CardContent className="p-3 text-center">
                   <Layers className="h-6 w-6 mx-auto text-orange-600 mb-1" />
-                  <p className="text-2xl text-orange-600 mb-1">5</p>
+                  <p className="text-2xl text-orange-600 mb-1">{overviewStats.totalLevels}</p>
                   <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>المستويات الوظيفية</p>
                 </CardContent>
               </Card>
             </div>
-
             <Card className="card-element card-rtl">
               <CardHeader className="p-2 pb-1">
                 <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -659,118 +627,114 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               </CardHeader>
               <CardContent className="p-2 pt-0">
                 <div className="space-y-2">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>الإدارة</span>
-                      <span className="text-xs font-mono">10%</span>
+                  {overviewStats.distribution.map(dist => (
+                    <div key={dist.name}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{dist.name}</span>
+                        <span className="text-xs font-mono">{dist.value}%</span>
+                      </div>
+                      <Progress value={dist.value} className="h-2" />
                     </div>
-                    <Progress value={10} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>المشاريع</span>
-                      <span className="text-xs font-mono">20%</span>
-                    </div>
-                    <Progress value={20} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>الهندسة</span>
-                      <span className="text-xs font-mono">40%</span>
-                    </div>
-                    <Progress value={40} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>المالية</span>
-                      <span className="text-xs font-mono">15%</span>
-                    </div>
-                    <Progress value={15} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>أخرى</span>
-                      <span className="text-xs font-mono">15%</span>
-                    </div>
-                    <Progress value={15} className="h-2" />
-                  </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           </div>
         );
 
-      // ==================== 903-02: جميع الأدوار (مع دور شريك ملكية) ====================
       case '903-02':
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>جميع الأدوار الوظيفية</h2>
               <div className="flex gap-2">
-                <Badge variant="outline" className="text-xs">{MOCK_ROLES.length} دور</Badge>
+                {roles && <Badge variant="outline" className="text-xs">{roles.length} دور</Badge>}
                 <Button size="sm" className="h-8 text-xs bg-green-500" onClick={() => setShowRoleDialog(true)}>
                   <Plus className="h-3 w-3 ml-1" />إنشاء دور جديد
                 </Button>
               </div>
             </div>
-
             <Card className="card-element card-rtl">
               <CardContent className="p-2">
                 <ScrollArea className="h-[500px]">
-                  <Table className="table-rtl dense-table">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الكود</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>اسم الدور</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>القسم</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المستوى</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الموظفون</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الصلاحيات</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجراءات</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {MOCK_ROLES.map((role) => (
-                        <TableRow key={role.id} className="hover:bg-blue-50 transition-colors">
-                          <TableCell className="text-right py-2 text-xs font-mono">{role.code}</TableCell>
-                          <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{role.name}</TableCell>
-                          <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{role.department}</TableCell>
-                          <TableCell className="text-right py-2 text-xs">{role.level}</TableCell>
-                          <TableCell className="text-right py-2 text-xs">{role.employeesCount}</TableCell>
-                          <TableCell className="text-right py-2 text-xs">{role.permissions}</TableCell>
-                          <TableCell className="text-right py-2">{getStatusBadge(role.status)}</TableCell>
-                          <TableCell className="text-right py-2">
-                            <div className="flex gap-1 justify-end">
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => handleViewDetails(role)}>
-                                <Eye className="h-3 w-3" />
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                                <Edit className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
+                  {isLoadingRoles ? (
+                    <div className="space-y-2 p-2">
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                    </div>
+                  ) : (
+                    <Table className="table-rtl dense-table">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الكود</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>اسم الدور</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>القسم</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المستوى</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الموظفون</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الصلاحيات</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجراءات</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {(roles || []).map((role) => (
+                          <TableRow 
+                            key={role.id} 
+                            className={`hover:bg-blue-50 transition-colors cursor-pointer ${
+                              selectedRoleId === role.id ? 'bg-blue-100' : ''
+                            }`}
+                            onClick={() => setSelectedRoleId(role.id)}
+                          >
+                            <TableCell className="text-right py-2 text-xs font-mono">{role.code}</TableCell>
+                            <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{role.name}</TableCell>
+                            <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{role.department}</TableCell>
+                            <TableCell className="text-right py-2 text-xs">{role.level}</TableCell>
+                            <TableCell className="text-right py-2 text-xs">{role.employeesCount || (role as any)._count?.employees || 0}</TableCell>
+                            <TableCell className="text-right py-2 text-xs">{role.permissions || (role as any)._count?.permissions || 0}</TableCell>
+                            <TableCell className="text-right py-2">{getStatusBadge(role.status)}</TableCell>
+                            <TableCell className="text-right py-2">
+                              <div className="flex gap-1 justify-end">
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); handleViewDetails(); }}>
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
                 </ScrollArea>
               </CardContent>
             </Card>
           </div>
         );
 
-      // ==================== 903-03: إنشاء دور مع نظام الصلاحيات المتقدم ====================
       case '903-03':
+        const isLoadingForm = isLoadingPermGroups || isLoadingIndivPerms;
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>إنشاء دور وظيفي جديد</h2>
-              <Button size="sm" className="h-8 text-xs bg-green-500" onClick={handleCreateRole}>
-                <Check className="h-3 w-3 ml-1" />حفظ الدور
+              <Button 
+                size="sm" 
+                className="h-8 text-xs bg-green-500" 
+                onClick={handleCreateRole}
+                disabled={createRoleMutation.isLoading || isLoadingForm}
+              >
+                {createRoleMutation.isLoading ? (
+                  <Loader2 className="h-3 w-3 ml-1 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3 ml-1" />
+                )}
+                حفظ الدور
               </Button>
             </div>
-
             <Card className="card-element card-rtl">
               <CardHeader className="p-2 pb-1">
                 <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -787,10 +751,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                     onChange={(e) => setNewRole({...newRole, code: e.target.value})}
                     placeholder="مثال: MGR-GEN"
                     required
-                    copyable={true}
-                    clearable={true}
                   />
-                  
                   <InputWithCopy
                     label="اسم الدور بالعربية *"
                     id="role-name"
@@ -798,20 +759,14 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                     onChange={(e) => setNewRole({...newRole, name: e.target.value})}
                     placeholder="مثال: مدير عام"
                     required
-                    copyable={true}
-                    clearable={true}
                   />
-                  
                   <InputWithCopy
                     label="اسم الدور بالإنجليزية"
                     id="role-name-en"
                     value={newRole.nameEn}
                     onChange={(e) => setNewRole({...newRole, nameEn: e.target.value})}
                     placeholder="Ex: General Manager"
-                    copyable={true}
-                    clearable={true}
                   />
-                  
                   <SelectWithCopy
                     label="القسم *"
                     id="role-department"
@@ -827,10 +782,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                       { value: 'التسويق', label: 'التسويق' },
                       { value: 'الملكية والشراكة', label: 'الملكية والشراكة' }
                     ]}
-                    copyable={true}
-                    clearable={true}
                   />
-                  
                   <SelectWithCopy
                     label="المستوى الوظيفي *"
                     id="role-level"
@@ -843,13 +795,10 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                       { value: '4', label: 'المستوى 4 - موظف تنفيذي' },
                       { value: '5', label: 'المستوى 5 - موظف مبتدئ' }
                     ]}
-                    copyable={true}
-                    clearable={false}
                   />
                 </div>
               </CardContent>
             </Card>
-
             <Card className="card-element card-rtl">
               <CardHeader className="p-2 pb-1">
                 <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -865,10 +814,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   onChange={(e) => setNewRole({...newRole, description: e.target.value})}
                   rows={3}
                   placeholder="وصف تفصيلي للدور الوظيفي..."
-                  copyable={true}
-                  clearable={true}
                 />
-                
                 <TextAreaWithCopy
                   label="المسؤوليات (واحدة في كل سطر)"
                   id="role-responsibilities"
@@ -876,10 +822,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   onChange={(e) => setNewRole({...newRole, responsibilities: e.target.value})}
                   rows={4}
                   placeholder="اتخاذ القرارات الاستراتيجية&#10;الإشراف على جميع الأقسام&#10;وضع الخطط طويلة المدى"
-                  copyable={true}
-                  clearable={true}
                 />
-                
                 <TextAreaWithCopy
                   label="المتطلبات (واحدة في كل سطر)"
                   id="role-requirements"
@@ -887,13 +830,9 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   onChange={(e) => setNewRole({...newRole, requirements: e.target.value})}
                   rows={4}
                   placeholder="خبرة 15+ سنة&#10;شهادة ماجستير في الإدارة&#10;مهارات قيادية عالية"
-                  copyable={true}
-                  clearable={true}
                 />
               </CardContent>
             </Card>
-
-            {/* 🆕 قسم الصلاحيات المتقدم */}
             <Card className="card-element card-rtl border-2 border-purple-200 bg-purple-50">
               <CardHeader className="p-2 pb-1">
                 <div className="flex items-center justify-between">
@@ -907,7 +846,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-2 pt-0 space-y-3">
-                {/* اختيار الطريقة */}
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -928,110 +866,105 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                     صلاحيات منفردة
                   </Button>
                 </div>
-
-                {/* مجموعات الصلاحيات */}
-                {permissionMode === 'groups' && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                      اختر مجموعة أو أكثر من المجموعات التالية:
-                    </p>
-                    <ScrollArea className="h-[300px]">
+                {isLoadingForm ? renderLoading('جاري تحميل الصلاحيات...') : (
+                  <>
+                    {permissionMode === 'groups' && (
                       <div className="space-y-2">
-                        {PERMISSION_GROUPS.map((group) => (
-                          <div
-                            key={group.id}
-                            className={`p-3 border rounded-lg cursor-pointer transition-all ${
-                              selectedPermissionGroups.includes(group.id)
-                                ? 'bg-purple-100 border-purple-400'
-                                : 'bg-white border-gray-200 hover:border-purple-300'
-                            }`}
-                            onClick={() => togglePermissionGroup(group.id)}
-                          >
-                            <div className="flex items-start gap-2">
-                              <Checkbox 
-                                checked={selectedPermissionGroups.includes(group.id)}
-                                className="mt-0.5"
-                              />
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-1">
-                                  <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{group.name}</p>
-                                  <Badge variant="outline" className="text-xs">{group.permissionsCount} صلاحية</Badge>
-                                </div>
-                                <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                                  {group.description}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </div>
-                )}
-
-                {/* الصلاحيات المنفردة */}
-                {permissionMode === 'individual' && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                      اختر الصلاحيات المطلوبة من القائمة:
-                    </p>
-                    <ScrollArea className="h-[300px]">
-                      <div className="space-y-2">
-                        {getPermissionsByCategory().map(({ category, permissions }) => (
-                          <div key={category} className="border rounded-lg overflow-hidden">
-                            {/* عنوان الفئة */}
-                            <div
-                              className="p-2 bg-gray-100 hover:bg-gray-200 cursor-pointer flex items-center justify-between"
-                              onClick={() => toggleCategory(category)}
-                            >
-                              <div className="flex items-center gap-2">
-                                {expandedCategories.includes(category) ? (
-                                  <ChevronDown className="h-4 w-4" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4" />
-                                )}
-                                <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{category}</p>
-                              </div>
-                              <Badge variant="outline" className="text-xs">
-                                {permissions.filter(p => selectedIndividualPermissions.includes(p.id)).length} / {permissions.length}
-                              </Badge>
-                            </div>
-                            
-                            {/* قائمة الصلاحيات */}
-                            {expandedCategories.includes(category) && (
-                              <div className="p-2 bg-white space-y-1">
-                                {permissions.map((perm) => (
-                                  <div
-                                    key={perm.id}
-                                    className={`p-2 border rounded cursor-pointer transition-all ${
-                                      selectedIndividualPermissions.includes(perm.id)
-                                        ? 'bg-blue-50 border-blue-300'
-                                        : 'hover:bg-gray-50'
-                                    }`}
-                                    onClick={() => toggleIndividualPermission(perm.id)}
-                                  >
-                                    <div className="flex items-start gap-2">
-                                      <Checkbox 
-                                        checked={selectedIndividualPermissions.includes(perm.id)}
-                                        className="mt-0.5"
-                                      />
-                                      <div className="flex-1">
-                                        <p className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{perm.name}</p>
-                                        <p className="text-[10px] text-gray-500 font-mono">{perm.code}</p>
-                                      </div>
+                        <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          اختر مجموعة أو أكثر من المجموعات التالية:
+                        </p>
+                        <ScrollArea className="h-[300px]">
+                          <div className="space-y-2">
+                            {(permissionGroups || []).map((group) => (
+                              <div
+                                key={group.id}
+                                className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                                  selectedPermissionGroups.includes(group.id)
+                                    ? 'bg-purple-100 border-purple-400'
+                                    : 'bg-white border-gray-200 hover:border-purple-300'
+                                }`}
+                                onClick={() => togglePermissionGroup(group.id)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <Checkbox 
+                                    checked={selectedPermissionGroups.includes(group.id)}
+                                    className="mt-0.5"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{group.name}</p>
+                                      <Badge variant="outline" className="text-xs">{group.permissionsCount} صلاحية</Badge>
                                     </div>
+                                    <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                                      {group.description}
+                                    </p>
                                   </div>
-                                ))}
+                                </div>
                               </div>
-                            )}
+                            ))}
                           </div>
-                        ))}
+                        </ScrollArea>
                       </div>
-                    </ScrollArea>
-                  </div>
+                    )}
+                    {permissionMode === 'individual' && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          اختر الصلاحيات المطلوبة من القائمة:
+                        </p>
+                        <ScrollArea className="h-[300px]">
+                          <div className="space-y-2">
+                            {permissionsByCategory.map(({ category, permissions }) => (
+                              <div key={category} className="border rounded-lg overflow-hidden">
+                                <div
+                                  className="p-2 bg-gray-100 hover:bg-gray-200 cursor-pointer flex items-center justify-between"
+                                  onClick={() => toggleCategory(category)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {expandedCategories.includes(category) ? (
+                                      <ChevronDown className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4" />
+                                    )}
+                                    <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{category}</p>
+                                  </div>
+                                  <Badge variant="outline" className="text-xs">
+                                    {permissions.filter(p => selectedIndividualPermissions.includes(p.id)).length} / {permissions.length}
+                                  </Badge>
+                                </div>
+                                {expandedCategories.includes(category) && (
+                                  <div className="p-2 bg-white space-y-1">
+                                    {permissions.map((perm) => (
+                                      <div
+                                        key={perm.id}
+                                        className={`p-2 border rounded cursor-pointer transition-all ${
+                                          selectedIndividualPermissions.includes(perm.id)
+                                            ? 'bg-blue-50 border-blue-300'
+                                            : 'hover:bg-gray-50'
+                                        }`}
+                                        onClick={() => toggleIndividualPermission(perm.id)}
+                                      >
+                                        <div className="flex items-start gap-2">
+                                          <Checkbox 
+                                            checked={selectedIndividualPermissions.includes(perm.id)}
+                                            className="mt-0.5"
+                                          />
+                                          <div className="flex-1">
+                                            <p className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{perm.name}</p>
+                                            <p className="text-[10px] text-gray-500 font-mono">{perm.code}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </div>
+                    )}
+                  </>
                 )}
-
-                {/* ملخص الصلاحيات */}
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded">
                   <div className="flex items-center justify-between">
                     <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -1044,7 +977,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   {permissionMode === 'groups' && selectedPermissionGroups.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {selectedPermissionGroups.map(groupId => {
-                        const group = PERMISSION_GROUPS.find(g => g.id === groupId);
+                        const group = (permissionGroups || []).find(g => g.id === groupId);
                         return group ? (
                           <Badge key={groupId} variant="outline" className="text-xs">
                             {group.name} ({group.permissionsCount})
@@ -1056,19 +989,27 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
-
             <div className="flex gap-2 justify-end">
               <Button size="sm" variant="outline" className="h-8 text-xs">
                 <X className="h-3 w-3 ml-1" />إلغاء
               </Button>
-              <Button size="sm" className="h-8 text-xs bg-green-500" onClick={handleCreateRole}>
-                <Check className="h-3 w-3 ml-1" />حفظ الدور
+              <Button 
+                size="sm" 
+                className="h-8 text-xs bg-green-500" 
+                onClick={handleCreateRole}
+                disabled={createRoleMutation.isLoading || isLoadingForm}
+              >
+                {createRoleMutation.isLoading ? (
+                  <Loader2 className="h-3 w-3 ml-1 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3 ml-1" />
+                )}
+                حفظ الدور
               </Button>
             </div>
           </div>
         );
 
-      // ==================== باقي التابات (كما هي) ====================
       case '903-04':
         return (
           <div className="space-y-3">
@@ -1078,43 +1019,125 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 <UserPlus className="h-3 w-3 ml-1" />تعيين موظف
               </Button>
             </div>
+            <Card className="card-element card-rtl">
+              <CardContent className="p-2">
+                <ScrollArea className="h-[500px]">
+                  {isLoadingEmployees ? (
+                     <div className="space-y-2 p-2">
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                    </div>
+                  ) : (
+                    <Table className="table-rtl dense-table">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>كود</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>اسم الموظف</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الدور الحالي</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>القسم</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>تاريخ الانضمام</TableHead>
+                          <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجراءات</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(employees || []).map((emp) => (
+                          <TableRow key={emp.id} className="hover:bg-blue-50 transition-colors">
+                            <TableCell className="text-right py-2 text-xs font-mono">{emp.code}</TableCell>
+                            <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{emp.name}</TableCell>
+                            <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{emp.currentRole}</TableCell>
+                            <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{emp.department}</TableCell>
+                            <TableCell className="text-right py-2 text-xs font-mono">{new Date(emp.joinDate).toLocaleDateString('ar-EG')}</TableCell>
+                            <TableCell className="text-right py-2">
+                              <div className="flex gap-1 justify-end">
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+                                  setTransfer(prev => ({...prev, employeeId: emp.id, fromRole: emp.currentRole}));
+                                  setShowTransferDialog(true);
+                                }}>
+                                  <ArrowRightLeft className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        );
 
+      case '903-05':
+        return <RoleDataPlaceholder tabId={activeTab} role={selectedRoleDetails} />;
+
+      case '903-06':
+        if (!selectedRoleDetails || isLoadingIndivPerms) return renderLoading('جاري تحميل الصلاحيات...');
+        const assignedIds = selectedRoleDetails.permissions.map(p => p.id);
+        return (
+          <RolePermissionsTab
+            key={selectedRoleId} 
+            allPermissions={individualPermissions || []}
+            assignedPermissionIds={assignedIds}
+            onSave={handleSavePermissions}
+            isLoading={isLoadingIndivPerms}
+            isSaving={updatePermissionsMutation.isLoading}
+            roleName={selectedRoleDetails.name} // (استخدم الاسم العربي)
+          />
+        );
+      
+      case '903-07':
+        return <RoleDataPlaceholder tabId={activeTab} role={selectedRoleDetails} />;
+
+      case '903-08':
+        return <RoleDataPlaceholder tabId={activeTab} role={selectedRoleDetails} />;
+
+      case '903-09':
+        if (!selectedRoleDetails) return renderLoading('جاري تحميل الموظفين...');
+        const assignedEmployees = selectedRoleDetails.employees;
+        return (
+          <div className="space-y-3">
+            <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+              الموظفون المعينون في دور: <strong>{selectedRoleDetails.name}</strong>
+            </h2>
             <Card className="card-element card-rtl">
               <CardContent className="p-2">
                 <ScrollArea className="h-[500px]">
                   <Table className="table-rtl dense-table">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>كود</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>اسم الموظف</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الدور الحالي</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>القسم</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>تاريخ الانضمام</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>البريد</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجراءات</TableHead>
+                        <TableHead className="text-right">الكود</TableHead>
+                        <TableHead className="text-right">الاسم</TableHead>
+                        <TableHead className="text-right">المنصب</TableHead>
+                        <TableHead className="text-right">البريد الإلكتروني</TableHead>
+                        <TableHead className="text-right">إجراءات</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {MOCK_EMPLOYEES.map((emp) => (
-                        <TableRow key={emp.id} className="hover:bg-blue-50 transition-colors">
-                          <TableCell className="text-right py-2 text-xs font-mono">{emp.code}</TableCell>
-                          <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{emp.name}</TableCell>
-                          <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{emp.currentRole}</TableCell>
-                          <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{emp.department}</TableCell>
-                          <TableCell className="text-right py-2 text-xs font-mono">{emp.joinDate}</TableCell>
-                          <TableCell className="text-right py-2 text-xs font-mono">{emp.email}</TableCell>
-                          <TableCell className="text-right py-2">
-                            <div className="flex gap-1 justify-end">
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                                <ArrowRightLeft className="h-3 w-3" />
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                                <Eye className="h-3 w-3" />
-                              </Button>
-                            </div>
+                      {assignedEmployees.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-4">
+                            لا يوجد موظفون معينون في هذا الدور حالياً.
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        assignedEmployees.map((emp: any) => (
+                          <TableRow key={emp.id} className="hover:bg-blue-50">
+                            <TableCell className="font-mono">{emp.employeeCode}</TableCell>
+                            <TableCell>{emp.name}</TableCell>
+                            <TableCell>{emp.position}</TableCell>
+                            <TableCell className="font-mono">{emp.email}</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500">
+                                <UserMinus className="h-3 w-3" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </ScrollArea>
@@ -1123,7 +1146,21 @@ const JobRoles_Complete_903_v10: React.FC = () => {
           </div>
         );
 
-      // التابات الباقية (مختصرة للحفاظ على حجم الملف)
+      case '903-10':
+        return <RoleDataPlaceholder tabId={activeTab} data={roleChanges} isLoading={isLoadingRoleChanges} />;
+      
+      case '903-11':
+        return <RoleDataPlaceholder tabId={activeTab} role={selectedRoleDetails} />;
+
+      case '903-12':
+         return <RoleDataPlaceholder tabId={activeTab} data={assignmentLists} isLoading={isLoadingAssignLists} />;
+      
+      case '903-13':
+        return <RoleDataPlaceholder tabId={activeTab} data={notifications} isLoading={isLoadingNotifications} />;
+      
+      case '903-14':
+        return <RoleDataPlaceholder tabId={activeTab} role={selectedRoleDetails} />;
+
       case '903-15':
         return (
           <div className="space-y-3">
@@ -1133,7 +1170,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 <Check className="h-3 w-3 ml-1" />حفظ التغييرات
               </Button>
             </div>
-
             <Card className="card-element card-rtl">
               <CardHeader className="p-2 pb-1">
                 <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -1151,7 +1187,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   size="sm"
                   variant="default"
                 />
-
                 <EnhancedSwitch
                   id="notify-change"
                   label="التنبيه عند التغيير"
@@ -1161,7 +1196,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   size="sm"
                   variant="success"
                 />
-                
                 <EnhancedSwitch
                   id="require-approval"
                   label="مطالبة بالاعتماد"
@@ -1171,7 +1205,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   size="sm"
                   variant="warning"
                 />
-                
                 <EnhancedSwitch
                   id="enable-hierarchy"
                   label="تفعيل التسلسل الهرمي"
@@ -1183,7 +1216,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 />
               </CardContent>
             </Card>
-
             <Card className="card-element card-rtl">
               <CardHeader className="p-2 pb-1">
                 <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -1205,18 +1237,11 @@ const JobRoles_Complete_903_v10: React.FC = () => {
           </div>
         );
 
+      case '903-16':
+        return <PermissionCreationTab />;
+      
       default:
-        return (
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <UserCheck className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <p className="text-lg text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>محتوى التبويب قيد التطوير</p>
-              <p className="text-sm text-gray-500 mt-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                التاب: {activeTab}
-              </p>
-            </div>
-          </div>
-        );
+        return <RoleDataPlaceholder tabId={activeTab} />;
     }
   };
 
@@ -1346,7 +1371,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   fontWeight: 600
                 }}
               >
-                15 تبويباً
+                16 تبويباً
               </span>
             </div>
           </div>
@@ -1371,56 +1396,39 @@ const JobRoles_Complete_903_v10: React.FC = () => {
         <DialogContent className="max-w-4xl dialog-rtl">
           <DialogHeader className="dialog-header">
             <DialogTitle className="dialog-title">تفاصيل الدور الوظيفي</DialogTitle>
-            <DialogDescription className="dialog-description">
-              معلومات كاملة عن الدور ومتطلباته ومسؤولياته وصلاحياته
-            </DialogDescription>
           </DialogHeader>
           
-          {selectedRole && (
+          {isLoadingRoleDetails ? renderLoading() : selectedRoleDetails && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 bg-blue-50 rounded">
                   <p className="text-xs text-gray-600 mb-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>اسم الدور</p>
-                  <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRole.name}</p>
-                  <p className="text-xs text-gray-500" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRole.nameEn}</p>
+                  <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRoleDetails.name}</p>
+                  <p className="text-xs text-gray-500" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRoleDetails.nameEn}</p>
                 </div>
                 <div className="p-3 bg-green-50 rounded">
                   <p className="text-xs text-gray-600 mb-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>الكود</p>
-                  <p className="text-sm font-mono">{selectedRole.code}</p>
+                  <p className="text-sm font-mono">{selectedRoleDetails.code}</p>
                 </div>
                 <div className="p-3 bg-purple-50 rounded">
                   <p className="text-xs text-gray-600 mb-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>القسم</p>
-                  <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRole.department}</p>
+                  <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRoleDetails.department}</p>
                 </div>
                 <div className="p-3 bg-orange-50 rounded">
                   <p className="text-xs text-gray-600 mb-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>المستوى الوظيفي</p>
-                  <p className="text-sm">{selectedRole.level}</p>
+                  <p className="text-sm">{selectedRoleDetails.level}</p>
                 </div>
               </div>
               
-              {/* 🆕 عرض الصلاحيات */}
-              {selectedRole.permissionGroups && selectedRole.permissionGroups.length > 0 && (
-                <div className="p-3 bg-purple-50 rounded">
-                  <p className="text-xs text-gray-600 mb-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>مجموعات الصلاحيات</p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedRole.permissionGroups.map((group, idx) => (
-                      <Badge key={idx} variant="outline" className="text-xs bg-white">
-                        {group}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
               <div className="p-3 bg-gray-50 rounded">
                 <p className="text-xs text-gray-600 mb-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>الوصف</p>
-                <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRole.description}</p>
+                <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRoleDetails.description}</p>
               </div>
               
               <div className="p-3 bg-blue-50 rounded">
                 <p className="text-xs text-gray-600 mb-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>المسؤوليات</p>
                 <ul className="text-sm space-y-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  {selectedRole.responsibilities.map((resp, idx) => (
+                  {(selectedRoleDetails.responsibilities || []).map((resp: string, idx: number) => (
                     <li key={idx} className="flex items-start gap-2">
                       <ChevronRight className="h-4 w-4 mt-0.5 flex-shrink-0" />
                       {resp}
@@ -1432,7 +1440,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               <div className="p-3 bg-green-50 rounded">
                 <p className="text-xs text-gray-600 mb-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>المتطلبات</p>
                 <ul className="text-sm space-y-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  {selectedRole.requirements.map((req, idx) => (
+                  {(selectedRoleDetails.requirements || []).map((req: string, idx: number) => (
                     <li key={idx} className="flex items-start gap-2">
                       <Check className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
                       {req}
@@ -1458,9 +1466,9 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               id="assign-employee"
               value={assignment.employeeId}
               onChange={(value) => setAssignment({...assignment, employeeId: value})}
-              options={MOCK_EMPLOYEES.map(e => ({ value: e.id, label: `${e.name} - ${e.code}` }))}
-              copyable={true}
-              clearable={true}
+              options={(employees || []).map(e => ({ value: e.id, label: `${e.name} - ${e.code}` }))}
+              placeholder={isLoadingEmployees ? 'جاري تحميل الموظفين...' : 'اختر موظفاً'}
+              disabled={isLoadingEmployees}
             />
             
             <SelectWithCopy
@@ -1468,9 +1476,9 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               id="assign-role"
               value={assignment.roleId}
               onChange={(value) => setAssignment({...assignment, roleId: value})}
-              options={MOCK_ROLES.map(r => ({ value: r.id, label: `${r.name} - ${r.department}` }))}
-              copyable={true}
-              clearable={true}
+              options={(roles || []).map(r => ({ value: r.id, label: `${r.name} - ${r.department}` }))}
+              placeholder={isLoadingRoles ? 'جاري تحميل الأدوار...' : 'اختر دوراً'}
+              disabled={isLoadingRoles}
             />
             
             <InputWithCopy
@@ -1479,8 +1487,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               type="date"
               value={assignment.startDate}
               onChange={(e) => setAssignment({...assignment, startDate: e.target.value})}
-              copyable={true}
-              clearable={true}
             />
             
             <TextAreaWithCopy
@@ -1489,8 +1495,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               value={assignment.notes}
               onChange={(e) => setAssignment({...assignment, notes: e.target.value})}
               rows={3}
-              copyable={true}
-              clearable={true}
             />
           </div>
           
@@ -1498,8 +1502,14 @@ const JobRoles_Complete_903_v10: React.FC = () => {
             <Button size="sm" variant="outline" onClick={() => setShowAssignDialog(false)}>
               <X className="h-3 w-3 ml-1" />إلغاء
             </Button>
-            <Button size="sm" className="bg-blue-500" onClick={handleAssignEmployee}>
-              <Check className="h-3 w-3 ml-1" />تعيين
+            <Button 
+              size="sm" 
+              className="bg-blue-500" 
+              onClick={handleAssignEmployee}
+              disabled={assignEmployeeMutation.isLoading}
+            >
+              {assignEmployeeMutation.isLoading ? <Loader2 className="h-3 w-3 ml-1 animate-spin" /> : <Check className="h-3 w-3 ml-1" />}
+              تعيين
             </Button>
           </div>
         </DialogContent>
@@ -1517,10 +1527,13 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               label="الموظف *"
               id="transfer-employee"
               value={transfer.employeeId}
-              onChange={(value) => setTransfer({...transfer, employeeId: value})}
-              options={MOCK_EMPLOYEES.map(e => ({ value: e.id, label: `${e.name} - ${e.currentRole}` }))}
-              copyable={true}
-              clearable={true}
+              onChange={(value) => {
+                const emp = (employees || []).find(e => e.id === value);
+                setTransfer({...transfer, employeeId: value, fromRole: emp?.currentRole || ''})
+              }}
+              options={(employees || []).map(e => ({ value: e.id, label: `${e.name} - ${e.currentRole}` }))}
+              placeholder={isLoadingEmployees ? 'جاري تحميل الموظفين...' : 'اختر موظفاً'}
+              disabled={isLoadingEmployees}
             />
             
             <SelectWithCopy
@@ -1528,9 +1541,9 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               id="transfer-to-role"
               value={transfer.toRole}
               onChange={(value) => setTransfer({...transfer, toRole: value})}
-              options={MOCK_ROLES.map(r => ({ value: r.id, label: `${r.name} - ${r.department}` }))}
-              copyable={true}
-              clearable={true}
+              options={(roles || []).map(r => ({ value: r.id, label: `${r.name} - ${r.department}` }))}
+              placeholder={isLoadingRoles ? 'جاري تحميل الأدوار...' : 'اختر الدور الجديد'}
+              disabled={isLoadingRoles}
             />
             
             <InputWithCopy
@@ -1539,8 +1552,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               type="date"
               value={transfer.effectiveDate}
               onChange={(e) => setTransfer({...transfer, effectiveDate: e.target.value})}
-              copyable={true}
-              clearable={true}
             />
             
             <TextAreaWithCopy
@@ -1550,8 +1561,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               onChange={(e) => setTransfer({...transfer, reason: e.target.value})}
               rows={3}
               placeholder="اذكر سبب نقل الموظف لهذا الدور..."
-              copyable={true}
-              clearable={true}
             />
           </div>
           
@@ -1559,8 +1568,14 @@ const JobRoles_Complete_903_v10: React.FC = () => {
             <Button size="sm" variant="outline" onClick={() => setShowTransferDialog(false)}>
               <X className="h-3 w-3 ml-1" />إلغاء
             </Button>
-            <Button size="sm" className="bg-purple-500" onClick={handleTransferEmployee}>
-              <ArrowRightLeft className="h-3 w-3 ml-1" />تقديم طلب النقل
+            <Button 
+              size="sm" 
+              className="bg-purple-500" 
+              onClick={handleTransferEmployee}
+              disabled={transferEmployeeMutation.isLoading}
+            >
+              {transferEmployeeMutation.isLoading ? <Loader2 className="h-3 w-3 ml-1 animate-spin" /> : <ArrowRightLeft className="h-3 w-3 ml-1" />}
+              تقديم طلب النقل
             </Button>
           </div>
         </DialogContent>
