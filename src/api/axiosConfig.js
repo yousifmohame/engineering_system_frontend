@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // إنشاء نسخة (instance) من axios
-const api = axios.create({
+export const api = axios.create({
   baseURL: 'http://localhost:5000/api',
   // baseURL: 'https://bravocode.shop/api', 
 });
@@ -24,4 +24,3 @@ api.interceptors.request.use(
   }
 );
 
-export default api;

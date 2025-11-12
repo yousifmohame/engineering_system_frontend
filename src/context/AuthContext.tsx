@@ -1,6 +1,6 @@
 // Frontend/src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../api/axiosConfig'; // استيراد Axios المُعد
+import {api} from '../api/axiosConfig'; // استيراد Axios المُعد
 
 // تعريف شكل بيانات الموظف والـ Context
 interface Employee {

@@ -1,5 +1,9 @@
+/**
+ * مكون تبويب إنشاء الصلاحيات
+ * تم تحديث استدعاءات useMutation لدعم تنسيق الكائن (Object) المطلوب في TanStack Query v5.
+ */
 import React, { useState } from 'react';
-import { useMutation, useQueryClient } from 'react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { InputWithCopy, SelectWithCopy, TextAreaWithCopy } from '../../InputWithCopy';
@@ -18,10 +22,11 @@ const CreatePermissionForm = () => {
     level: '3'
   });
 
-  const mutation = useMutation(permApi.createPermission, {
+  const mutation = useMutation({
+    mutationFn: permApi.createPermission, // تمرير الدالة كقيمة للخاصية mutationFn
     onSuccess: (newPerm) => {
       toast.success(`تم إنشاء الصلاحية "${newPerm.name}" بنجاح`);
-      queryClient.invalidateQueries('individualPermissions'); // تحديث قائمة الصلاحيات
+      queryClient.invalidateQueries({ queryKey: ['individualPermissions'] }); // تحديث قائمة الصلاحيات
       setFormData({ code: '', name: '', description: '', category: 'عرض', level: '3' });
     },
     onError: (err: any) => {
@@ -124,19 +129,18 @@ const CreateGroupForm = () => {
     description: '',
   });
 
-  const mutation = useMutation(
-    (data: any) => permApi.createPermissionGroup({ ...data, permissionIds: [] }), // (يمكن تطوير هذا لاحقاً)
-    {
-      onSuccess: (newGroup) => {
-        toast.success(`تم إنشاء المجموعة "${newGroup.name}" بنجاح`);
-        queryClient.invalidateQueries('permissionGroups'); // تحديث قائمة المجموعات
-        setFormData({ code: '', name: '', description: '' });
-      },
-      onError: (err: any) => {
-        toast.error(`فشل إنشاء المجموعة: ${err.response?.data?.message || err.message}`);
-      }
+  const mutation = useMutation({
+    // تمرير دالة مجهولة (anonymous function) كقيمة للخاصية mutationFn
+    mutationFn: (data: any) => permApi.createPermissionGroup({ ...data, permissionIds: [] }), 
+    onSuccess: (newGroup) => {
+      toast.success(`تم إنشاء المجموعة "${newGroup.name}" بنجاح`);
+      queryClient.invalidateQueries({ queryKey: ['permissionGroups'] }); // تحديث قائمة المجموعات
+      setFormData({ code: '', name: '', description: '' });
+    },
+    onError: (err: any) => {
+      toast.error(`فشل إنشاء المجموعة: ${err.response?.data?.message || err.message}`);
     }
-  );
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

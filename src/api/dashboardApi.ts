@@ -1,4 +1,4 @@
-import api from './axiosConfig';
+import {api} from './axiosConfig';
 
 // واجهة إحصائيات لوحة الأدوار (تاب 903-01)
 export interface RoleDashboardStats {

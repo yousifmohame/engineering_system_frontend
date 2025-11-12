@@ -7,9 +7,8 @@
  * 3. يعرض التبويب المناسب بناءً على `activeTab`.
  * 4. يمرر البيانات والدوال (props) إلى التبويبات الفرعية.
  */
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -33,19 +32,16 @@ import { EnhancedSwitch } from '../EnhancedSwitch';
 import { toast } from 'sonner';
 import { Skeleton } from '../ui/skeleton';
 import { Input } from '../ui/input';
-
 // --- استيراد دوال الـ API ---
 import * as roleApi from '../../api/roleApi';
 import * as permApi from '../../api/permissionApi';
 import * as empApi from '../../api/employeeApi';
 import * as dashApi from '../../api/dashboardApi';
-
 // --- استيراد الواجهات (Interfaces) ---
 import { JobRole, RoleChange, AssignmentList, Notification, RoleDetails } from '../../api/roleApi';
 import { Permission, PermissionGroup } from '../../api/permissionApi';
 import { Employee } from '../../api/employeeApi';
 import { RoleDashboardStats } from '../../api/dashboardApi';
-
 // --- استيراد مكونات التبويبات الفرعية ---
 // (تأكد من أن هذه الملفات موجودة في المسار الصحيح)
 import RolePermissionsTab from './tabs/RolePermissionsTab'; 
@@ -71,7 +67,6 @@ const TABS_CONFIG: TabConfig[] = [
   { id: '903-16', number: '903-16', title: 'إنشاء صلاحيات', icon: ShieldCheck },
 ];
 
-
 const JobRoles_Complete_903_v10: React.FC = () => {
   const [activeTab, setActiveTab] = useState('903-01');
   const queryClient = useQueryClient();
@@ -82,19 +77,19 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   const [notifyOnChange, setNotifyOnChange] = useState(true);
   const [requireApproval, setRequireApproval] = useState(true);
   const [enableHierarchy, setEnableHierarchy] = useState(true);
-  
+
   // States للنوافذ المنبثقة
   const [showRoleDialog, setShowRoleDialog] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showTransferDialog, setShowTransferDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
-  
+
   // States لنظام الصلاحيات (في نموذج الإنشاء)
   const [permissionMode, setPermissionMode] = useState<'groups' | 'individual'>('groups');
   const [selectedPermissionGroups, setSelectedPermissionGroups] = useState<string[]>([]);
   const [selectedIndividualPermissions, setSelectedIndividualPermissions] = useState<string[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['عرض']);
-  
+
   // States للنماذج
   const [newRole, setNewRole] = useState({
     code: '',
@@ -106,14 +101,14 @@ const JobRoles_Complete_903_v10: React.FC = () => {
     responsibilities: '',
     requirements: ''
   });
-  
+
   const [assignment, setAssignment] = useState({
     employeeId: '',
     roleId: '',
     startDate: '',
     notes: ''
   });
-  
+
   const [transfer, setTransfer] = useState({
     employeeId: '',
     fromRole: '', // سيتم جلبه من الموظف
@@ -123,79 +118,78 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   });
 
   // ==================== جلب البيانات (Data Fetching) ====================
-  
+
   // (903-01) جلب إحصائيات النظرة العامة
-  const { data: overviewStats, isLoading: isLoadingStats } = useQuery<RoleDashboardStats>(
-    'roleDashboardStats', 
-    dashApi.fetchRoleDashboardStats
-  );
+  const { data: overviewStats, isLoading: isLoadingStats } = useQuery<RoleDashboardStats>({
+    queryKey: ['roleDashboardStats'], 
+    queryFn: dashApi.fetchRoleDashboardStats
+  });
 
   // (903-02) جلب جميع الأدوار
-  const { data: roles, isLoading: isLoadingRoles } = useQuery<JobRole[]>(
-    'roles', 
-    roleApi.fetchRoles
-  );
+  const { data: roles, isLoading: isLoadingRoles } = useQuery<JobRole[]>({
+    queryKey: ['roles'], 
+    queryFn: roleApi.fetchRoles
+  });
 
   // (903-03 / 903-04) جلب جميع الموظفين (للاختيار)
-  const { data: employees, isLoading: isLoadingEmployees } = useQuery<Employee[]>(
-    'employees',
-    empApi.fetchEmployees
-  );
-  
+  const { data: employees, isLoading: isLoadingEmployees } = useQuery<Employee[]>({
+    queryKey: ['employees'],
+    queryFn: empApi.fetchEmployees
+  });
+
   // (903-03 / 903-06 / 903-16) جلب مجموعات الصلاحيات
-  const { data: permissionGroups, isLoading: isLoadingPermGroups } = useQuery<PermissionGroup[]>(
-    'permissionGroups',
-    permApi.fetchPermissionGroups
-  );
+  const { data: permissionGroups, isLoading: isLoadingPermGroups } = useQuery<PermissionGroup[]>({
+    queryKey: ['permissionGroups'],
+    queryFn: permApi.fetchPermissionGroups
+  });
 
   // (903-03 / 903-06 / 903-16) جلب الصلاحيات المنفردة
-  const { data: individualPermissions, isLoading: isLoadingIndivPerms } = useQuery<Permission[]>(
-    'individualPermissions',
-    permApi.fetchIndividualPermissions
-  );
-  
+  const { data: individualPermissions, isLoading: isLoadingIndivPerms } = useQuery<Permission[]>({
+    queryKey: ['individualPermissions'],
+    queryFn: permApi.fetchIndividualPermissions
+  });
+
   // (903-10) جلب سجل التغييرات
-  const { data: roleChanges, isLoading: isLoadingRoleChanges } = useQuery<RoleChange[]>(
-    'roleChanges',
-    roleApi.fetchRoleChanges,
-    { enabled: activeTab === '903-10' } // جلب فقط عند فتح التاب
-  );
+  const { data: roleChanges, isLoading: isLoadingRoleChanges } = useQuery<RoleChange[]>({
+    queryKey: ['roleChanges'],
+    queryFn: roleApi.fetchRoleChanges,
+    enabled: activeTab === '903-10' // جلب فقط عند فتح التاب
+  });
 
   // (903-12) جلب قوائم الإسناد
-  const { data: assignmentLists, isLoading: isLoadingAssignLists } = useQuery<AssignmentList[]>(
-    'assignmentLists',
-    roleApi.fetchAssignmentLists,
-    { enabled: activeTab === '903-12' } // جلب فقط عند فتح التاب
-  );
-  
+  const { data: assignmentLists, isLoading: isLoadingAssignLists } = useQuery<AssignmentList[]>({
+    queryKey: ['assignmentLists'],
+    queryFn: roleApi.fetchAssignmentLists,
+    enabled: activeTab === '903-12' // جلب فقط عند فتح التاب
+  });
+
   // (903-13) جلب الإشعارات
-  const { data: notifications, isLoading: isLoadingNotifications } = useQuery<Notification[]>(
-    'roleNotifications',
-    roleApi.fetchRoleNotifications,
-    { enabled: activeTab === '903-13' } // جلب فقط عند فتح التاب
-  );
+  const { data: notifications, isLoading: isLoadingNotifications } = useQuery<Notification[]>({
+    queryKey: ['roleNotifications'],
+    queryFn: roleApi.fetchRoleNotifications,
+    enabled: activeTab === '903-13' // جلب فقط عند فتح التاب
+  });
 
   // (Tabs 06-14) جلب تفاصيل الدور المحدد
-  const { data: selectedRoleDetails, isLoading: isLoadingRoleDetails } = useQuery<RoleDetails>(
-    ['roleDetails', selectedRoleId], // مفتاح الكاش يعتمد على ID الدور
-    () => roleApi.fetchRoleById(selectedRoleId!),
-    {
-      enabled: !!selectedRoleId, // لا تقم بالطلب إلا إذا كان هناك ID محدد
-      onError: () => {
-        toast.error('فشل جلب تفاصيل الدور');
-        setSelectedRoleId(null); // إلغاء التحديد عند الخطأ
-      }
+  const { data: selectedRoleDetails, isLoading: isLoadingRoleDetails } = useQuery<RoleDetails>({
+    queryKey: ['roleDetails', selectedRoleId], // مفتاح الكاش يعتمد على ID الدور
+    queryFn: () => roleApi.fetchRoleById(selectedRoleId!),
+    enabled: !!selectedRoleId, // لا تقم بالطلب إلا إذا كان هناك ID محدد
+    onError: () => {
+      toast.error('فشل جلب تفاصيل الدور');
+      setSelectedRoleId(null); // إلغاء التحديد عند الخطأ
     }
-  );
+  });
 
   // ==================== عمليات الحفظ (Mutations) ====================
 
   // (903-03) إنشاء دور جديد
-  const createRoleMutation = useMutation(roleApi.createRole, {
+  const createRoleMutation = useMutation({
+    mutationFn: roleApi.createRole,
     onSuccess: (newRoleData) => {
       toast.success(`تم إنشاء الدور "${newRoleData.name}" بنجاح`);
-      queryClient.invalidateQueries('roles'); // تحديث قائمة الأدوار
-      queryClient.invalidateQueries('roleDashboardStats'); // تحديث الإحصائيات
+      queryClient.invalidateQueries({ queryKey: ['roles'] }); // تحديث قائمة الأدوار
+      queryClient.invalidateQueries({ queryKey: ['roleDashboardStats'] }); // تحديث الإحصائيات
       setShowRoleDialog(false);
       setNewRole({
         code: '', name: '', nameEn: '', department: '', level: '3',
@@ -210,11 +204,12 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   });
 
   // (903-04) تعيين موظف
-  const assignEmployeeMutation = useMutation(roleApi.assignEmployeeToRole, {
+  const assignEmployeeMutation = useMutation({
+    mutationFn: roleApi.assignEmployeeToRole,
     onSuccess: () => {
       toast.success('تم تعيين الموظف في الدور بنجاح');
-      queryClient.invalidateQueries('employees'); // تحديث قائمة الموظفين
-      queryClient.invalidateQueries('roles'); // تحديث عدد الموظفين في الدور
+      queryClient.invalidateQueries({ queryKey: ['employees'] }); // تحديث قائمة الموظفين
+      queryClient.invalidateQueries({ queryKey: ['roles'] }); // تحديث عدد الموظفين في الدور
       setShowAssignDialog(false);
       setAssignment({ employeeId: '', roleId: '', startDate: '', notes: '' });
     },
@@ -224,11 +219,12 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   });
 
   // (903-05) نقل موظف
-  const transferEmployeeMutation = useMutation(roleApi.transferEmployeeRole, {
+  const transferEmployeeMutation = useMutation({
+    mutationFn: roleApi.transferEmployeeRole,
     onSuccess: () => {
       toast.success('تم إرسال طلب النقل للاعتماد');
-      queryClient.invalidateQueries('employees');
-      queryClient.invalidateQueries('roleChanges'); // تحديث سجل التغييرات
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['roleChanges'] }); // تحديث سجل التغييرات
       setShowTransferDialog(false);
       setTransfer({ employeeId: '', fromRole: '', toRole: '', effectiveDate: '', reason: '' });
     },
@@ -238,23 +234,20 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   });
 
   // (903-06) تحديث صلاحيات الدور
-  const updatePermissionsMutation = useMutation(
-    ({ roleId, permissionIds }: { roleId: string, permissionIds: string[] }) => 
+  const updatePermissionsMutation = useMutation({
+    mutationFn: ({ roleId, permissionIds }: { roleId: string, permissionIds: string[] }) => 
       roleApi.updateRolePermissions(roleId, permissionIds),
-    {
-      onSuccess: () => {
-        toast.success('تم تحديث الصلاحيات بنجاح');
-        queryClient.invalidateQueries(['roleDetails', selectedRoleId]);
-      },
-      onError: () => {
-        toast.error('فشل تحديث الصلاحيات');
-      }
+    onSuccess: () => {
+      toast.success('تم تحديث الصلاحيات بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['roleDetails', selectedRoleId] });
+    },
+    onError: () => {
+      toast.error('فشل تحديث الصلاحيات');
     }
-  );
+  });
 
-  
   // ==================== دوال المساعدة ====================
-  
+
   const getStatusBadge = (status: string) => {
     switch(status) {
       case 'active':
@@ -267,7 +260,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
         return <Badge className="text-xs px-1.5 py-0 h-5 bg-gray-400 text-white">غير معروف</Badge>;
     }
   };
-  
+
   const getChangeStatusBadge = (status: string) => {
     switch(status) {
       case 'approved':
@@ -280,7 +273,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
         return <Badge className="text-xs px-1.5 py-0 h-5 bg-gray-400 text-white">غير معروف</Badge>;
     }
   };
-  
+
   const getNotificationIcon = (type: string) => {
     switch(type) {
       case 'role_created': return <Plus className="h-4 w-4 text-blue-600" />;
@@ -290,11 +283,10 @@ const JobRoles_Complete_903_v10: React.FC = () => {
       default: return <Bell className="h-4 w-4 text-gray-600" />;
     }
   };
-  
+
   // دوال نظام الصلاحيات (لنموذج الإنشاء)
   const getTotalSelectedPermissions = () => {
     let total = 0;
-    
     if (permissionMode === 'groups') {
       selectedPermissionGroups.forEach(groupId => {
         const group = (permissionGroups || []).find(g => g.id === groupId);
@@ -303,32 +295,30 @@ const JobRoles_Complete_903_v10: React.FC = () => {
     } else {
       total = selectedIndividualPermissions.length;
     }
-    
     return total;
   };
-  
+
   const togglePermissionGroup = (groupId: string) => {
     setSelectedPermissionGroups(prev =>
       prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]
     );
   };
-  
+
   const toggleIndividualPermission = (permissionId: string) => {
     setSelectedIndividualPermissions(prev =>
       prev.includes(permissionId) ? prev.filter(id => id !== permissionId) : [...prev, permissionId]
     );
   };
-  
+
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev =>
       prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
     );
   };
-  
+
   const permissionsByCategory = useMemo(() => {
     if (!individualPermissions) return [];
     const categoriesMap: Record<string, Permission[]> = {};
-    
     individualPermissions.forEach(perm => {
       const category = perm.category || 'غير مصنف';
       if (!categoriesMap[category]) {
@@ -336,13 +326,12 @@ const JobRoles_Complete_903_v10: React.FC = () => {
       }
       categoriesMap[category].push(perm);
     });
-    
     return Object.entries(categoriesMap).map(([category, permissions]) => ({
       category,
       permissions
     }));
   }, [individualPermissions]);
-  
+
   // ==================== دوال الإجراءات (Handlers) ====================
 
   const handleCreateRole = () => {
@@ -350,12 +339,10 @@ const JobRoles_Complete_903_v10: React.FC = () => {
       toast.error('يرجى ملء جميع الحقول المطلوبة');
       return;
     }
-    
     if (permissionMode === 'groups' && selectedPermissionGroups.length === 0) {
       toast.error('يرجى اختيار مجموعة صلاحيات واحدة على الأقل');
       return;
     }
-    
     if (permissionMode === 'individual' && selectedIndividualPermissions.length === 0) {
       toast.error('يرجى اختيار صلاحية واحدة على الأقل');
       return;
@@ -375,7 +362,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
 
     createRoleMutation.mutate(roleDataPayload);
   };
-  
+
   const handleAssignEmployee = () => {
     if (!assignment.employeeId || !assignment.roleId) {
       toast.error('يرجى اختيار الموظف والدور');
@@ -383,29 +370,27 @@ const JobRoles_Complete_903_v10: React.FC = () => {
     }
     assignEmployeeMutation.mutate(assignment);
   };
-  
+
   const handleTransferEmployee = () => {
     if (!transfer.employeeId || !transfer.toRole) {
       toast.error('يرجى إكمال جميع البيانات المطلوبة');
       return;
     }
     const emp = (employees || []).find(e => e.id === transfer.employeeId);
-    
     const transferPayload = {
       ...transfer,
       fromRole: emp?.currentRole || 'غير محدد',
     };
-    
     transferEmployeeMutation.mutate(transferPayload);
   };
-  
+
   const handleViewDetails = () => {
     if(selectedRoleId) {
         // البيانات موجودة في selectedRoleDetails
         setShowDetailsDialog(true);
     }
   };
-  
+
   const handleSavePermissions = (newPermissionIds: string[]) => {
     if (!selectedRoleId) return;
     updatePermissionsMutation.mutate({ roleId: selectedRoleId, permissionIds: newPermissionIds });
@@ -421,16 +406,14 @@ const JobRoles_Complete_903_v10: React.FC = () => {
       </div>
     </div>
   );
-  
+
   const RoleDataPlaceholder: React.FC<{ tabId: string; role?: RoleDetails; data?: any; isLoading?: boolean }> = ({ tabId, role, data, isLoading }) => {
     if (isLoading) return renderLoading();
-    
     let content = (
       <pre className="text-xs" dir="ltr" style={{ maxHeight: '600px', overflowY: 'auto' }}>
         {JSON.stringify(role || data || { message: "لا توجد بيانات لعرضها" }, null, 2)}
       </pre>
     );
-    
     const currentTab = TABS_CONFIG.find(t => t.id === tabId);
 
     // تخصيص العرض للتبويبات
@@ -531,7 +514,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
           {currentTab?.icon && React.createElement(currentTab.icon, { className: 'inline-block h-5 w-5 mr-2' })}
           {currentTab?.title}
         </h2>
-        
         {/* رسالة توضيحية للتبويبات غير المكتملة */}
         {['903-05', '903-07', '903-11', '903-14'].includes(tabId) && (
             <p className="text-sm text-gray-600 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -540,7 +522,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 المحتوى المعروض هو بيانات JSON مؤقتة.
             </p>
         )}
-        
         <Card className="card-element card-rtl">
           <CardContent className="p-4">
             {content}
@@ -550,11 +531,10 @@ const JobRoles_Complete_903_v10: React.FC = () => {
     );
   };
 
-
   const renderTabContent = () => {
     // --- فحص إذا كان يجب عرض رسالة "الرجاء اختيار دور" ---
     const requiresRole = !['903-01', '903-02', '903-03', '903-04', '903-15', '903-16'].includes(activeTab);
-    
+
     if (requiresRole && !selectedRoleId) {
       return (
         <div className="flex items-center justify-center h-96">
@@ -1088,7 +1068,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
             roleName={selectedRoleDetails.name} // (استخدم الاسم العربي)
           />
         );
-      
+
       case '903-07':
         return <RoleDataPlaceholder tabId={activeTab} role={selectedRoleDetails} />;
 
@@ -1148,16 +1128,16 @@ const JobRoles_Complete_903_v10: React.FC = () => {
 
       case '903-10':
         return <RoleDataPlaceholder tabId={activeTab} data={roleChanges} isLoading={isLoadingRoleChanges} />;
-      
+
       case '903-11':
         return <RoleDataPlaceholder tabId={activeTab} role={selectedRoleDetails} />;
 
       case '903-12':
          return <RoleDataPlaceholder tabId={activeTab} data={assignmentLists} isLoading={isLoadingAssignLists} />;
-      
+
       case '903-13':
         return <RoleDataPlaceholder tabId={activeTab} data={notifications} isLoading={isLoadingNotifications} />;
-      
+
       case '903-14':
         return <RoleDataPlaceholder tabId={activeTab} role={selectedRoleDetails} />;
 
@@ -1239,7 +1219,7 @@ const JobRoles_Complete_903_v10: React.FC = () => {
 
       case '903-16':
         return <PermissionCreationTab />;
-      
+
       default:
         return <RoleDataPlaceholder tabId={activeTab} />;
     }
@@ -1248,7 +1228,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
   return (
     <div className="w-full h-full" dir="rtl">
       <CodeDisplay code="SCR-903" position="top-right" />
-      
       {/* هيدر الشاشة */}
       <div
         style={{
@@ -1289,7 +1268,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 }} 
               />
             </div>
-            
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
                 <h1 
@@ -1307,7 +1285,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                 >
                   إدارة الأدوار الوظيفية
                 </h1>
-                
                 <div
                   style={{
                     padding: '4px 12px',
@@ -1330,7 +1307,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   </span>
                 </div>
               </div>
-              
               <p 
                 style={{ 
                   fontFamily: 'Tajawal, sans-serif', 
@@ -1353,7 +1329,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               </p>
             </div>
           </div>
-          
           <div className="flex items-center gap-3">
             <div 
               style={{
@@ -1377,7 +1352,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
           </div>
         </div>
       </div>
-
       {/* السايد بار والمحتوى */}
       <div className="flex" style={{ gap: '4px', paddingTop: '16px' }}>
         <UnifiedTabsSidebar
@@ -1385,19 +1359,16 @@ const JobRoles_Complete_903_v10: React.FC = () => {
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
-        
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 220px)', paddingLeft: '16px', paddingRight: '16px' }}>
           {renderTabContent()}
         </div>
       </div>
-
       {/* نافذة تفاصيل الدور */}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent className="max-w-4xl dialog-rtl">
           <DialogHeader className="dialog-header">
             <DialogTitle className="dialog-title">تفاصيل الدور الوظيفي</DialogTitle>
           </DialogHeader>
-          
           {isLoadingRoleDetails ? renderLoading() : selectedRoleDetails && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -1419,12 +1390,10 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   <p className="text-sm">{selectedRoleDetails.level}</p>
                 </div>
               </div>
-              
               <div className="p-3 bg-gray-50 rounded">
                 <p className="text-xs text-gray-600 mb-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>الوصف</p>
                 <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedRoleDetails.description}</p>
               </div>
-              
               <div className="p-3 bg-blue-50 rounded">
                 <p className="text-xs text-gray-600 mb-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>المسؤوليات</p>
                 <ul className="text-sm space-y-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -1436,7 +1405,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
                   ))}
                 </ul>
               </div>
-              
               <div className="p-3 bg-green-50 rounded">
                 <p className="text-xs text-gray-600 mb-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>المتطلبات</p>
                 <ul className="text-sm space-y-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -1452,14 +1420,12 @@ const JobRoles_Complete_903_v10: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
-
       {/* نافذة تعيين موظف */}
       <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
         <DialogContent className="max-w-2xl dialog-rtl">
           <DialogHeader className="dialog-header">
             <DialogTitle className="dialog-title">تعيين موظف في دور</DialogTitle>
           </DialogHeader>
-          
           <div className="space-y-3">
             <SelectWithCopy
               label="الموظف *"
@@ -1470,7 +1436,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               placeholder={isLoadingEmployees ? 'جاري تحميل الموظفين...' : 'اختر موظفاً'}
               disabled={isLoadingEmployees}
             />
-            
             <SelectWithCopy
               label="الدور *"
               id="assign-role"
@@ -1480,7 +1445,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               placeholder={isLoadingRoles ? 'جاري تحميل الأدوار...' : 'اختر دوراً'}
               disabled={isLoadingRoles}
             />
-            
             <InputWithCopy
               label="تاريخ البدء"
               id="assign-start-date"
@@ -1488,7 +1452,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               value={assignment.startDate}
               onChange={(e) => setAssignment({...assignment, startDate: e.target.value})}
             />
-            
             <TextAreaWithCopy
               label="ملاحظات"
               id="assign-notes"
@@ -1497,7 +1460,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               rows={3}
             />
           </div>
-          
           <div className="flex gap-2 justify-end mt-4">
             <Button size="sm" variant="outline" onClick={() => setShowAssignDialog(false)}>
               <X className="h-3 w-3 ml-1" />إلغاء
@@ -1514,14 +1476,12 @@ const JobRoles_Complete_903_v10: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
-
       {/* نافذة نقل موظف */}
       <Dialog open={showTransferDialog} onOpenChange={setShowTransferDialog}>
         <DialogContent className="max-w-2xl dialog-rtl">
           <DialogHeader className="dialog-header">
             <DialogTitle className="dialog-title">نقل موظف بين الأدوار</DialogTitle>
           </DialogHeader>
-          
           <div className="space-y-3">
             <SelectWithCopy
               label="الموظف *"
@@ -1535,7 +1495,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               placeholder={isLoadingEmployees ? 'جاري تحميل الموظفين...' : 'اختر موظفاً'}
               disabled={isLoadingEmployees}
             />
-            
             <SelectWithCopy
               label="الدور الجديد *"
               id="transfer-to-role"
@@ -1545,7 +1504,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               placeholder={isLoadingRoles ? 'جاري تحميل الأدوار...' : 'اختر الدور الجديد'}
               disabled={isLoadingRoles}
             />
-            
             <InputWithCopy
               label="تاريخ السريان"
               id="transfer-effective-date"
@@ -1553,7 +1511,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               value={transfer.effectiveDate}
               onChange={(e) => setTransfer({...transfer, effectiveDate: e.target.value})}
             />
-            
             <TextAreaWithCopy
               label="سبب النقل *"
               id="transfer-reason"
@@ -1563,7 +1520,6 @@ const JobRoles_Complete_903_v10: React.FC = () => {
               placeholder="اذكر سبب نقل الموظف لهذا الدور..."
             />
           </div>
-          
           <div className="flex gap-2 justify-end mt-4">
             <Button size="sm" variant="outline" onClick={() => setShowTransferDialog(false)}>
               <X className="h-3 w-3 ml-1" />إلغاء

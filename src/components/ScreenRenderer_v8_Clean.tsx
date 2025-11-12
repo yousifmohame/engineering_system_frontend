@@ -24,8 +24,6 @@ const SimpleTransactions_Complete_287_v1 = lazy(() => import('./screens/SimpleTr
 
 // 300-399: إدارة العملاء
 const ClientManagement_300_v19 = lazy(() => import('./screens/ClientManagement_300_v19_WITH_COMPLETE_CLIENTS'));
-const ClientManagement_300_ALL_TABS_COMPLETE_FINAL = lazy(() => import('./screens/ClientManagement_300_ALL_TABS_COMPLETE_FINAL'));
-const ClientManagement_300_ENHANCED = lazy(() => import('./screens/ClientManagement_300_ENHANCED_WITH_PROFILE_GRADING'));
 
 // 400-499: الموارد البشرية
 const AdvancedHRManagement_Complete_842 = lazy(() => import('./screens/AdvancedHRManagement_Complete_842'));
@@ -114,7 +112,6 @@ const SectorsDistricts_Complete_948_v2 = lazy(() => import('./screens/SectorsDis
 const LocationsMap_Complete_949 = lazy(() => import('./screens/LocationsMap_Complete_949'));
 const CommitmentsDeclarations_Complete_940_v8 = lazy(() => import('./screens/CommitmentsDeclarations_Complete_940_v8'));
 const CommitmentsDeclarationsSettings_Complete_941 = lazy(() => import('./screens/CommitmentsDeclarationsSettings_Complete_941'));
-const DocumentTypes_Complete_942 = lazy(() => import('./screens/DocumentTypes_Complete_942'));
 const DocumentTypes_Complete_942_v2 = lazy(() => import('./screens/DocumentTypes_Complete_942_v2_WITH_CODES'));
 const OfficePartnersOwnership_Complete_943 = lazy(() => import('./screens/OfficePartnersOwnership_Complete_943'));
 const OfficeQualification_Complete_944 = lazy(() => import('./screens/PlatformsQualification_Complete_944_FULL'));

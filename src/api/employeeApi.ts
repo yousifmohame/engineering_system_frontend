@@ -1,6 +1,6 @@
 // src/api/employeeApi.ts
 
-import  api  from './axiosConfig'; // استيراد النسخة المهيأة من axios
+import  {api}  from './axiosConfig'; // استيراد النسخة المهيأة من axios
 // افتراضياً، سنستورد الأنواع من Prisma إذا كانت مشتركة
 // إذا لم تكن كذلك، يمكنك تعريفها هنا كما في الواجهة
 // import { Employee as PrismaEmployee, Attachment, Task } from '@prisma/client';

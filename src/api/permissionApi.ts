@@ -1,4 +1,4 @@
-import api from './axiosConfig';
+import {api} from './axiosConfig';
 
 // واجهة الصلاحية الفردية (تاب 903-06 و 903-16)
 export interface Permission {

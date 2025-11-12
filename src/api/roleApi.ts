@@ -1,4 +1,4 @@
-import api from './axiosConfig';
+import {api} from './axiosConfig';
 import { Permission } from './permissionApi'; // (استيراد الواجهة من الملف التالي)
 import { Employee } from './employeeApi';   // (استيراد الواجهة من الملف السابق)
 

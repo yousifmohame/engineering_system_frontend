@@ -1,126 +1,51 @@
-// Frontend/src/api/clientApi.ts
-import api from './axiosConfig';
+import {api} from './axiosConfig';
+import { 
+  Client, 
+  ClientName, 
+  ClientContact, 
+  ClientAddress, 
+  ClientIdentification,
+  ClientPayload // استيراد الأنواع من الملف المركزي
+} from '../types/clientTypes'; // نفترض أنك قمت بنقل الواجهات إلى src/types/clientTypes.ts
 
-// 1. تعريف الواجهات (Interfaces) كما هي في شاشة v19
-export interface ClientName {
-  firstName: string;
-  fatherName: string;
-  grandFatherName: string;
-  familyName: string;
-}
-
-export interface ClientContact {
-  mobile: string;
-  phone?: string;
-  email: string;
-  fax?: string;
-  whatsapp?: string;
-  telegram?: string;
-}
-
-export interface ClientAddress {
-  country: string;
-  city: string;
-  district: string;
-  street: string;
-  buildingNumber: string;
-  postalCode: string;
-  additionalNumber?: string;
-  unitNumber?: string;
-  fullAddress: string;
-}
-
-export interface ClientIdentification {
-  idType: 'هوية وطنية' | 'إقامة' | 'جواز سفر' | 'سجل تجاري';
-  idNumber: string;
-  issueDate: string;
-  expiryDate: string;
-  issuePlace: string;
-}
-
-// واجهة العميل الكاملة (التي سنستخدمها في الواجهة)
-export interface Client {
-  id: string;
-  clientCode: string;
-  type: 'فرد' | 'شركة' | 'جهة حكومية';
-  
-  // الحقول الفريدة (مضافة هنا لسهولة الاستخدام)
-  mobile: string;
-  email: string | null;
-  idNumber: string;
-
-  // الكائنات (Json)
-  name: ClientName;
-  contact: Omit<ClientContact, 'mobile' | 'email'>; // (الباقي)
-  address: ClientAddress | null;
-  identification: Omit<ClientIdentification, 'idNumber'>; // (الباقي)
-  
-  category?: string;
-  nationality?: string;
-  occupation?: string;
-  company?: string;
-  taxNumber?: string;
-  rating?: number;
-  secretRating?: number;
-  grade?: 'أ' | 'ب' | 'ج';
-  gradeScore?: number;
-  completionPercentage?: number;
-  isActive: boolean;
-  notes?: string;
-  _count: {
-    transactions: number;
-    contracts: number;
-    quotations: number;
-  };
-}
-
-// واجهة البيانات التي يتوقعها الـ Backend (مع حقول Json)
-interface ClientPayload {
-  clientCode: string;
-  mobile: string; // (Top-level)
-  email: string; // (Top-level)
-  idNumber: string; // (Top-level)
-  name: ClientName; // (Json)
-  contact: Omit<ClientContact, 'mobile' | 'email'>; // (Json)
-  address: ClientAddress; // (Json)
-  identification: Omit<ClientIdentification, 'idNumber'>; // (Json)
-  type: string;
-  category?: string;
-  nationality?: string;
-  occupation?: string;
-  company?: string;
-}
-
-
-// 2. وظيفة جلب جميع العملاء
-export const fetchClients = async (): Promise<Client[]> => {
+/**
+ * ============================================================================
+ * 1. جلب جميع العملاء
+ * GET /api/clients
+ * ============================================================================
+ */
+export const getAllClients = async (): Promise<Client[]> => {
   try {
     const { data } = await api.get('/clients');
-    // Prisma تعيد الـ Json ككائنات، جاهزة للاستخدام
+    // الـ Backend (v3) يعيد البيانات جاهزة ومتوافقة مع الواجهات
     return data;
   } catch (error: any) {
+    console.error('Error fetching clients:', error);
     throw new Error(error.response?.data?.message || 'فشل في جلب العملاء');
   }
 };
 
-// 3. وظيفة إنشاء عميل جديد (مع معالجة البنية المعقدة)
+/**
+ * ============================================================================
+ * 2. إنشاء عميل جديد
+ * POST /api/clients
+ * ============================================================================
+ */
 export const createClient = async (clientData: any): Promise<Client> => {
   
-  // 3.1. فصل البيانات لتطابق الـ Backend (v3-Json Schema)
+  // 1. تحويل البيانات من النموذج (الواجهة) إلى الـ Payload (الـ Backend)
   const payload: ClientPayload = {
-    clientCode: clientData.clientCode,
-    type: clientData.type,
+    // ❌❌❌ تم حذف 'clientCode' من هنا ❌❌❌
+    // clientCode: clientData.clientCode,
     
     // الحقول الفريدة (Top-level)
     mobile: clientData.contact.mobile,
     email: clientData.contact.email,
     idNumber: clientData.identification.idNumber,
 
-    // الكائنات (Json)
+    // ... (باقي الحقول: name, address, contact, identification, type, إلخ) ...
     name: clientData.name,
     address: clientData.address,
-    
-    // كائنات (Json) بعد إزالة الحقول المكررة
     contact: {
       phone: clientData.contact.phone,
       fax: clientData.contact.fax,
@@ -133,19 +58,95 @@ export const createClient = async (clientData: any): Promise<Client> => {
       expiryDate: clientData.identification.expiryDate,
       issuePlace: clientData.identification.issuePlace,
     },
-
-    // بيانات إضافية
+    type: clientData.type,
     category: clientData.category,
     nationality: clientData.nationality,
     occupation: clientData.occupation,
     company: clientData.company,
+    taxNumber: clientData.taxNumber,
+    rating: clientData.rating,
+    secretRating: clientData.secretRating,
+    notes: clientData.notes,
+    isActive: clientData.isActive,
   };
   
   try {
-    // 3.2. إرسال الـ payload المعالج
+    // 2. إرسال الـ payload المعالج
     const { data } = await api.post('/clients', payload);
     return data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'فشل في إنشاء العميل');
+    console.error('Error creating client:', error);
+    // ✅ تحسين رسالة الخطأ لتشمل ما يرسله السيرفر
+    const serverError = error.response?.data?.error || error.response?.data?.message;
+    throw new Error(serverError || 'فشل في إنشاء العميل');
+  }
+};
+
+
+/**
+ * ============================================================================
+ * 3. تحديث عميل موجود
+ * PUT /api/clients/:id
+ * ============================================================================
+ */
+export const updateClient = async (clientId: string, clientData: any): Promise<Client> => {
+  
+  // 1. تحويل البيانات للـ Payload بنفس منطق الإنشاء
+  const payload: Partial<ClientPayload> = {
+    mobile: clientData.contact.mobile,
+    email: clientData.contact.email,
+    idNumber: clientData.identification.idNumber,
+
+    name: clientData.name,
+    address: clientData.address,
+    
+    contact: {
+      phone: clientData.contact.phone,
+      fax: clientData.contact.fax,
+      whatsapp: clientData.contact.whatsapp,
+      telegram: clientData.contact.telegram,
+    },
+    identification: {
+      idType: clientData.identification.idType,
+      issueDate: clientData.identification.issueDate,
+      expiryDate: clientData.identification.expiryDate,
+      issuePlace: clientData.identification.issuePlace,
+    },
+    
+    type: clientData.type,
+    category: clientData.category,
+    nationality: clientData.nationality,
+    occupation: clientData.occupation,
+    company: clientData.company,
+    taxNumber: clientData.taxNumber,
+    rating: clientData.rating,
+    secretRating: clientData.secretRating,
+    notes: clientData.notes,
+    isActive: clientData.isActive,
+  };
+
+  try {
+    // 2. إرسال الطلب إلى المسار الصحيح
+    const { data } = await api.put(`/clients/${clientId}`, payload);
+    return data;
+  } catch (error: any) {
+    console.error('Error updating client:', error);
+    throw new Error(error.response?.data?.message || 'فشل في تحديث العميل');
+  }
+};
+
+/**
+ * ============================================================================
+ * 4. حذف عميل
+ * DELETE /api/clients/:id
+ * ============================================================================
+ */
+export const deleteClient = async (clientId: string): Promise<any> => {
+  try {
+    const { data } = await api.delete(`/clients/${clientId}`);
+    return data; // عادة ما يُرجع رسالة نجاح
+  } catch (error: any) {
+    console.error('Error deleting client:', error);
+    throw new Error(error.response?.data?.message || 'فشل في حذف العميل');
   }
 };
