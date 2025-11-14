@@ -1,23 +1,28 @@
 /**
- * الشاشة 825 - إسناد مهام المعاملات - نظام متكامل v2.0 (Dynamic Backend)
+ * الشاشة 825 - إسناد مهام المعاملات - نظام متكامل v1.0
  * ================================================================
- * * تم تحويل هذه الشاشة بالكامل للعمل مع الـ Backend.
- * - إزالة البيانات التجريبية (Dummy Data).
- * - إضافة جلب البيانات (useState, useEffect) من الـ API.
- * - ربط جميع التابات بالحالات (States) الديناميكية.
- * - تفعيل نموذج "إسناد مهمة جديدة" ليرسل البيانات (POST).
- * - تفعيل النوافذ المنبثقة (Dialogs) لإرسال التحديثات (PATCH).
- * * التطوير: نوفمبر 2025 - v2.0
+ * 
+ * نظام شامل لإدارة وإسناد مهام المعاملات:
+ * - استعراض جميع المهام المسندة مع تفاصيلها الدقيقة
+ * - تتبع مقدار التقدم لكل مهمة بشكل تفاعلي
+ * - إسناد مهام جديدة للموظفين
+ * - نظام إشعارات تلقائي شامل
+ * - تقارير الأداء والإنتاجية
+ * - إدارة الأولويات والمواعيد النهائية
+ * - سجل التدقيق الكامل
+ * 
+ * التطوير: أكتوبر 2025 - v1.0
  */
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Progress } from '../ui/progress';
+import { Separator } from '../ui/separator';
+import { ScrollArea } from '../ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import {
   Send, Eye, Edit, Trash2, Download, Upload, CheckCircle, Clock, AlertCircle,
   X, Search, Filter, Calendar, Users, Building, Settings, History, RefreshCw,
@@ -26,53 +31,9 @@ import {
   PlayCircle, PauseCircle, StopCircle, Flag, Star, MessageSquare, Paperclip,
   ArrowUp, ArrowDown, Layers, Plus, Snowflake, UserX, Ban, Share2
 } from 'lucide-react';
-import { InputWithCopy, TextAreaWithCopy, SelectWithCopy } from '@/components/InputWithCopy';
-import DateInputWithToday from '@/components/DateInputWithToday';
-import { api } from '@/api/axiosConfig'; // 💡 استيراد الـ API
-// ===== واجهات البيانات (Interfaces) =====
-interface Task {
-  id: string;
-  taskNumber: string;
-  transactionCode: string;
-  transactionTitle: string; 
-  taskType: string;
-  description: string;
-  assignedTo: { 
-    id: string;
-    name: string;
-    employeeCode: string;
-  } | null;
-  assignedBy: string; 
-  assignedDate: string;
-  startDate: string | null;
-  dueDate: string | null;
-  status: string;
-  priority: string;
-  progress: number;
-  estimatedHours: number | null;
-  actualHours: number | null;
-  notes: string | null;
-  attachments: any[]; 
-  comments: any[]; 
-  frozenType?: 'temporary' | 'indefinite';
-  frozenDate?: string | null;
-  frozenUntil?: string | null;
-  frozenBy?: string | null;
-  frozenReason?: string | null;
-  notificationsSent?: number;
-  lastNotification?: string | null;
-}
-interface Employee {
-  id: string;
-  code: string; 
-  name: string;
-  department: string;
-  position: string;
-  activeTasks: number; 
-  completedTasks: number; 
-  performance: number; 
-  available: boolean; 
-}
+import { InputWithCopy, TextAreaWithCopy, SelectWithCopy } from '../InputWithCopy';
+import DateInputWithToday from '../DateInputWithToday';
+
 // ===== تكوين التابات =====
 const TABS_CONFIG = [
   { id: '825-01', number: '825-01', title: 'نظرة عامة', icon: Activity },
@@ -88,6 +49,7 @@ const TABS_CONFIG = [
   { id: '825-11', number: '825-11', title: 'سجل التدقيق', icon: History },
   { id: '825-12', number: '825-12', title: 'الإعدادات', icon: Settings },
 ];
+
 // ===== حالات المهام =====
 const TASK_STATUSES = [
   { value: 'pending', label: 'قيد الانتظار', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
@@ -99,6 +61,7 @@ const TASK_STATUSES = [
   { value: 'cancelled', label: 'ملغاة', color: 'bg-red-100 text-red-700', icon: XSquare },
   { value: 'overdue', label: 'متأخرة', color: 'bg-red-100 text-red-700', icon: AlertTriangle },
 ];
+
 // ===== أولويات المهام =====
 const TASK_PRIORITIES = [
   { value: 'low', label: 'منخفضة', color: 'bg-gray-100 text-gray-700', icon: ArrowDown },
@@ -106,6 +69,7 @@ const TASK_PRIORITIES = [
   { value: 'high', label: 'عالية', color: 'bg-orange-100 text-orange-700', icon: ArrowUp },
   { value: 'urgent', label: 'عاجلة', color: 'bg-red-100 text-red-700', icon: AlertCircle },
 ];
+
 // ===== أنواع المهام =====
 const TASK_TYPES = [
   { value: 'data-entry', label: 'إدخال بيانات', icon: FileText },
@@ -117,244 +81,331 @@ const TASK_TYPES = [
   { value: 'follow-up', label: 'متابعة', icon: Target },
   { value: 'inspection', label: 'معاينة', icon: Eye },
 ];
-// 💡 --- تم حذف البيانات التجريبية ---
+
+// ===== بيانات الموظفين =====
+const EMPLOYEES_DATA = [
+  { id: 'EMP-001', code: '817-00123', name: 'أحمد محمد علي', department: 'المعاملات', position: 'مسؤول معاملات', activeTasks: 5, completedTasks: 127, performance: 95, available: true },
+  { id: 'EMP-002', code: '817-00124', name: 'خالد عبدالله السعيد', department: 'المراجعة', position: 'مراجع رئيسي', activeTasks: 3, completedTasks: 98, performance: 92, available: true },
+  { id: 'EMP-003', code: '817-00125', name: 'محمد سعد القحطاني', department: 'الاعتماد', position: 'معتمد معاملات', activeTasks: 4, completedTasks: 156, performance: 97, available: true },
+  { id: 'EMP-004', code: '817-00126', name: 'سارة أحمد المطيري', department: 'التوثيق', position: 'موثقة معاملات', activeTasks: 6, completedTasks: 89, performance: 90, available: false },
+  { id: 'EMP-005', code: '817-00127', name: 'فهد عبدالعزيز العتيبي', department: 'المتابعة', position: 'مسؤول متابعة', activeTasks: 7, completedTasks: 134, performance: 94, available: true },
+  { id: 'EMP-006', code: '817-00128', name: 'نورة محمد الدوسري', department: 'المعاملات', position: 'مسؤولة معاملات', activeTasks: 4, completedTasks: 112, performance: 93, available: true },
+  { id: 'EMP-007', code: '817-00129', name: 'عبدالله فيصل الشمري', department: 'المراجعة', position: 'مراجع', activeTasks: 5, completedTasks: 78, performance: 88, available: true },
+  { id: 'EMP-008', code: '817-00130', name: 'منى خالد الحربي', department: 'الاعتماد', position: 'معتمدة', activeTasks: 3, completedTasks: 145, performance: 96, available: true },
+];
+
+// ===== بيانات المهام المسندة =====
+const ASSIGNED_TASKS = [
+  {
+    id: 'TSK-001',
+    taskNumber: 'TSK-2025-001',
+    transactionCode: '286-2025-00456',
+    transactionTitle: 'رخصة بناء سكني - حي العليا',
+    taskType: 'data-entry',
+    description: 'إدخال بيانات المالك وتفاصيل العقار',
+    assignedTo: 'أحمد محمد علي',
+    employeeCode: '817-00123',
+    assignedBy: 'مدير المعاملات',
+    assignedDate: '2025-10-15 09:00',
+    startDate: '2025-10-15',
+    dueDate: '2025-10-17',
+    status: 'in-progress',
+    priority: 'high',
+    progress: 65,
+    estimatedHours: 8,
+    actualHours: 5.5,
+    notes: 'المهمة تسير بشكل جيد، تم إدخال 65% من البيانات',
+    attachments: 3,
+    comments: 5,
+  },
+  {
+    id: 'TSK-002',
+    taskNumber: 'TSK-2025-002',
+    transactionCode: '286-2025-00457',
+    transactionTitle: 'رخصة بناء تجاري - حي الملقا',
+    taskType: 'review',
+    description: 'مراجعة المستندات والوثائق المرفقة',
+    assignedTo: 'خالد عبدالله السعيد',
+    employeeCode: '817-00124',
+    assignedBy: 'مدير المراجعة',
+    assignedDate: '2025-10-15 10:30',
+    startDate: '2025-10-15',
+    dueDate: '2025-10-16',
+    status: 'in-progress',
+    priority: 'medium',
+    progress: 45,
+    estimatedHours: 6,
+    actualHours: 3,
+    notes: 'هناك بعض المستندات الناقصة',
+    attachments: 7,
+    comments: 3,
+  },
+  {
+    id: 'TSK-003',
+    taskNumber: 'TSK-2025-003',
+    transactionCode: '286-2025-00458',
+    transactionTitle: 'رخصة ترميم - حي النرجس',
+    taskType: 'approval',
+    description: 'اعتماد المعاملة بعد استكمال المتطلبات',
+    assignedTo: 'محمد سعد القحطاني',
+    employeeCode: '817-00125',
+    assignedBy: 'المدير التنفيذي',
+    assignedDate: '2025-10-14 14:00',
+    startDate: '2025-10-14',
+    dueDate: '2025-10-16',
+    status: 'pending',
+    priority: 'high',
+    progress: 0,
+    estimatedHours: 4,
+    actualHours: 0,
+    notes: 'في انتظار استكمال المراجعة',
+    attachments: 2,
+    comments: 1,
+  },
+  {
+    id: 'TSK-004',
+    taskNumber: 'TSK-2025-004',
+    transactionCode: '286-2025-00455',
+    transactionTitle: 'فسح بناء - حي الياسمين',
+    taskType: 'documentation',
+    description: 'توثيق المعاملة وحفظ المستندات',
+    assignedTo: 'سارة أحمد المطيري',
+    employeeCode: '817-00126',
+    assignedBy: 'مدير التوثيق',
+    assignedDate: '2025-10-13 11:00',
+    startDate: '2025-10-13',
+    dueDate: '2025-10-14',
+    status: 'overdue',
+    priority: 'urgent',
+    progress: 30,
+    estimatedHours: 3,
+    actualHours: 2,
+    notes: 'المهمة متأخرة - يجب الإسراع',
+    attachments: 4,
+    comments: 8,
+  },
+  {
+    id: 'TSK-005',
+    taskNumber: 'TSK-2025-005',
+    transactionCode: '286-2025-00454',
+    transactionTitle: 'رخصة توسعة - حي الروضة',
+    taskType: 'calculation',
+    description: 'حساب الرسوم والمساحات',
+    assignedTo: 'فهد عبدالعزيز العتيبي',
+    employeeCode: '817-00127',
+    assignedBy: 'مدير المالية',
+    assignedDate: '2025-10-12 08:30',
+    startDate: '2025-10-12',
+    dueDate: '2025-10-13',
+    status: 'completed',
+    priority: 'medium',
+    progress: 100,
+    estimatedHours: 5,
+    actualHours: 4.5,
+    notes: 'تم إكمال المهمة بنجاح',
+    attachments: 2,
+    comments: 4,
+  },
+  {
+    id: 'TSK-006',
+    taskNumber: 'TSK-2025-006',
+    transactionCode: '286-2025-00459',
+    transactionTitle: 'رخصة هدم - حي الورود',
+    taskType: 'follow-up',
+    description: 'متابعة المعاملة مع الجهات الخارجية',
+    assignedTo: 'نورة محمد الدوسري',
+    employeeCode: '817-00128',
+    assignedBy: 'مدير المعاملات',
+    assignedDate: '2025-10-15 13:00',
+    startDate: '2025-10-15',
+    dueDate: '2025-10-18',
+    status: 'in-progress',
+    priority: 'medium',
+    progress: 25,
+    estimatedHours: 10,
+    actualHours: 2.5,
+    notes: 'جاري التواصل مع البلدية',
+    attachments: 1,
+    comments: 2,
+  },
+  {
+    id: 'TSK-007',
+    taskNumber: 'TSK-2025-007',
+    transactionCode: '286-2025-00460',
+    transactionTitle: 'رخصة بناء سكني - حي السليمانية',
+    taskType: 'inspection',
+    description: 'معاينة الموقع وتوثيق الحالة',
+    assignedTo: 'عبدالله فيصل الشمري',
+    employeeCode: '817-00129',
+    assignedBy: 'مدير المعاينات',
+    assignedDate: '2025-10-14 15:00',
+    startDate: '2025-10-15',
+    dueDate: '2025-10-16',
+    status: 'pending',
+    priority: 'high',
+    progress: 0,
+    estimatedHours: 6,
+    actualHours: 0,
+    notes: 'المعاينة مجدولة ليوم غد',
+    attachments: 0,
+    comments: 1,
+  },
+  {
+    id: 'TSK-008',
+    taskNumber: 'TSK-2025-008',
+    transactionCode: '286-2025-00453',
+    transactionTitle: 'شهادة إتمام بناء - حي الغدير',
+    taskType: 'approval',
+    description: 'اعتماد شهادة الإتمام',
+    assignedTo: 'منى خالد الحربي',
+    employeeCode: '817-00130',
+    assignedBy: 'المدير التنفيذي',
+    assignedDate: '2025-10-11 10:00',
+    startDate: '2025-10-11',
+    dueDate: '2025-10-12',
+    status: 'completed',
+    priority: 'medium',
+    progress: 100,
+    estimatedHours: 3,
+    actualHours: 2.5,
+    notes: 'تم الاعتماد بنجاح',
+    attachments: 5,
+    comments: 3,
+  },
+  {
+    id: 'TSK-009',
+    taskNumber: 'TSK-2025-009',
+    transactionCode: '286-2025-00461',
+    transactionTitle: 'رخصة بناء تجاري - حي العقيق',
+    taskType: 'data-entry',
+    description: 'إدخال بيانات المشروع التجاري',
+    assignedTo: 'عمر سعيد الزهراني',
+    employeeCode: '817-00131',
+    assignedBy: 'مدير المعاملات',
+    assignedDate: '2025-10-16 08:00',
+    startDate: '2025-10-16',
+    dueDate: '2025-10-20',
+    status: 'not-received',
+    priority: 'high',
+    progress: 0,
+    estimatedHours: 12,
+    actualHours: 0,
+    notes: 'لم يستلم الموظف المهمة بعد',
+    attachments: 0,
+    comments: 0,
+    notificationsSent: 3,
+    lastNotification: '2025-10-18 09:00',
+  },
+  {
+    id: 'TSK-010',
+    taskNumber: 'TSK-2025-010',
+    transactionCode: '286-2025-00462',
+    transactionTitle: 'رخصة ترميم - حي المروج',
+    taskType: 'review',
+    description: 'مراجعة وثائق الترميم',
+    assignedTo: 'ريم أحمد القرني',
+    employeeCode: '817-00132',
+    assignedBy: 'مدير المراجعة',
+    assignedDate: '2025-10-14 14:00',
+    startDate: '2025-10-14',
+    dueDate: '2025-10-18',
+    status: 'not-received',
+    priority: 'medium',
+    progress: 0,
+    estimatedHours: 8,
+    actualHours: 0,
+    notes: 'في انتظار استلام الموظف',
+    attachments: 2,
+    comments: 1,
+    notificationsSent: 2,
+    lastNotification: '2025-10-17 10:30',
+  },
+  {
+    id: 'TSK-011',
+    taskNumber: 'TSK-2025-011',
+    transactionCode: '286-2025-00463',
+    transactionTitle: 'رخصة إضافة دور - حي النخيل',
+    taskType: 'calculation',
+    description: 'حساب الرسوم والتصاريح',
+    assignedTo: 'طارق محمد الشهري',
+    employeeCode: '817-00133',
+    assignedBy: 'مدير المالية',
+    assignedDate: '2025-10-10 11:00',
+    startDate: '2025-10-10',
+    dueDate: '2025-10-25',
+    status: 'frozen',
+    frozenType: 'temporary',
+    frozenDate: '2025-10-12 15:00',
+    frozenUntil: '2025-10-22',
+    frozenBy: 'مدير المشاريع',
+    frozenReason: 'في انتظار مستندات إضافية من العميل',
+    priority: 'medium',
+    progress: 15,
+    estimatedHours: 6,
+    actualHours: 1,
+    notes: 'المهمة مجمدة مؤقتاً',
+    attachments: 3,
+    comments: 4,
+  },
+  {
+    id: 'TSK-012',
+    taskNumber: 'TSK-2025-012',
+    transactionCode: '286-2025-00464',
+    transactionTitle: 'رخصة بناء سكني - حي الربيع',
+    taskType: 'inspection',
+    description: 'معاينة الموقع وتوثيق الحالة',
+    assignedTo: 'وليد عبدالله المالكي',
+    employeeCode: '817-00134',
+    assignedBy: 'مدير المعاينات',
+    assignedDate: '2025-10-08 09:30',
+    startDate: '2025-10-08',
+    dueDate: null,
+    status: 'frozen',
+    frozenType: 'indefinite',
+    frozenDate: '2025-10-09 13:00',
+    frozenUntil: null,
+    frozenBy: 'المدير التنفيذي',
+    frozenReason: 'تعليق من جهة حكومية - في انتظار إشعار بالاستئناف',
+    priority: 'low',
+    progress: 5,
+    estimatedHours: 10,
+    actualHours: 0.5,
+    notes: 'مجمدة لحين رفع التعليق الحكوم��',
+    attachments: 1,
+    comments: 6,
+  },
+];
+
 const TransactionTasksAssignment_Complete_825: React.FC = () => {
   const [activeTab, setActiveTab] = useState('825-01');
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTask, setSelectedTask] = useState<any>(null);
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showTransferDialog, setShowTransferDialog] = useState(false);
   const [showFreezeDialog, setShowFreezeDialog] = useState(false);
-  // --- 💡 حالات جديدة لجلب البيانات ---
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  // --- 💡 حالة لنموذج الإنشاء ---
-  const [newTaskData, setNewTaskData] = useState({
-    transactionCode: '',
-    transactionTitle: '',
-    taskType: '',
-    description: '',
-    startDate: '',
-    dueDate: '',
-    priority: 'medium',
-    estimatedHours: '',
-    notes: '',
-  });
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
-  // --- 💡 دالة جلب البيانات الأولية ---
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        // 1. جلب المهام (نفترض أن الـ API يرجعها مع بيانات الموظف والمعاملة)
-        // المسار المقترح: GET /api/tasks/detailed
-        // السطر الجديد (الصحيح)
-        const tasksResponse = await api.get('/tasks');
-        setTasks(tasksResponse.data);
-        // 2. جلب الموظفين مع إحصائياتهم
-        // المسار المقترح: GET /api/employees/with-stats
-        const employeesResponse = await api.get('/employees/with-stats'); 
-        setEmployees(employeesResponse.data);
-      } catch (err) {
-        console.error("Failed to load data", err);
-        setError("فشل تحميل البيانات من الخادم.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadData();
-  }, []); // يعمل مرة واحدة عند تحميل المكون
-  // --- 💡 دالة لإعادة جلب البيانات بعد التعديل ---
-  const refetchData = async () => {
-    try {
-      setIsLoading(true);
-      // السطر الجديد (الصحيح)
-      const tasksResponse = await api.get('/tasks');
-      setTasks(tasksResponse.data);
-      const employeesResponse = await api.get('/employees/with-stats');
-      setEmployees(employeesResponse.data);
-    } catch (err) {
-      setError("فشل تحديث البيانات.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  // --- 💡 دوال التعامل مع نموذج الإنشاء ---
-  const handleNewTaskChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { id, value } = e.target;
-    setNewTaskData(prev => ({ ...prev, [id]: value }));
-  };
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskData.transactionCode || !newTaskData.taskType || !selectedEmployeeId) {
-      alert("الرجاء ملء الحقول المطلوبة واختيار موظف: رقم المعاملة، نوع المهمة، والموظف المكلف.");
-      return;
-    }
-    try {
-      setIsLoading(true);
-      await api.post('/tasks', {
-        ...newTaskData,
-        assignedToId: selectedEmployeeId,
-        status: 'not-received', // المهمة تبدأ كـ "غير مستلمة"
-        estimatedHours: newTaskData.estimatedHours ? parseFloat(newTaskData.estimatedHours) : null,
-      });
-      await refetchData();
-      alert("تم إسناد المهمة بنجاح!");
-      setActiveTab('825-02'); // انتقل لعرض المهام
-      // إعادة تعيين النموذج
-      setNewTaskData({
-        transactionCode: '', transactionTitle: '', taskType: '', description: '',
-        startDate: '', dueDate: '', priority: 'medium', estimatedHours: '', notes: '',
-      });
-      setSelectedEmployeeId(null);
-    } catch (err) {
-      console.error("Failed to create task", err);
-      setError("فشل إسناد المهمة.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  // --- 💡 دوال التعامل مع النوافذ المنبثقة ---
-  const handleCompleteTask = async () => {
-    if (!selectedTask) return;
-    const reason = (document.getElementById('completeReason') as HTMLTextAreaElement).value;
-    const completeStatus = (document.getElementById('completeStatus') as HTMLSelectElement).value;
-    const progress = parseFloat((document.getElementById('completionPercentage') as HTMLInputElement).value) || 100;
-    try {
-      setIsLoading(true);
-      setShowCompleteDialog(false);
-      await api.patch(`/tasks/${selectedTask.id}/status`, {
-        status: 'completed',
-        notes: `إتمام إشرافي: ${reason}`,
-        completionStatus: completeStatus,
-        progress: progress,
-      });
-      await refetchData();
-      alert("تم إكمال المهمة بنجاح.");
-    } catch (err) {
-      setError("فشل إكمال المهمة.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  const handleCancelTask = async () => {
-    if (!selectedTask) return;
-    const reason = (document.getElementById('cancelReason') as HTMLSelectElement).value;
-    const details = (document.getElementById('cancelDetails') as HTMLTextAreaElement).value;
-    if (!reason || !details) {
-      alert("الرجاء تحديد سبب وتفاصيل الإلغاء.");
-      return;
-    }
-    try {
-      setIsLoading(true);
-      setShowCancelDialog(false);
-      await api.patch(`/tasks/${selectedTask.id}/status`, {
-        status: 'cancelled',
-        notes: `سبب الإلغاء (${reason}): ${details}`,
-      });
-      await refetchData();
-      alert("تم إلغاء المهمة.");
-    } catch (err) {
-      setError("فشل إلغاء المهمة.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  const handleTransferTask = async () => {
-    if (!selectedTask) return;
-    const newEmployeeId = (document.getElementById('newEmployee') as HTMLSelectElement).value;
-    const reason = (document.getElementById('transferReason') as HTMLTextAreaElement).value;
-    if (!newEmployeeId || !reason) {
-      alert("الرجاء اختيار الموظف الجديد وذكر السبب.");
-      return;
-    }
-    try {
-      setIsLoading(true);
-      setShowTransferDialog(false);
-      await api.patch(`/tasks/${selectedTask.id}/transfer`, {
-        newEmployeeId: newEmployeeId,
-        transferReason: reason,
-        transferBy: "ID_المشرف_الحالي", // يجب إحضاره من useAuth
-      });
-      await refetchData();
-      alert("تم تحويل المهمة بنجاح.");
-    } catch (err) {
-      setError("فشل تحويل المهمة.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  const handleFreezeTask = async () => {
-    if (!selectedTask) return;
-    const reason = (document.getElementById('freezeReasonSelect') as HTMLSelectElement).value;
-    const details = (document.getElementById('freezeDetails') as HTMLTextAreaElement).value;
-    const freezeUntil = (document.getElementById('freezeEndDate') as HTMLInputElement).value;
-    if (!reason || !details) {
-      alert("الرجاء تحديد سبب وتفاصيل التجميد.");
-      return;
-    }
-    try {
-      setIsLoading(true);
-      setShowFreezeDialog(false);
-      await api.patch(`/tasks/${selectedTask.id}/status`, {
-        status: 'frozen',
-        notes: `سبب التجميد (${reason}): ${details}`,
-        frozenReason: `${reason}: ${details}`,
-        frozenDate: new Date().toISOString(),
-        frozenUntil: freezeUntil || null,
-        // frozenBy: "ID_المشرف_الحالي" // يجب إحضاره من useAuth
-      });
-      await refetchData();
-      alert("تم تجميد المهمة.");
-    } catch (err) {
-      setError("فشل تجميد المهمة.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  const totalTasks = tasks.length;
   const renderTabContent = () => {
-    // --- 💡 معالجة التحميل والخطأ ---
-    if (isLoading) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <RefreshCw className="h-6 w-6 animate-spin text-blue-500" />
-          <p className="mr-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>جاري تحميل البيانات...</p>
-        </div>
-      );
-    }
-    if (error) {
-      return (
-        <div className="flex items-center justify-center h-64 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="h-6 w-6 text-red-500" />
-          <p className="mr-2 text-red-700" style={{ fontFamily: 'Tajawal, sans-serif' }}>{error}</p>
-        </div>
-      );
-    }
     const tab = TABS_CONFIG.find(t => t.id === activeTab);
     if (!tab) return null;
+
     switch (activeTab) {
       // 825-01: نظرة عامة
       case '825-01':
-        // 💡 --- مربوط بالحالة ---
-        
-        const activeTasks = tasks.filter(t => t.status === 'in-progress').length;
-        const completedTasks = tasks.filter(t => t.status === 'completed').length;
-        const overdueTasks = tasks.filter(t => t.status === 'overdue').length;
-        const pendingTasks = tasks.filter(t => t.status === 'pending').length;
-        const frozenTasksCount = tasks.filter(t => t.status === 'frozen').length;
-        const notReceivedTasks = tasks.filter(t => t.status === 'not-received').length;
-        const avgProgress = totalTasks > 0 ? tasks.reduce((sum, t) => sum + t.progress, 0) / totalTasks : 0;
+        const totalTasks = ASSIGNED_TASKS.length;
+        const activeTasks = ASSIGNED_TASKS.filter(t => t.status === 'in-progress').length;
+        const completedTasks = ASSIGNED_TASKS.filter(t => t.status === 'completed').length;
+        const overdueTasks = ASSIGNED_TASKS.filter(t => t.status === 'overdue').length;
+        const pendingTasks = ASSIGNED_TASKS.filter(t => t.status === 'pending').length;
+        const frozenTasksCount = ASSIGNED_TASKS.filter(t => t.status === 'frozen').length;
+        const notReceivedTasks = ASSIGNED_TASKS.filter(t => t.status === 'not-received').length;
+        const avgProgress = ASSIGNED_TASKS.reduce((sum, t) => sum + t.progress, 0) / totalTasks;
+
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>نظرة عامة على المهام</h2>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={refetchData}>
+                <Button size="sm" variant="outline" className="h-8 text-xs">
                   <RefreshCw className="h-3 w-3 ml-1" />
                   تحديث
                 </Button>
@@ -364,6 +415,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </Button>
               </div>
             </div>
+
             {/* إحصائيات سريعة */}
             <div className="grid grid-cols-8 gap-2">
               <Card className="card-element card-rtl hover:shadow-lg transition-all">
@@ -382,6 +434,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Badge>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl hover:shadow-lg transition-all">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -398,6 +451,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Badge>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl hover:shadow-lg transition-all">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -414,6 +468,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Badge>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl hover:shadow-lg transition-all">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -430,6 +485,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Badge>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl hover:shadow-lg transition-all">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -446,6 +502,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Badge>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl hover:shadow-lg transition-all">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -462,6 +519,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Badge>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl hover:shadow-lg transition-all">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -478,6 +536,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Badge>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl hover:shadow-lg transition-all">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -495,6 +554,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
+
             {/* رسم بياني للمهام */}
             <Card className="card-element card-rtl">
               <CardHeader className="p-3 pb-2">
@@ -506,9 +566,8 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               <CardContent className="p-3 pt-0">
                 <div className="space-y-3">
                   {TASK_STATUSES.map((status) => {
-                    // 💡 --- مربوط بالحالة ---
-                    const count = tasks.filter(t => t.status === status.value).length;
-                    const percentage = totalTasks > 0 ? (count / totalTasks) * 100 : 0;
+                    const count = ASSIGNED_TASKS.filter(t => t.status === status.value).length;
+                    const percentage = (count / totalTasks) * 100;
                     return (
                       <div key={status.value}>
                         <div className="flex items-center justify-between mb-1">
@@ -525,6 +584,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
+
             {/* المهام الأخيرة */}
             <Card className="card-element card-rtl">
               <CardHeader className="p-3 pb-2">
@@ -536,8 +596,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               <CardContent className="p-0">
                 <ScrollArea className="h-96">
                   <div className="p-3 space-y-2">
-                    {/* 💡 --- مربوط بالحالة --- */}
-                    {tasks.slice(0, 6).map((task) => (
+                    {ASSIGNED_TASKS.slice(0, 6).map((task) => (
                       <Card key={task.id} className="card-element card-rtl hover:shadow-md transition-all cursor-pointer border-r-4" style={{ borderRightColor: task.status === 'in-progress' ? '#10b981' : task.status === 'overdue' ? '#ef4444' : '#6b7280' }}>
                         <CardContent className="p-3">
                           <div className="flex items-start justify-between mb-2">
@@ -560,11 +619,11 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               <div className="flex items-center gap-3 text-xs text-gray-600">
                                 <span className="flex items-center gap-1">
                                   <User className="h-3 w-3" />
-                                  {task.assignedTo?.name || 'غير مسندة'}
+                                  {task.assignedTo}
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
-                                  {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}
+                                  {task.dueDate}
                                 </span>
                               </div>
                             </div>
@@ -583,6 +642,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </ScrollArea>
               </CardContent>
             </Card>
+
             {/* المهام المجمدة */}
             <Card className="card-element card-rtl">
               <CardHeader className="p-3 pb-2 bg-gradient-to-r from-cyan-50 to-blue-50">
@@ -594,8 +654,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               <CardContent className="p-0">
                 <ScrollArea className="h-64">
                   <div className="p-3 space-y-2">
-                    {/* 💡 --- مربوط بالحالة --- */}
-                    {tasks.filter(t => t.status === 'frozen').map((task) => (
+                    {ASSIGNED_TASKS.filter(t => t.status === 'frozen').map((task) => (
                       <Card key={task.id} className="card-element card-rtl hover:shadow-md transition-all cursor-pointer border-r-4 border-cyan-500">
                         <CardContent className="p-3">
                           <div className="flex items-start justify-between mb-2">
@@ -613,22 +672,22 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               </h4>
                               <div className="bg-cyan-50 rounded p-2 text-xs mb-2">
                                 <p className="text-cyan-900 font-medium mb-1">سبب التجميد:</p>
-                                <p className="text-cyan-800">{task.frozenReason || task.notes}</p>
+                                <p className="text-cyan-800">{task.frozenReason}</p>
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div>
                                   <span className="text-gray-600">تاريخ التجميد: </span>
-                                  <span className="font-medium">{task.frozenDate ? new Date(task.frozenDate).toLocaleDateString() : 'N/A'}</span>
+                                  <span className="font-medium">{task.frozenDate}</span>
                                 </div>
                                 {task.frozenUntil && (
                                   <div>
                                     <span className="text-gray-600">إلى: </span>
-                                    <span className="font-medium">{new Date(task.frozenUntil).toLocaleDateString()}</span>
+                                    <span className="font-medium">{task.frozenUntil}</span>
                                   </div>
                                 )}
                                 <div>
                                   <span className="text-gray-600">بواسطة: </span>
-                                  <span className="font-medium">{task.frozenBy || 'النظام'}</span>
+                                  <span className="font-medium">{task.frozenBy}</span>
                                 </div>
                                 <div>
                                   <span className="text-gray-600">التقدم: </span>
@@ -644,6 +703,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </ScrollArea>
               </CardContent>
             </Card>
+
             {/* المهام غير المستلمة */}
             <Card className="card-element card-rtl">
               <CardHeader className="p-3 pb-2 bg-gradient-to-r from-amber-50 to-yellow-50">
@@ -655,8 +715,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               <CardContent className="p-0">
                 <ScrollArea className="h-64">
                   <div className="p-3 space-y-2">
-                    {/* 💡 --- مربوط بالحالة --- */}
-                    {tasks.filter(t => t.status === 'not-received').map((task) => (
+                    {ASSIGNED_TASKS.filter(t => t.status === 'not-received').map((task) => (
                       <Card key={task.id} className="card-element card-rtl hover:shadow-md transition-all cursor-pointer border-r-4 border-amber-500">
                         <CardContent className="p-3">
                           <div className="flex items-start justify-between mb-2">
@@ -676,24 +735,24 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                                 {task.transactionTitle}
                               </h4>
                               <div className="bg-amber-50 rounded p-2 text-xs mb-2">
-                                <p className="text-amber-800">{task.notes || 'في انتظار استلام الموظف'}</p>
+                                <p className="text-amber-800">{task.notes}</p>
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div>
                                   <span className="text-gray-600">الموظف: </span>
-                                  <span className="font-medium">{task.assignedTo?.name || 'N/A'}</span>
+                                  <span className="font-medium">{task.assignedTo}</span>
                                 </div>
                                 <div>
                                   <span className="text-gray-600">تاريخ الإسناد: </span>
-                                  <span className="font-medium">{new Date(task.assignedDate).toLocaleString()}</span>
+                                  <span className="font-medium">{task.assignedDate}</span>
                                 </div>
                                 <div>
                                   <span className="text-gray-600">الإشعارات المرسلة: </span>
-                                  <Badge className="bg-red-100 text-red-700">{task.notificationsSent || 0}</Badge>
+                                  <Badge className="bg-red-100 text-red-700">{task.notificationsSent}</Badge>
                                 </div>
                                 <div>
                                   <span className="text-gray-600">آخر إشعار: </span>
-                                  <span className="font-medium">{task.lastNotification ? new Date(task.lastNotification).toLocaleString() : 'N/A'}</span>
+                                  <span className="font-medium">{task.lastNotification}</span>
                                 </div>
                               </div>
                             </div>
@@ -707,14 +766,15 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
             </Card>
           </div>
         );
+
       // 825-02: المهام النشطة
       case '825-02':
-        // 💡 --- مربوط بالحالة ---
-        const activeTasksList = tasks.filter(t => t.status === 'in-progress');
+        const activeTasksList = ASSIGNED_TASKS.filter(t => t.status === 'in-progress');
+        
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام النشطة ({activeTasksList.length})</h2>
+              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام النشطة</h2>
               <div className="flex gap-2">
                 <InputWithCopy
                   label=""
@@ -732,6 +792,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </Button>
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               {activeTasksList.map((task) => (
                 <Card key={task.id} className="card-element card-rtl hover:shadow-lg transition-all cursor-pointer border-t-4 border-green-500">
@@ -755,36 +816,39 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                         {TASK_PRIORITIES.find(p => p.value === task.priority)?.label}
                       </Badge>
                     </div>
+
                     <Separator className="my-2" />
+
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       <div>
                         <p className="text-xs text-gray-600">الموظف المكلف</p>
                         <div className="flex items-center gap-1 mt-1">
                           <User className="h-3 w-3 text-blue-500" />
-                          <span className="text-xs font-medium">{task.assignedTo?.name || 'N/A'}</span>
+                          <span className="text-xs font-medium">{task.assignedTo}</span>
                         </div>
                       </div>
                       <div>
                         <p className="text-xs text-gray-600">نوع المهمة</p>
                         <Badge className="bg-purple-100 text-purple-700 text-xs mt-1">
-                          {TASK_TYPES.find(t => t.value === task.taskType)?.label || task.taskType}
+                          {TASK_TYPES.find(t => t.value === task.taskType)?.label}
                         </Badge>
                       </div>
                       <div>
                         <p className="text-xs text-gray-600">تاريخ البدء</p>
                         <div className="flex items-center gap-1 mt-1">
                           <Calendar className="h-3 w-3 text-green-500" />
-                          <span className="text-xs">{task.startDate ? new Date(task.startDate).toLocaleDateString() : 'N/A'}</span>
+                          <span className="text-xs">{task.startDate}</span>
                         </div>
                       </div>
                       <div>
                         <p className="text-xs text-gray-600">تاريخ الاستحقاق</p>
                         <div className="flex items-center gap-1 mt-1">
                           <AlertCircle className="h-3 w-3 text-orange-500" />
-                          <span className="text-xs">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</span>
+                          <span className="text-xs">{task.dueDate}</span>
                         </div>
                       </div>
                     </div>
+
                     <div className="space-y-2 mb-3">
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-gray-600">نسبة الإنجاز</span>
@@ -792,35 +856,39 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                       </div>
                       <Progress value={task.progress} className="h-2.5" />
                     </div>
+
                     <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
                       <div className="bg-blue-50 rounded p-2 text-center">
                         <p className="text-gray-600">الوقت المقدر</p>
-                        <p className="font-medium text-blue-600">{task.estimatedHours || 0} ساعة</p>
+                        <p className="font-medium text-blue-600">{task.estimatedHours} ساعة</p>
                       </div>
                       <div className="bg-green-50 rounded p-2 text-center">
                         <p className="text-gray-600">الوقت الفعلي</p>
-                        <p className="font-medium text-green-600">{task.actualHours || 0} ساعة</p>
+                        <p className="font-medium text-green-600">{task.actualHours} ساعة</p>
                       </div>
                       <div className="bg-purple-50 rounded p-2 text-center">
                         <p className="text-gray-600">المتبقي</p>
-                        <p className="font-medium text-purple-600">{((task.estimatedHours || 0) - (task.actualHours || 0)).toFixed(1)} ساعة</p>
+                        <p className="font-medium text-purple-600">{(task.estimatedHours - task.actualHours).toFixed(1)} ساعة</p>
                       </div>
                     </div>
+
                     <div className="flex items-center gap-2 text-xs text-gray-600 mb-3">
                       <span className="flex items-center gap-1">
                         <Paperclip className="h-3 w-3" />
-                        {task.attachments?.length || 0} مرفقات
+                        {task.attachments} مرفقات
                       </span>
                       <span className="flex items-center gap-1">
                         <MessageSquare className="h-3 w-3" />
-                        {task.comments?.length || 0} تعليقات
+                        {task.comments} تعليقات
                       </span>
                     </div>
+
                     {task.notes && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mb-3">
                         <p className="text-xs text-yellow-800">{task.notes}</p>
                       </div>
                     )}
+
                     <div className="space-y-2">
                       <div className="flex items-center gap-1">
                         <Button 
@@ -828,7 +896,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                           variant="outline"
                           onClick={() => {
                             setSelectedTask(task);
-                            // فتح معاينة التفاصيل (تحتاج لإضافة Dialog)
+                            // فتح معاينة التفاصيل
                           }}
                         >
                           <Eye className="h-3 w-3 ml-1" />
@@ -888,253 +956,232 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
             </div>
           </div>
         );
+
       // 825-03: إسناد مهمة جديدة
       case '825-03':
         return (
-          <form onSubmit={handleCreateTask}> {/* 💡 ربط النموذج */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>إسناد مهمة جديدة</h2>
-              </div>
-              <Card className="card-element card-rtl">
-                <CardHeader className="p-3 pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    <Info className="h-4 w-4 text-blue-600" />
-                    معلومات المهمة
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 pt-0">
-                  <div className="grid grid-cols-3 gap-3 mb-3">
-                    <InputWithCopy
-                      label="رقم المعاملة *"
-                      id="transactionCode"
-                      placeholder="286-2025-XXXXX"
-                      value={newTaskData.transactionCode} // 💡 مربوط بالحالة
-                      onChange={handleNewTaskChange} // 💡 مربوط بالحالة
-                    />
-                    <InputWithCopy
-                      label="عنوان المعاملة *"
-                      id="transactionTitle"
-                      placeholder="أدخل عنوان المعاملة"
-                      value={newTaskData.transactionTitle} // 💡 مربوط بالحالة
-                      onChange={handleNewTaskChange} // 💡 مربوط بالحالة
-                    />
-                    <SelectWithCopy
-                      label="نوع المهمة *"
-                      id="taskType"
-                      value={newTaskData.taskType} // 💡 مربوط بالحالة
-                      onChange={handleNewTaskChange} // 💡 مربوط بالحالة
-                      options={[
-                        { value: '', label: 'اختر نوع المهمة' },
-                        ...TASK_TYPES.map(t => ({ value: t.value, label: t.label }))
-                      ]}
-                    />
-                  </div>
-                  <TextAreaWithCopy
-                    label="وصف المهمة *"
-                    id="description"
-                    placeholder="اكتب وصف تفصيلي للمهمة المطلوب إنجازها..."
-                    rows={3}
-                    value={newTaskData.description} // 💡 مربوط بالحالة
-                    onChange={handleNewTaskChange} // 💡 مربوط بالحالة
+          <div className="space-y-3">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>إسناد مهمة جديدة</h2>
+            </div>
+
+            <Card className="card-element card-rtl">
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                  <Info className="h-4 w-4 text-blue-600" />
+                  معلومات المهمة
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <InputWithCopy
+                    label="رقم المعاملة *"
+                    id="transCode"
+                    placeholder="286-2025-XXXXX"
                   />
-                </CardContent>
-              </Card>
-              <Card className="card-element card-rtl">
-                <CardHeader className="p-3 pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    <User className="h-4 w-4 text-green-600" />
-                    اختيار الموظف المكلف
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 pt-0">
-                  <div className="mb-3">
-                    <InputWithCopy
-                      label="بحث في الموظفين"
-                      id="searchEmp"
-                      placeholder="ابحث بالاسم أو الكود أو القسم..."
-                      icon={<Search className="h-4 w-4" />}
-                      // (للتفعيل الكامل: أضف حالة للبحث وقم بفلترة 'employees' بناءً عليها)
-                    />
-                  </div>
-                  <ScrollArea className="h-64">
-                    <div className="grid grid-cols-2 gap-2">
-                      {/* 💡 --- مربوط بالحالة --- */}
-                      {employees.map((emp) => (
-                        <Card 
-                          key={emp.id} 
-                          className={`card-element card-rtl hover:shadow-md transition-all cursor-pointer border-2 ${
-                            selectedEmployeeId === emp.id ? 'border-blue-500 bg-blue-50' : 
-                            emp.available ? 'border-green-200 hover:border-green-400' : 
-                            'border-gray-200 opacity-60'
-                          }`}
-                          onClick={() => emp.available && setSelectedEmployeeId(emp.id)} // 💡 ربط الاختيار
-                        >
-                          <CardContent className="p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className={`w-10 h-10 rounded-lg ${emp.available ? 'bg-green-500' : 'bg-gray-400'} flex items-center justify-center`}>
-                                <User className="h-5 w-5 text-white" />
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-xs font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                                  {emp.name}
-                                </p>
-                                <Badge className="bg-gray-100 text-gray-700 font-mono text-xs mt-0.5">
-                                  {emp.code}
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-xs mb-2">
-                              <div>
-                                <p className="text-gray-600">القسم</p>
-                                <p className="font-medium">{emp.department}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-600">المنصب</p>
-                                <p className="font-medium">{emp.position}</p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 text-xs mb-2">
-                              <div className="bg-blue-50 rounded p-1.5 text-center">
-                                <p className="text-gray-600">نشطة</p>
-                                <p className="font-medium text-blue-600">{emp.activeTasks}</p>
-                              </div>
-                              <div className="bg-green-50 rounded p-1.5 text-center">
-                                <p className="text-gray-600">مكتملة</p>
-                                <p className="font-medium text-green-600">{emp.completedTasks}</p>
-                              </div>
-                              <div className="bg-purple-50 rounded p-1.5 text-center">
-                                <p className="text-gray-600">الأداء</p>
-                                <p className="font-medium text-purple-600">{emp.performance}%</p>
-                              </div>
-                            </div>
-                            <Badge className={emp.available ? 'bg-green-100 text-green-700 w-full justify-center' : 'bg-gray-100 text-gray-700 w-full justify-center'}>
-                              {emp.available ? 'متاح' : 'غير متاح'}
-                            </Badge>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-              <Card className="card-element card-rtl">
-                <CardHeader className="p-3 pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    <Settings className="h-4 w-4 text-orange-600" />
-                    تفاصيل وإعدادات المهمة
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 pt-0">
-                  <div className="grid grid-cols-4 gap-3 mb-3">
-                    <DateInputWithToday
-                      label="تاريخ البدء *"
-                      id="startDate"
-                      value={newTaskData.startDate} // 💡 مربوط بالحالة
-                      onChange={handleNewTaskChange} // 💡 مربوط بالحالة
-                    />
-                    <DateInputWithToday
-                      label="تاريخ الاستحقاق *"
-                      id="dueDate"
-                      value={newTaskData.dueDate} // 💡 مربوط بالحالة
-                      onChange={handleNewTaskChange} // 💡 مربوط بالحالة
-                    />
-                    <SelectWithCopy
-                      label="الأولوية *"
-                      id="priority"
-                      value={newTaskData.priority} // 💡 مربوط بالحالة
-                      onChange={handleNewTaskChange} // 💡 مربوط بالحالة
-                      options={[
-                        { value: 'medium', label: 'متوسطة' },
-                        ...TASK_PRIORITIES.map(p => ({ value: p.value, label: p.label }))
-                      ]}
-                    />
-                    <InputWithCopy
-                      label="الوقت المقدر (ساعات)"
-                      id="estimatedHours"
-                      placeholder="8"
-                      type="number"
-                      value={newTaskData.estimatedHours} // 💡 مربوط بالحالة
-                      onChange={handleNewTaskChange} // 💡 مربوط بالحالة
-                    />
-                  </div>
-                  <TextAreaWithCopy
-                    label="ملاحظات إضافية"
-                    id="notes"
-                    placeholder="أي ملاحظات أو تعليمات خاصة بالمهمة..."
-                    rows={2}
-                    value={newTaskData.notes} // 💡 مربوط بالحالة
-                    onChange={handleNewTaskChange} // 💡 مربوط بالحالة
+                  <InputWithCopy
+                    label="عنوان المعاملة *"
+                    id="transTitle"
+                    placeholder="أدخل عنوان المعاملة"
                   />
-                </CardContent>
-              </Card>
-              <Card className="card-element card-rtl">
-                <CardHeader className="p-3 pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    <Bell className="h-4 w-4 text-cyan-600" />
-                    خيارات الإشعارات
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 pt-0">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-200">
-                      <input type="checkbox" className="w-4 h-4" defaultChecked />
-                      <div className="flex-1">
-                        <p className="text-xs font-medium text-blue-900">إشعار النظام</p>
-                        <p className="text-xs text-blue-700">إشعار فوري عبر النظام</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-200">
-                      <input type="checkbox" className="w-4 h-4" defaultChecked />
-                      <div className="flex-1">
-                        <p className="text-xs font-medium text-green-900">بريد إلكتروني</p>
-                        <p className="text-xs text-green-700">إرسال تفاصيل المهمة</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 bg-purple-50 rounded border border-purple-200">
-                      <input type="checkbox" className="w-4 h-4" />
-                      <div className="flex-1">
-                        <p className="text-xs font-medium text-purple-900">رسالة نصية (SMS)</p>
-                        <p className="text-xs text-purple-700">تنبيه على الجوال</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 bg-orange-50 rounded border border-orange-200">
-                      <input type="checkbox" className="w-4 h-4" defaultChecked />
-                      <div className="flex-1">
-                        <p className="text-xs font-medium text-orange-900">إشعار المدير</p>
-                        <p className="text-xs text-orange-700">إخطار المدير المباشر</p>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <div className="flex items-center justify-between pt-3 border-t">
-                <Button variant="outline" className="h-9" type="button" onClick={() => setActiveTab('825-01')}>
-                  <X className="h-4 w-4 ml-1" />
-                  إلغاء
-                </Button>
-                <div className="flex gap-2">
-                  <Button variant="outline" className="h-9" type="button">
-                    <Eye className="h-4 w-4 ml-1" />
-                    معاينة
-                  </Button>
-                  <Button className="h-9 bg-blue-500" type="submit"> {/* 💡 زر الإرسال */}
-                    <Send className="h-4 w-4 ml-1" />
-                    إسناد المهمة
-                  </Button>
+                  <SelectWithCopy
+                    label="نوع المهمة *"
+                    id="taskType"
+                    options={[
+                      { value: '', label: 'اختر نوع المهمة' },
+                      ...TASK_TYPES.map(t => ({ value: t.value, label: t.label }))
+                    ]}
+                  />
                 </div>
+
+                <TextAreaWithCopy
+                  label="وصف المهمة *"
+                  id="taskDesc"
+                  placeholder="اكتب وصف تفصيلي للمهمة المطلوب إنجازها..."
+                  rows={3}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="card-element card-rtl">
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                  <User className="h-4 w-4 text-green-600" />
+                  اختيار الموظف المكلف
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="mb-3">
+                  <InputWithCopy
+                    label="بحث في الموظفين"
+                    id="searchEmp"
+                    placeholder="ابحث بالاسم أو الكود أو القسم..."
+                    icon={<Search className="h-4 w-4" />}
+                  />
+                </div>
+
+                <ScrollArea className="h-64">
+                  <div className="grid grid-cols-2 gap-2">
+                    {EMPLOYEES_DATA.map((emp) => (
+                      <Card key={emp.id} className={`card-element card-rtl hover:shadow-md transition-all cursor-pointer border-2 ${emp.available ? 'border-green-200 hover:border-green-400' : 'border-gray-200 opacity-60'}`}>
+                        <CardContent className="p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`w-10 h-10 rounded-lg ${emp.available ? 'bg-green-500' : 'bg-gray-400'} flex items-center justify-center`}>
+                              <User className="h-5 w-5 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                                {emp.name}
+                              </p>
+                              <Badge className="bg-gray-100 text-gray-700 font-mono text-xs mt-0.5">
+                                {emp.code}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                            <div>
+                              <p className="text-gray-600">القسم</p>
+                              <p className="font-medium">{emp.department}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">المنصب</p>
+                              <p className="font-medium">{emp.position}</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs mb-2">
+                            <div className="bg-blue-50 rounded p-1.5 text-center">
+                              <p className="text-gray-600">نشطة</p>
+                              <p className="font-medium text-blue-600">{emp.activeTasks}</p>
+                            </div>
+                            <div className="bg-green-50 rounded p-1.5 text-center">
+                              <p className="text-gray-600">مكتملة</p>
+                              <p className="font-medium text-green-600">{emp.completedTasks}</p>
+                            </div>
+                            <div className="bg-purple-50 rounded p-1.5 text-center">
+                              <p className="text-gray-600">الأداء</p>
+                              <p className="font-medium text-purple-600">{emp.performance}%</p>
+                            </div>
+                          </div>
+                          <Badge className={emp.available ? 'bg-green-100 text-green-700 w-full justify-center' : 'bg-gray-100 text-gray-700 w-full justify-center'}>
+                            {emp.available ? 'متاح' : 'غير متاح'}
+                          </Badge>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            <Card className="card-element card-rtl">
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                  <Settings className="h-4 w-4 text-orange-600" />
+                  تفاصيل وإعدادات المهمة
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="grid grid-cols-4 gap-3 mb-3">
+                  <DateInputWithToday
+                    label="تاريخ البدء *"
+                    id="startDate"
+                  />
+                  <DateInputWithToday
+                    label="تاريخ الاستحقاق *"
+                    id="dueDate"
+                  />
+                  <SelectWithCopy
+                    label="الأولوية *"
+                    id="priority"
+                    options={[
+                      { value: '', label: 'اختر الأولوية' },
+                      ...TASK_PRIORITIES.map(p => ({ value: p.value, label: p.label }))
+                    ]}
+                  />
+                  <InputWithCopy
+                    label="الوقت المقدر (ساعات)"
+                    id="estHours"
+                    placeholder="8"
+                  />
+                </div>
+
+                <TextAreaWithCopy
+                  label="ملاحظات إضافية"
+                  id="notes"
+                  placeholder="أي ملاحظات أو تعليمات خاصة بالمهمة..."
+                  rows={2}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="card-element card-rtl">
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                  <Bell className="h-4 w-4 text-cyan-600" />
+                  خيارات الإشعارات
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-200">
+                    <input type="checkbox" className="w-4 h-4" defaultChecked />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-blue-900">إشعار النظام</p>
+                      <p className="text-xs text-blue-700">إشعار فوري عبر النظام</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-200">
+                    <input type="checkbox" className="w-4 h-4" defaultChecked />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-green-900">بريد إلكتروني</p>
+                      <p className="text-xs text-green-700">إرسال تفاصيل المهمة</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-purple-50 rounded border border-purple-200">
+                    <input type="checkbox" className="w-4 h-4" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-purple-900">رسالة نصية (SMS)</p>
+                      <p className="text-xs text-purple-700">تنبيه على الجوال</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-orange-50 rounded border border-orange-200">
+                    <input type="checkbox" className="w-4 h-4" defaultChecked />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-orange-900">إشعار المدير</p>
+                      <p className="text-xs text-orange-700">إخطار المدير المباشر</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex items-center justify-between pt-3 border-t">
+              <Button variant="outline" className="h-9">
+                <X className="h-4 w-4 ml-1" />
+                إلغاء
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" className="h-9">
+                  <Eye className="h-4 w-4 ml-1" />
+                  معاينة
+                </Button>
+                <Button className="h-9 bg-blue-500">
+                  <Send className="h-4 w-4 ml-1" />
+                  إسناد المهمة
+                </Button>
               </div>
             </div>
-          </form>
+          </div>
         );
+
       // 825-04: المهام المكتملة
       case '825-04':
-        // 💡 --- مربوط بالحالة ---
-        const completedTasksList = tasks.filter(t => t.status === 'completed');
+        const completedTasksList = ASSIGNED_TASKS.filter(t => t.status === 'completed');
+        
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام المكتملة ({completedTasksList.length})</h2>
+              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام المكتملة</h2>
               <div className="flex gap-2">
                 <InputWithCopy
                   label=""
@@ -1152,6 +1199,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </Button>
               </div>
             </div>
+
             {/* إحصائيات سريعة */}
             <div className="grid grid-cols-4 gap-2 mb-3">
               <Card className="card-element card-rtl">
@@ -1167,6 +1215,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
@@ -1175,11 +1224,12 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                     </div>
                     <div className="flex-1">
                       <p className="text-xs text-gray-600">في الوقت المحدد</p>
-                      <p className="text-xl">{completedTasksList.filter(t => t.status !== 'overdue').length}</p>
+                      <p className="text-xl">{completedTasksList.length - 1}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
@@ -1193,6 +1243,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
@@ -1201,14 +1252,13 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                     </div>
                     <div className="flex-1">
                       <p className="text-xs text-gray-600">نسبة الإنجاز</p>
-                      <p className="text-xl">
-                        {totalTasks > 0 ? ((completedTasksList.length / totalTasks) * 100).toFixed(0) : 0}%
-                      </p>
+                      <p className="text-xl">95%</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               {completedTasksList.map((task) => (
                 <Card key={task.id} className="card-element card-rtl hover:shadow-lg transition-all cursor-pointer border-t-4 border-green-500">
@@ -1229,46 +1279,51 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                             ))}
                           </div>
                         </div>
+
                         <h4 className="text-sm font-medium mb-2">{task.transactionTitle}</h4>
                         <p className="text-xs text-gray-600 mb-2">{task.description}</p>
+
                         <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
                           <div className="bg-blue-50 rounded p-2">
                             <p className="text-gray-600 mb-1">الموظف المنفذ</p>
                             <div className="flex items-center gap-1">
                               <User className="h-3 w-3 text-blue-500" />
-                              <span className="font-medium">{task.assignedTo?.name || 'N/A'}</span>
+                              <span className="font-medium">{task.assignedTo}</span>
                             </div>
                           </div>
                           <div className="bg-green-50 rounded p-2">
                             <p className="text-gray-600 mb-1">تاريخ الإكمال</p>
                             <div className="flex items-center gap-1">
                               <CheckCircle className="h-3 w-3 text-green-500" />
-                              <span className="font-medium">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</span>
+                              <span className="font-medium">{task.dueDate}</span>
                             </div>
                           </div>
                         </div>
+
                         <div className="bg-green-50 border border-green-200 rounded p-2 mb-2">
-                          <p className="text-xs text-green-800">{task.notes || 'تم إكمال المهمة بنجاح'}</p>
+                          <p className="text-xs text-green-800">{task.notes}</p>
                         </div>
+
                         <div className="grid grid-cols-3 gap-1 text-xs">
                           <div className="text-center p-1 bg-gray-50 rounded">
                             <p className="text-gray-600">الوقت المقدر</p>
-                            <p className="font-medium">{task.estimatedHours || 0}س</p>
+                            <p className="font-medium">{task.estimatedHours}س</p>
                           </div>
                           <div className="text-center p-1 bg-gray-50 rounded">
                             <p className="text-gray-600">الوقت الفعلي</p>
-                            <p className="font-medium">{task.actualHours || 0}س</p>
+                            <p className="font-medium">{task.actualHours}س</p>
                           </div>
                           <div className="text-center p-1 bg-green-50 rounded">
                             <p className="text-gray-600">الكفاءة</p>
                             <p className="font-medium text-green-600">
-                              {(task.actualHours && task.estimatedHours) ? ((task.estimatedHours / task.actualHours) * 100).toFixed(0) : 'N/A'}%
+                              {((task.estimatedHours / task.actualHours) * 100).toFixed(0)}%
                             </p>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 mt-3">
+
+                    <div className="flex items-center gap-1">
                       <Button className="flex-1 h-7 text-xs" variant="outline">
                         <Eye className="h-3 w-3 ml-1" />
                         عرض
@@ -1288,10 +1343,11 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
             </div>
           </div>
         );
+
       // 825-05: المهام المتأخرة
       case '825-05':
-        // 💡 --- مربوط بالحالة ---
-        const overdueTasksList = tasks.filter(t => t.status === 'overdue');
+        const overdueTasksList = ASSIGNED_TASKS.filter(t => t.status === 'overdue');
+        
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-4">
@@ -1307,6 +1363,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </Button>
               </div>
             </div>
+
             {/* إحصائيات التأخير */}
             <div className="grid grid-cols-5 gap-2 mb-3">
               <Card className="card-element card-rtl bg-red-50 border-red-200">
@@ -1316,6 +1373,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-2xl text-red-600">{overdueTasksList.length}</p>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardContent className="p-3 text-center">
                   <Clock className="h-6 w-6 mx-auto mb-1 text-orange-600" />
@@ -1323,6 +1381,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-2xl">3.5</p>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardContent className="p-3 text-center">
                   <Users className="h-6 w-6 mx-auto mb-1 text-purple-600" />
@@ -1330,6 +1389,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-2xl">2</p>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardContent className="p-3 text-center">
                   <Target className="h-6 w-6 mx-auto mb-1 text-blue-600" />
@@ -1337,6 +1397,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-2xl">45%</p>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardContent className="p-3 text-center">
                   <TrendingUp className="h-6 w-6 mx-auto mb-1 text-green-600" />
@@ -1345,9 +1406,11 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
+
             <div className="space-y-2">
               {overdueTasksList.map((task) => {
-                const daysOverdue = task.dueDate ? Math.floor((new Date().getTime() - new Date(task.dueDate).getTime()) / (1000 * 3600 * 24)) : 0;
+                const daysOverdue = 3; // حساب أيام التأخير
+                
                 return (
                   <Card key={task.id} className="card-element card-rtl border-r-4 border-red-500">
                     <CardContent className="p-3">
@@ -1359,22 +1422,24 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                             </Badge>
                             <Badge className="bg-red-100 text-red-700">
                               <AlertTriangle className="h-3 w-3 ml-1" />
-                              متأخرة {daysOverdue > 0 ? daysOverdue : 0} أيام
+                              متأخرة {daysOverdue} أيام
                             </Badge>
                             <Badge className={TASK_PRIORITIES.find(p => p.value === task.priority)?.color}>
                               {TASK_PRIORITIES.find(p => p.value === task.priority)?.label}
                             </Badge>
                           </div>
+
                           <h4 className="text-sm font-medium mb-1">{task.transactionTitle}</h4>
                           <p className="text-xs text-gray-600 mb-2">{task.description}</p>
+
                           <div className="grid grid-cols-4 gap-2 text-xs mb-2">
                             <div>
                               <p className="text-gray-600">الموظف:</p>
-                              <p className="font-medium">{task.assignedTo?.name || 'N/A'}</p>
+                              <p className="font-medium">{task.assignedTo}</p>
                             </div>
                             <div>
                               <p className="text-gray-600">تاريخ الاستحقاق:</p>
-                              <p className="font-medium text-red-600">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</p>
+                              <p className="font-medium text-red-600">{task.dueDate}</p>
                             </div>
                             <div>
                               <p className="text-gray-600">التقدم:</p>
@@ -1382,23 +1447,25 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                             </div>
                             <div>
                               <p className="text-gray-600">الإشعارات المرسلة:</p>
-                              <Badge className="bg-orange-100 text-orange-700">{task.notificationsSent || 0} إشعارات</Badge>
+                              <Badge className="bg-orange-100 text-orange-700">5 إشعارات</Badge>
                             </div>
                           </div>
+
                           <div className="bg-red-50 border border-red-200 rounded p-2">
-                            <p className="text-xs text-red-800 font-medium">⚠️ {task.notes || 'المهمة متأخرة - يجب الإسراع'}</p>
+                            <p className="text-xs text-red-800 font-medium">⚠️ {task.notes}</p>
                           </div>
                         </div>
+
                         <div className="flex flex-col gap-1 mr-2">
                           <Button className="h-7 text-xs bg-green-500">
                             <Send className="h-3 w-3 ml-1" />
                             تنبيه
                           </Button>
-                          <Button className="h-7 text-xs bg-blue-500" onClick={() => { setSelectedTask(task); setShowTransferDialog(true); }}>
+                          <Button className="h-7 text-xs bg-blue-500">
                             <Share2 className="h-3 w-3 ml-1" />
                             تحويل
                           </Button>
-                          <Button className="h-7 text-xs" variant="outline" onClick={() => setSelectedTask(task)}>
+                          <Button className="h-7 text-xs" variant="outline">
                             <Eye className="h-3 w-3 ml-1" />
                             عرض
                           </Button>
@@ -1411,11 +1478,12 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
             </div>
           </div>
         );
+
       // 825-06: المهام المعلقة
       case '825-06':
-        // 💡 --- مربوط بالحالة ---
-        const pausedTasks = tasks.filter(t => t.status === 'paused');
-        const frozenTasks = tasks.filter(t => t.status === 'frozen');
+        const pausedTasks = ASSIGNED_TASKS.filter(t => t.status === 'paused');
+        const frozenTasks = ASSIGNED_TASKS.filter(t => t.status === 'frozen');
+        
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-4">
@@ -1437,6 +1505,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </Button>
               </div>
             </div>
+
             {/* إحصائيات المهام المعلقة */}
             <div className="grid grid-cols-4 gap-2 mb-3">
               <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
@@ -1446,6 +1515,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-2xl font-mono text-orange-700">{pausedTasks.length}</p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-cyan-50 to-cyan-100 border-cyan-200">
                 <CardContent className="p-3 text-center">
                   <Snowflake className="h-5 w-5 mx-auto mb-1 text-cyan-600" />
@@ -1453,6 +1523,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-2xl font-mono text-cyan-700">{frozenTasks.length}</p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
                 <CardContent className="p-3 text-center">
                   <Clock className="h-5 w-5 mx-auto mb-1 text-yellow-600" />
@@ -1461,6 +1532,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-xs text-yellow-600">أيام</p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
                 <CardContent className="p-3 text-center">
                   <AlertCircle className="h-5 w-5 mx-auto mb-1 text-purple-600" />
@@ -1469,6 +1541,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               {pausedTasks.map((task, index) => {
                 const pauseDays = Math.floor(Math.random() * 10) + 1;
@@ -1479,6 +1552,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   'في انتظار استكمال إجراءات سابقة',
                   'تأجيل مؤقت لإعادة التقييم'
                 ];
+                
                 return (
                   <Card key={task.id} className="card-element card-rtl border-t-4 border-orange-500 hover:shadow-lg transition-shadow">
                     <CardContent className="p-3">
@@ -1496,12 +1570,15 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               {TASK_PRIORITIES.find(p => p.value === task.priority)?.label}
                             </Badge>
                           </div>
+
                           <h4 className="text-sm font-medium mb-1">{task.transactionTitle}</h4>
                           <p className="text-xs text-gray-600 mb-2">{task.description}</p>
+                          
                           <div className="bg-orange-50 border border-orange-200 rounded p-2 mb-2">
                             <p className="text-xs text-orange-900 font-medium mb-1">📋 سبب التعليق:</p>
                             <p className="text-xs text-orange-800">{pauseReasons[index % pauseReasons.length]}</p>
                           </div>
+
                           <div className="space-y-2 mb-2">
                             <div>
                               <div className="flex items-center justify-between text-xs mb-1">
@@ -1510,6 +1587,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               </div>
                               <Progress value={task.progress} className="h-2" />
                             </div>
+
                             <div className="grid grid-cols-4 gap-1.5 text-xs">
                               <div className="bg-gray-50 rounded p-1.5 text-center border border-gray-200">
                                 <p className="text-gray-600">معلقة منذ</p>
@@ -1518,7 +1596,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               </div>
                               <div className="bg-blue-50 rounded p-1.5 text-center border border-blue-200">
                                 <p className="text-gray-600">الموظف</p>
-                                <p className="font-medium text-blue-700 text-xs">{task.assignedTo?.name?.split(' ')[0] || 'N/A'}</p>
+                                <p className="font-medium text-blue-700 text-xs">{task.assignedTo.split(' ')[0]}</p>
                               </div>
                               <div className="bg-purple-50 rounded p-1.5 text-center border border-purple-200">
                                 <p className="text-gray-600">الأولوية</p>
@@ -1530,17 +1608,19 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               </div>
                             </div>
                           </div>
+
                           <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
                             <div className="flex items-start gap-2">
                               <Info className="h-3 w-3 text-yellow-600 mt-0.5 flex-shrink-0" />
                               <div className="flex-1">
                                 <p className="text-xs text-yellow-900 font-medium">آخر تحديث:</p>
-                                <p className="text-xs text-yellow-800">منذ {pauseDays} أيام بواسطة {task.assignedTo?.name?.split(' ')[0] || 'N/A'}</p>
+                                <p className="text-xs text-yellow-800">منذ {pauseDays} أيام بواسطة {task.assignedTo.split(' ')[0]}</p>
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
+
                       <div className="space-y-1.5 pt-2 border-t">
                         <div className="flex items-center gap-1">
                           <Button className="flex-1 h-7 text-xs bg-green-500 text-white hover:bg-green-600">
@@ -1575,100 +1655,10 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Card>
                 );
               })}
-              {frozenTasks.map((task) => (
-                  <Card key={task.id} className="card-element card-rtl border-t-4 border-cyan-500 hover:shadow-lg transition-shadow">
-                    <CardContent className="p-3">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge className="bg-gray-100 text-gray-700 font-mono text-xs">
-                              {task.taskNumber}
-                            </Badge>
-                            <Badge className="bg-cyan-100 text-cyan-700">
-                              <Snowflake className="h-3 w-3 ml-1" />
-                              مجمدة
-                            </Badge>
-                            <Badge className={TASK_PRIORITIES.find(p => p.value === task.priority)?.color}>
-                              {TASK_PRIORITIES.find(p => p.value === task.priority)?.label}
-                            </Badge>
-                          </div>
-                          <h4 className="text-sm font-medium mb-1">{task.transactionTitle}</h4>
-                          <p className="text-xs text-gray-600 mb-2">{task.description}</p>
-                          <div className="bg-cyan-50 border border-cyan-200 rounded p-2 mb-2">
-                            <p className="text-xs text-cyan-900 font-medium mb-1">❄️ سبب التجميد:</p>
-                            <p className="text-xs text-cyan-800">{task.frozenReason || task.notes || 'N/A'}</p>
-                          </div>
-                          <div className="space-y-2 mb-2">
-                            <div>
-                              <div className="flex items-center justify-between text-xs mb-1">
-                                <span className="text-gray-600">التقدم قبل التجميد</span>
-                                <span className="font-medium">{task.progress}%</span>
-                              </div>
-                              <Progress value={task.progress} className="h-2" />
-                            </div>
-                            <div className="grid grid-cols-4 gap-1.5 text-xs">
-                              <div className="bg-gray-50 rounded p-1.5 text-center border border-gray-200">
-                                <p className="text-gray-600">مجمدة منذ</p>
-                                <p className="font-mono text-gray-900">{task.frozenDate ? Math.floor((new Date().getTime() - new Date(task.frozenDate).getTime()) / (1000 * 3600 * 24)) : 0}</p>
-                                <p className="text-gray-500">يوم</p>
-                              </div>
-                              <div className="bg-blue-50 rounded p-1.5 text-center border border-blue-200">
-                                <p className="text-gray-600">الموظف</p>
-                                <p className="font-medium text-blue-700 text-xs">{task.assignedTo?.name?.split(' ')[0] || 'N/A'}</p>
-                              </div>
-                              <div className="bg-purple-50 rounded p-1.5 text-center border border-purple-200">
-                                <p className="text-gray-600">نوع التجميد</p>
-                                <p className="font-medium text-xs">{task.frozenType === 'temporary' ? 'مؤقت' : 'غير محدد'}</p>
-                              </div>
-                              <div className="bg-green-50 rounded p-1.5 text-center border border-green-200">
-                                <p className="text-gray-600">الإشعارات</p>
-                                <p className="font-mono text-green-700">{task.notificationsSent || 0}</p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
-                            <div className="flex items-start gap-2">
-                              <Info className="h-3 w-3 text-yellow-600 mt-0.5 flex-shrink-0" />
-                              <div className="flex-1">
-                                <p className="text-xs text-yellow-900 font-medium">ملاحظات:</p>
-                                <p className="text-xs text-yellow-800">{task.notes || 'لا توجد ملاحظات'}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-1.5 pt-2 border-t">
-                        <div className="flex items-center gap-1">
-                          <Button className="flex-1 h-7 text-xs bg-green-500 text-white hover:bg-green-600">
-                            <PlayCircle className="h-3 w-3 ml-1" />
-                            استئناف
-                          </Button>
-                          <Button className="flex-1 h-7 text-xs bg-blue-500 text-white hover:bg-blue-600">
-                            <Send className="h-3 w-3 ml-1" />
-                            تنبيه
-                          </Button>
-                          <Button className="flex-1 h-7 text-xs" variant="outline">
-                            <Edit className="h-3 w-3 ml-1" />
-                            تعديل
-                          </Button>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button className="flex-1 h-7 text-xs" variant="outline">
-                            <Eye className="h-3 w-3 ml-1" />
-                            عرض
-                          </Button>
-                          <Button className="flex-1 h-7 text-xs bg-red-500 text-white hover:bg-red-600">
-                            <Ban className="h-3 w-3 ml-1" />
-                            إلغاء
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
             </div>
           </div>
         );
+
       // 825-07: تفاصيل المهام
       case '825-07':
         return (
@@ -1692,62 +1682,68 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </Button>
               </div>
             </div>
+
             {/* إحصائيات سريعة */}
             <div className="grid grid-cols-6 gap-2 mb-3">
-              {/* 💡 --- مربوط بالحالة --- */}
               <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
                 <CardContent className="p-3 text-center">
                   <List className="h-5 w-5 mx-auto mb-1 text-blue-600" />
                   <p className="text-xs text-gray-700">إجمالي المهام</p>
-                  <p className="text-2xl font-mono text-blue-700">{tasks.length}</p>
+                  <p className="text-2xl font-mono text-blue-700">{ASSIGNED_TASKS.length}</p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
                 <CardContent className="p-3 text-center">
                   <CheckCircle className="h-5 w-5 mx-auto mb-1 text-green-600" />
                   <p className="text-xs text-gray-700">مكتملة</p>
                   <p className="text-2xl font-mono text-green-700">
-                    {tasks.filter(t => t.status === 'completed').length}
+                    {ASSIGNED_TASKS.filter(t => t.status === 'completed').length}
                   </p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
                 <CardContent className="p-3 text-center">
                   <PlayCircle className="h-5 w-5 mx-auto mb-1 text-blue-600" />
                   <p className="text-xs text-gray-700">قيد التنفيذ</p>
                   <p className="text-2xl font-mono text-blue-700">
-                    {tasks.filter(t => t.status === 'in-progress').length}
+                    {ASSIGNED_TASKS.filter(t => t.status === 'in-progress').length}
                   </p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
                 <CardContent className="p-3 text-center">
                   <PauseCircle className="h-5 w-5 mx-auto mb-1 text-orange-600" />
                   <p className="text-xs text-gray-700">معلقة</p>
                   <p className="text-2xl font-mono text-orange-700">
-                    {tasks.filter(t => t.status === 'paused').length}
+                    {ASSIGNED_TASKS.filter(t => t.status === 'paused').length}
                   </p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
                 <CardContent className="p-3 text-center">
                   <AlertTriangle className="h-5 w-5 mx-auto mb-1 text-red-600" />
                   <p className="text-xs text-gray-700">متأخرة</p>
                   <p className="text-2xl font-mono text-red-700">
-                    {tasks.filter(t => t.status === 'overdue').length}
+                    {ASSIGNED_TASKS.filter(t => t.status === 'overdue').length}
                   </p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
                 <CardContent className="p-3 text-center">
                   <Clock className="h-5 w-5 mx-auto mb-1 text-yellow-600" />
                   <p className="text-xs text-gray-700">في الانتظار</p>
                   <p className="text-2xl font-mono text-yellow-700">
-                    {tasks.filter(t => t.status === 'pending').length}
+                    {ASSIGNED_TASKS.filter(t => t.status === 'pending').length}
                   </p>
                 </CardContent>
               </Card>
             </div>
+
             {/* جدول تفاصيل المهام */}
             <Card className="card-element card-rtl">
               <CardContent className="p-0">
@@ -1755,22 +1751,40 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <Table className="table-rtl">
                     <TableHeader>
                       <TableRow className="bg-gray-50">
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>رقم المهمة</TableHead>
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>عنوان المهمة</TableHead>
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>الموظف المكلف</TableHead>
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>الأولوية</TableHead>
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>التقدم</TableHead>
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>تاريخ البدء</TableHead>
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>الاستحقاق</TableHead>
-                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>الإجراءات</TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          رقم المهمة
+                        </TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          عنوان المهمة
+                        </TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          الموظف المكلف
+                        </TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          الحالة
+                        </TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          الأولوية
+                        </TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          التقدم
+                        </TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          تاريخ البدء
+                        </TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          الاستحقاق
+                        </TableHead>
+                        <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                          الإجراءات
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {/* 💡 --- مربوط بالحالة --- */}
-                      {tasks.map((task) => {
+                      {ASSIGNED_TASKS.map((task) => {
                         const statusInfo = TASK_STATUSES.find(s => s.value === task.status);
                         const priorityInfo = TASK_PRIORITIES.find(p => p.value === task.priority);
+                        
                         return (
                           <TableRow key={task.id} className="hover:bg-gray-50">
                             <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -1789,7 +1803,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                                 <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
                                   <User className="h-3 w-3 text-blue-600" />
                                 </div>
-                                <span className="text-xs">{task.assignedTo?.name || 'N/A'}</span>
+                                <span className="text-xs">{task.assignedTo}</span>
                               </div>
                             </TableCell>
                             <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -1809,16 +1823,16 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               </div>
                             </TableCell>
                             <TableCell className="text-right text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                              {task.startDate ? new Date(task.startDate).toLocaleDateString() : 'N/A'}
+                              {task.startDate}
                             </TableCell>
                             <TableCell className="text-right text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>
                               <span className={task.status === 'overdue' ? 'text-red-600 font-medium' : ''}>
-                                {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}
+                                {task.dueDate}
                               </span>
                             </TableCell>
                             <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
                               <div className="flex items-center gap-1">
-                                <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => setSelectedTask(task)}>
+                                <Button size="sm" variant="outline" className="h-6 text-xs px-2">
                                   <Eye className="h-3 w-3" />
                                 </Button>
                                 <Button size="sm" variant="outline" className="h-6 text-xs px-2">
@@ -1839,17 +1853,18 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
             </Card>
           </div>
         );
+
       // 825-08: تقارير الأداء
       case '825-08':
-        // 💡 --- مربوط بالحالة ---
         const performanceStats = {
-          totalTasks: tasks.length,
-          completed: tasks.filter(t => t.status === 'completed').length,
-          inProgress: tasks.filter(t => t.status === 'in-progress').length,
-          overdue: tasks.filter(t => t.status === 'overdue').length,
-          avgCompletionTime: 3.2, // (يفضل حسابه في الـ Backend)
-          successRate: totalTasks > 0 ? (tasks.filter(t => t.status === 'completed').length / totalTasks) * 100 : 0,
+          totalTasks: ASSIGNED_TASKS.length,
+          completed: ASSIGNED_TASKS.filter(t => t.status === 'completed').length,
+          inProgress: ASSIGNED_TASKS.filter(t => t.status === 'in-progress').length,
+          overdue: ASSIGNED_TASKS.filter(t => t.status === 'overdue').length,
+          avgCompletionTime: 3.2,
+          successRate: 92.5,
         };
+        
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-4">
@@ -1877,9 +1892,9 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </Button>
               </div>
             </div>
+
             {/* مؤشرات الأداء الرئيسية */}
             <div className="grid grid-cols-4 gap-3">
-              {/* 💡 --- مربوط بالحالة --- */}
               <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
@@ -1891,6 +1906,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-xs text-blue-200">+15% عن الشهر الماضي</p>
                 </CardContent>
               </Card>
+
               <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
@@ -1898,10 +1914,11 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                     <TrendingUp className="h-4 w-4 text-green-200" />
                   </div>
                   <p className="text-xs text-green-100 mb-1">معدل الإنجاز</p>
-                  <p className="text-3xl font-mono mb-1">{performanceStats.successRate.toFixed(0)}%</p>
+                  <p className="text-3xl font-mono mb-1">{performanceStats.successRate}%</p>
                   <p className="text-xs text-green-200">ممتاز جداً</p>
                 </CardContent>
               </Card>
+
               <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
@@ -1913,6 +1930,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <p className="text-xs text-purple-200">أيام</p>
                 </CardContent>
               </Card>
+
               <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
@@ -1925,6 +1943,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
+
             {/* تقارير تفصيلية */}
             <div className="grid grid-cols-2 gap-3">
               {/* تقرير الأداء حسب الموظف */}
@@ -1938,8 +1957,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 <CardContent className="p-3">
                   <ScrollArea className="h-80">
                     <div className="space-y-2">
-                      {/* 💡 --- مربوط بالحالة --- */}
-                      {employees.map((emp, index) => (
+                      {EMPLOYEES_DATA.map((emp, index) => (
                         <Card key={emp.id} className={`p-2 ${index < 3 ? 'border-r-4 border-green-500' : ''}`}>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
@@ -1953,6 +1971,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               #{index + 1}
                             </Badge>
                           </div>
+                          
                           <div className="grid grid-cols-3 gap-2 text-xs mb-2">
                             <div className="bg-blue-50 rounded p-1.5 text-center">
                               <p className="text-gray-600">نشطة</p>
@@ -1967,6 +1986,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                               <p className="font-mono text-purple-600">{emp.performance}%</p>
                             </div>
                           </div>
+                          
                           <div>
                             <div className="flex items-center justify-between text-xs mb-1">
                               <span className="text-gray-600">معدل الأداء</span>
@@ -1980,6 +2000,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </ScrollArea>
                 </CardContent>
               </Card>
+
               {/* تقرير الأداء حسب نوع المهمة */}
               <Card className="card-element card-rtl">
                 <CardHeader className="p-3 pb-2 bg-purple-50 border-b">
@@ -1992,11 +2013,10 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   <ScrollArea className="h-80">
                     <div className="space-y-2">
                       {TASK_TYPES.map((type, index) => {
-                        const typeTasks = tasks.filter(t => t.taskType === type.value);
-                        const count = typeTasks.length;
-                        const completed = typeTasks.filter(t => t.status === 'completed').length;
-                        const avgTime = typeTasks.reduce((sum, t) => sum + (t.actualHours || 0), 0) / count || 0;
-                        const successRate = count > 0 ? (completed / count) * 100 : 0;
+                        const count = Math.floor(Math.random() * 20) + 5;
+                        const avgTime = (Math.random() * 5 + 1).toFixed(1);
+                        const successRate = Math.floor(Math.random() * 15) + 85;
+                        
                         return (
                           <Card key={type.value} className="p-3 hover:shadow-md transition-shadow">
                             <div className="flex items-center gap-2 mb-2">
@@ -2008,27 +2028,29 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                                 <p className="text-xs text-gray-600">{count} مهمة</p>
                               </div>
                               <Badge className="bg-gray-100 text-gray-700 font-mono">
-                                {successRate.toFixed(0)}%
+                                {successRate}%
                               </Badge>
                             </div>
+                            
                             <div className="grid grid-cols-3 gap-2 text-xs mb-2">
                               <div className="bg-green-50 rounded p-1.5 text-center">
                                 <p className="text-gray-600">منجزة</p>
-                                <p className="font-mono text-green-600">{completed}</p>
+                                <p className="font-mono text-green-600">{Math.floor(count * successRate / 100)}</p>
                               </div>
                               <div className="bg-blue-50 rounded p-1.5 text-center">
                                 <p className="text-gray-600">نشطة</p>
-                                <p className="font-mono text-blue-600">{typeTasks.filter(t => t.status === 'in-progress').length}</p>
+                                <p className="font-mono text-blue-600">{Math.floor(count * (100 - successRate) / 100)}</p>
                               </div>
                               <div className="bg-purple-50 rounded p-1.5 text-center">
                                 <p className="text-gray-600">متوسط الوقت</p>
-                                <p className="font-mono text-purple-600">{avgTime.toFixed(1)}س</p>
+                                <p className="font-mono text-purple-600">{avgTime}د</p>
                               </div>
                             </div>
+                            
                             <div>
                               <div className="flex items-center justify-between text-xs mb-1">
                                 <span className="text-gray-600">معدل النجاح</span>
-                                <span className="font-mono">{successRate.toFixed(0)}%</span>
+                                <span className="font-mono">{successRate}%</span>
                               </div>
                               <Progress value={successRate} className="h-2" />
                             </div>
@@ -2040,6 +2062,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
+
             {/* تقارير إضافية */}
             <div className="grid grid-cols-3 gap-3">
               <Card className="card-element card-rtl">
@@ -2070,6 +2093,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardHeader className="p-3 pb-2">
                   <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -2098,6 +2122,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                 </CardContent>
               </Card>
+
               <Card className="card-element card-rtl">
                 <CardHeader className="p-3 pb-2">
                   <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -2125,6 +2150,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
             </div>
           </div>
         );
+
       // 825-09: الموظفين والتكليف
       case '825-09':
         return (
@@ -2149,63 +2175,67 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                     { value: 'documentation', label: 'التوثيق' },
                   ]}
                 />
-                <Button size="sm" className="h-8 text-xs bg-blue-500" onClick={() => setActiveTab('825-03')}>
+                <Button size="sm" className="h-8 text-xs bg-blue-500">
                   <Plus className="h-3 w-3 ml-1" />
                   إسناد جديد
                 </Button>
               </div>
             </div>
+
             {/* إحصائيات الموظفين */}
             <div className="grid grid-cols-5 gap-2 mb-3">
-              {/* 💡 --- مربوط بالحالة --- */}
               <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
                 <CardContent className="p-3 text-center">
                   <Users className="h-5 w-5 mx-auto mb-1 text-blue-600" />
                   <p className="text-xs text-gray-700">إجمالي الموظفين</p>
-                  <p className="text-2xl font-mono text-blue-700">{employees.length}</p>
+                  <p className="text-2xl font-mono text-blue-700">{EMPLOYEES_DATA.length}</p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
                 <CardContent className="p-3 text-center">
                   <CheckCircle className="h-5 w-5 mx-auto mb-1 text-green-600" />
                   <p className="text-xs text-gray-700">متاحون</p>
                   <p className="text-2xl font-mono text-green-700">
-                    {employees.filter(e => e.available).length}
+                    {EMPLOYEES_DATA.filter(e => e.available).length}
                   </p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
                 <CardContent className="p-3 text-center">
                   <AlertCircle className="h-5 w-5 mx-auto mb-1 text-orange-600" />
                   <p className="text-xs text-gray-700">مشغولون</p>
                   <p className="text-2xl font-mono text-orange-700">
-                    {employees.filter(e => !e.available).length}
+                    {EMPLOYEES_DATA.filter(e => !e.available).length}
                   </p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
                 <CardContent className="p-3 text-center">
                   <Activity className="h-5 w-5 mx-auto mb-1 text-purple-600" />
                   <p className="text-xs text-gray-700">متوسط المهام</p>
                   <p className="text-2xl font-mono text-purple-700">
-                    {(employees.reduce((a, b) => a + b.activeTasks, 0) / employees.length).toFixed(1)}
+                    {(EMPLOYEES_DATA.reduce((a, b) => a + b.activeTasks, 0) / EMPLOYEES_DATA.length).toFixed(1)}
                   </p>
                 </CardContent>
               </Card>
+              
               <Card className="bg-gradient-to-br from-cyan-50 to-cyan-100 border-cyan-200">
                 <CardContent className="p-3 text-center">
                   <Award className="h-5 w-5 mx-auto mb-1 text-cyan-600" />
                   <p className="text-xs text-gray-700">متوسط الأداء</p>
                   <p className="text-2xl font-mono text-cyan-700">
-                    {(employees.reduce((a, b) => a + b.performance, 0) / employees.length).toFixed(0)}%
+                    {(EMPLOYEES_DATA.reduce((a, b) => a + b.performance, 0) / EMPLOYEES_DATA.length).toFixed(0)}%
                   </p>
                 </CardContent>
               </Card>
             </div>
+
             {/* بطاقات الموظفين */}
             <div className="grid grid-cols-2 gap-3">
-              {/* 💡 --- مربوط بالحالة --- */}
-              {employees.map((emp) => (
+              {EMPLOYEES_DATA.map((emp) => (
                 <Card 
                   key={emp.id} 
                   className={`card-element card-rtl hover:shadow-lg transition-all ${emp.available ? 'border-r-4 border-green-500' : 'border-r-4 border-orange-500'}`}
@@ -2227,6 +2257,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                         {emp.available ? '● متاح' : '● مشغول'}
                       </Badge>
                     </div>
+
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       <div className="bg-gray-50 rounded p-2">
                         <p className="text-xs text-gray-600 mb-0.5">القسم</p>
@@ -2237,6 +2268,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                         <p className="text-xs font-medium">{emp.position}</p>
                       </div>
                     </div>
+
                     {/* إحصائيات المهام */}
                     <div className="grid grid-cols-4 gap-2 mb-3">
                       <div className="bg-blue-50 rounded p-2 text-center border border-blue-200">
@@ -2254,10 +2286,11 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                       <div className="bg-orange-50 rounded p-2 text-center border border-orange-200">
                         <p className="text-xs text-gray-600 mb-1">معدل</p>
                         <p className="text-lg font-mono text-orange-600">
-                          {((emp.completedTasks / (emp.activeTasks + emp.completedTasks || 1)) * 100).toFixed(0)}%
+                          {(emp.completedTasks / (emp.activeTasks + emp.completedTasks) * 100).toFixed(0)}%
                         </p>
                       </div>
                     </div>
+
                     {/* مؤشر الأداء */}
                     <div className="mb-3">
                       <div className="flex items-center justify-between text-xs mb-1">
@@ -2266,20 +2299,22 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                       </div>
                       <Progress value={emp.performance} className="h-2.5" />
                     </div>
-                    {/* المهام الحالية (هذا الجزء يحتاج بيانات حية للمهام الخاصة بالموظف) */}
+
+                    {/* المهام الحالية */}
                     <div className="bg-gray-50 rounded p-2 mb-3">
                       <p className="text-xs text-gray-600 mb-2 font-medium">المهام الحالية ({emp.activeTasks}):</p>
                       <div className="space-y-1">
-                        {tasks.filter(t => t.assignedTo?.id === emp.id && t.status === 'in-progress').slice(0, 3).map((task) => (
-                          <div key={task.id} className="flex items-center justify-between text-xs bg-white rounded p-1.5">
-                            <span className="text-gray-700 truncate">{task.transactionTitle}</span>
+                        {Array.from({ length: Math.min(emp.activeTasks, 3) }, (_, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs bg-white rounded p-1.5">
+                            <span className="text-gray-700">مهمة معاملة #{286 + i}</span>
                             <Badge className="bg-blue-100 text-blue-700 text-xs">
-                              {task.progress}%
+                              {Math.floor(Math.random() * 40) + 60}%
                             </Badge>
                           </div>
                         ))}
                       </div>
                     </div>
+
                     {/* أزرار الإجراءات */}
                     <div className="grid grid-cols-3 gap-1.5">
                       <Button size="sm" variant="outline" className="h-7 text-xs">
@@ -2290,10 +2325,6 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                         size="sm" 
                         className={`h-7 text-xs ${emp.available ? 'bg-blue-500' : 'bg-gray-400 cursor-not-allowed'}`}
                         disabled={!emp.available}
-                        onClick={() => {
-                          setActiveTab('825-03');
-                          setSelectedEmployeeId(emp.id);
-                        }}
                       >
                         <Send className="h-3 w-3 ml-1" />
                         إسناد
@@ -2307,6 +2338,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 </Card>
               ))}
             </div>
+
             {/* جدول ملخص التكليفات */}
             <Card className="card-element card-rtl">
               <CardHeader className="p-3 pb-2 bg-gradient-to-r from-blue-50 to-purple-50 border-b">
@@ -2319,20 +2351,33 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                 <Table className="table-rtl">
                   <TableHeader>
                     <TableRow className="bg-gray-50">
-                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>الموظف</TableHead>
-                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>القسم</TableHead>
-                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام النشطة</TableHead>
-                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام المكتملة</TableHead>
-                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>معدل الإنجاز</TableHead>
-                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>الأداء</TableHead>
-                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
+                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                        الموظف
+                      </TableHead>
+                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                        القسم
+                      </TableHead>
+                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                        المهام النشطة
+                      </TableHead>
+                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                        المهام المكتملة
+                      </TableHead>
+                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                        معدل الإنجاز
+                      </TableHead>
+                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                        الأداء
+                      </TableHead>
+                      <TableHead className="text-right font-medium" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                        الحالة
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {/* 💡 --- مربوط بالحالة --- */}
-                    {employees.map((emp) => {
-                      const totalTasks = emp.activeTasks + emp.completedTasks;
-                      const completionRate = totalTasks > 0 ? (emp.completedTasks / totalTasks * 100).toFixed(0) : 0;
+                    {EMPLOYEES_DATA.map((emp) => {
+                      const completionRate = (emp.completedTasks / (emp.activeTasks + emp.completedTasks) * 100).toFixed(0);
+                      
                       return (
                         <TableRow key={emp.id} className="hover:bg-gray-50">
                           <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -2389,290 +2434,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
             </Card>
           </div>
         );
-      // 825-10: الإشعارات
-      case '825-10':
-        return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>إدارة الإشعارات</h2>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-8 text-xs">
-                  <RefreshCw className="h-3 w-3 ml-1" />
-                  تحديث
-                </Button>
-                <Button size="sm" className="h-8 text-xs bg-green-500">
-                  <Send className="h-3 w-3 ml-1" />
-                  إرسال جماعي
-                </Button>
-                <Button size="sm" className="h-8 text-xs bg-blue-500">
-                  <Settings className="h-3 w-3 ml-1" />
-                  إعدادات
-                </Button>
-              </div>
-            </div>
-            <Card className="card-element card-rtl">
-              <CardHeader className="p-3 pb-2">
-                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  <Bell className="h-4 w-4 text-blue-600" />
-                  إشعارات المهام
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-96">
-                  <div className="p-3 space-y-2">
-                    {tasks.filter(t => t.notificationsSent && t.notificationsSent > 0).map(task => (
-                      <Card key={task.id} className="card-element card-rtl p-3 border-r-4 border-blue-500">
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                            <Bell className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-medium mb-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>{task.transactionTitle}</h4>
-                            <p className="text-xs text-gray-600 mb-1">{task.notes || `تم إرسال ${task.notificationsSent} إشعارات`}</p>
-                            <div className="flex items-center gap-3 text-xs text-gray-600">
-                              <span className="flex items-center gap-1">
-                                <User className="h-3 w-3" />
-                                {task.assignedTo?.name || 'N/A'}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {task.lastNotification ? new Date(task.lastNotification).toLocaleString() : 'N/A'}
-                              </span>
-                              <Badge className="bg-blue-100 text-blue-700">الحالة: {TASK_STATUSES.find(s => s.value === task.status)?.label}</Badge>
-                            </div>
-                          </div>
-                          <Badge className="bg-gray-100 text-gray-700 font-mono">
-                            {task.notificationsSent} إشعار
-                          </Badge>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-            <Card className="card-element card-rtl">
-              <CardHeader className="p-3 pb-2">
-                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  <Settings className="h-4 w-4 text-purple-600" />
-                  إعدادات الإشعارات
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات المهام المتأخرة</p>
-                      <p className="text-xs text-gray-600">إشعار تلقائي عند تأخير المهمة</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات التقدم</p>
-                      <p className="text-xs text-gray-600">إشعار عند تغيير نسبة التقدم</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات التحويل</p>
-                      <p className="text-xs text-gray-600">إشعار عند تحويل المهمة لموظف آخر</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات التجميد</p>
-                      <p className="text-xs text-gray-600">إشعار عند تجميد المهمة</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
-      // 825-11: سجل التدقيق
-      case '825-11':
-        return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>سجل التدقيق</h2>
-              <div className="flex gap-2">
-                <InputWithCopy
-                  label=""
-                  id="searchAudit"
-                  placeholder="بحث في السجل..."
-                  icon={<Search className="h-4 w-4" />}
-                />
-                <Button size="sm" variant="outline" className="h-8 text-xs">
-                  <Filter className="h-3 w-3 ml-1" />
-                  تصفية
-                </Button>
-                <Button size="sm" className="h-8 text-xs bg-green-500">
-                  <Download className="h-3 w-3 ml-1" />
-                  تصدير
-                </Button>
-              </div>
-            </div>
-            <Card className="card-element card-rtl">
-              <CardHeader className="p-3 pb-2">
-                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  <History className="h-4 w-4 text-purple-600" />
-                  سجل الأنشطة
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-96">
-                  <div className="p-3 space-y-2">
-                    <Card className="card-element card-rtl p-3 border-r-4 border-purple-500">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-                          <User className="h-5 w-5 text-purple-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="text-sm font-medium mb-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>إسناد مهمة جديدة</h4>
-                          <p className="text-xs text-gray-600 mb-1">TSK-2025-001 - رخصة بناء سكني - حي العليا</p>
-                          <div className="flex items-center gap-3 text-xs text-gray-600">
-                            <span className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              أحمد محمد علي
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              2025-10-15 09:00
-                            </span>
-                          </div>
-                        </div>
-                        <Badge className="bg-purple-100 text-purple-700">إسناد</Badge>
-                      </div>
-                    </Card>
-                    <Card className="card-element card-rtl p-3 border-r-4 border-green-500">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="text-sm font-medium mb-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>إكمال المهمة</h4>
-                          <p className="text-xs text-gray-600 mb-1">TSK-2025-005 - رخصة توسعة - حي الروضة</p>
-                          <div className="flex items-center gap-3 text-xs text-gray-600">
-                            <span className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              فهد عبدالعزيز العتيبي
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              2025-10-13 17:30
-                            </span>
-                          </div>
-                        </div>
-                        <Badge className="bg-green-100 text-green-700">إكمال</Badge>
-                      </div>
-                    </Card>
-                    <Card className="card-element card-rtl p-3 border-r-4 border-blue-500">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Share2 className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="text-sm font-medium mb-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>تحويل المهمة</h4>
-                          <p className="text-xs text-gray-600 mb-1">TSK-2025-002 - رخصة بناء تجاري - حي الملقا</p>
-                          <div className="flex items-center gap-3 text-xs text-gray-600">
-                            <span className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              خالد عبدالله السعيد → محمد سعد القحطاني
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              2025-10-16 11:15
-                            </span>
-                          </div>
-                        </div>
-                        <Badge className="bg-blue-100 text-blue-700">تحويل</Badge>
-                      </div>
-                    </Card>
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
-        );
-      // 825-12: الإعدادات
-      case '825-12':
-        return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>إعدادات النظام</h2>
-            </div>
-            <Card className="card-element card-rtl">
-              <CardHeader className="p-3 pb-2">
-                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  <Settings className="h-4 w-4 text-blue-600" />
-                  الإعدادات العامة
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات المهام المتأخرة</p>
-                      <p className="text-xs text-gray-600">إشعار تلقائي عند تأخير المهمة</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات التقدم</p>
-                      <p className="text-xs text-gray-600">إشعار عند تغيير نسبة التقدم</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات التحويل</p>
-                      <p className="text-xs text-gray-600">إشعار عند تحويل المهمة لموظف آخر</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات التجميد</p>
-                      <p className="text-xs text-gray-600">إشعار عند تجميد المهمة</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="card-element card-rtl">
-              <CardHeader className="p-3 pb-2">
-                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  <User className="h-4 w-4 text-green-600" />
-                  الإعدادات الشخصية
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات البريد الإلكتروني</p>
-                      <p className="text-xs text-gray-600">استقبال الإشعارات عبر البريد</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">إشعارات الرسائل النصية</p>
-                      <p className="text-xs text-gray-600">استقبال الإشعارات عبر SMS</p>
-                    </div>
-                    <input type="checkbox" className="w-4 h-4" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
+
       default:
         return (
           <div className="flex items-center justify-center h-64">
@@ -2683,6 +2445,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
         );
     }
   };
+
   return (
     <div className="flex h-screen bg-gray-50" style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
       {/* Sidebar للتابات */}
@@ -2698,11 +2461,13 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
             </div>
           </div>
         </div>
+
         <ScrollArea className="h-[calc(100vh-80px)]">
           <div className="p-2 space-y-0.5">
             {TABS_CONFIG.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
+              
               return (
                 <button
                   key={tab.id}
@@ -2727,13 +2492,14 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
           </div>
         </ScrollArea>
       </div>
+
       {/* محتوى التاب */}
       <div className="flex-1 overflow-auto">
         <div className="p-4">
           {renderTabContent()}
         </div>
       </div>
-      {/* 💡 --- النوافذ المنبثقة مربوطة بالـ API --- */}
+
       {/* نافذة إتمام المهمة */}
       <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
         <DialogContent className="max-w-2xl" style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
@@ -2746,6 +2512,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               إتمام المهمة بشكل إشرافي مع توثيق السبب
             </DialogDescription>
           </DialogHeader>
+
           {selectedTask && (
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -2757,16 +2524,18 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-gray-600">الموظف: </span>
-                    <span className="font-medium">{selectedTask.assignedTo?.name || 'N/A'}</span>
+                    <span className="font-medium">{selectedTask.assignedTo}</span>
                   </div>
                 </div>
               </div>
+
               <TextAreaWithCopy
                 label="سبب الإتمام الإشرافي *"
                 id="completeReason"
                 placeholder="اكتب سبب إتمام المهمة من قبل المشرف..."
                 rows={3}
               />
+
               <div className="grid grid-cols-2 gap-3">
                 <SelectWithCopy
                   label="حالة الإتمام"
@@ -2777,13 +2546,14 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                     { value: 'completed-with-notes', label: 'مكتملة مع ملاحظات' },
                   ]}
                 />
+
                 <InputWithCopy
                   label="نسبة الإنجاز"
                   id="completionPercentage"
                   placeholder="100"
-                  defaultValue="100"
                 />
               </div>
+
               <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
                 <input type="checkbox" className="w-4 h-4" defaultChecked />
                 <div className="flex-1">
@@ -2793,18 +2563,20 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               </div>
             </div>
           )}
+
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={() => setShowCompleteDialog(false)}>
               <X className="h-4 w-4 ml-1" />
               إلغاء
             </Button>
-            <Button className="bg-green-500 hover:bg-green-600" onClick={handleCompleteTask}>
+            <Button className="bg-green-500 hover:bg-green-600">
               <CheckCircle className="h-4 w-4 ml-1" />
               إتمام المهمة
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       {/* نافذة إلغاء المهمة */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent className="max-w-2xl" style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
@@ -2817,6 +2589,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               إلغاء المهمة بشكل نهائي مع توثيق السبب
             </DialogDescription>
           </DialogHeader>
+
           {selectedTask && (
             <div className="space-y-4">
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -2832,10 +2605,11 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-gray-600">الموظف: </span>
-                    <span className="font-medium">{selectedTask.assignedTo?.name || 'N/A'}</span>
+                    <span className="font-medium">{selectedTask.assignedTo}</span>
                   </div>
                 </div>
               </div>
+
               <SelectWithCopy
                 label="سبب الإلغاء *"
                 id="cancelReason"
@@ -2848,12 +2622,14 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   { value: 'other', label: 'سبب آخر' },
                 ]}
               />
+
               <TextAreaWithCopy
                 label="تفاصيل الإلغاء *"
                 id="cancelDetails"
                 placeholder="اكتب تفاصيل سبب الإلغاء..."
                 rows={3}
               />
+
               <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <input type="checkbox" className="w-4 h-4" defaultChecked />
                 <div className="flex-1">
@@ -2863,18 +2639,20 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               </div>
             </div>
           )}
+
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
               <X className="h-4 w-4 ml-1" />
               رجوع
             </Button>
-            <Button className="bg-red-500 hover:bg-red-600" onClick={handleCancelTask}>
+            <Button className="bg-red-500 hover:bg-red-600">
               <Ban className="h-4 w-4 ml-1" />
               تأكيد الإلغاء
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       {/* نافذة تحويل المهمة */}
       <Dialog open={showTransferDialog} onOpenChange={setShowTransferDialog}>
         <DialogContent className="max-w-3xl" style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
@@ -2887,6 +2665,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               تحويل المهمة لموظف آخر لاستكمالها
             </DialogDescription>
           </DialogHeader>
+
           {selectedTask && (
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -2898,7 +2677,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-gray-600">الموظف الحالي: </span>
-                    <span className="font-medium">{selectedTask.assignedTo?.name || 'N/A'}</span>
+                    <span className="font-medium">{selectedTask.assignedTo}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">التقدم الحالي: </span>
@@ -2906,41 +2685,45 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <SelectWithCopy
                   label="اختر الموظف الجديد *"
                   id="newEmployee"
                   options={[
                     { value: '', label: 'اختر الموظف' },
-                    // 💡 --- مربوط بالحالة ---
-                    ...employees.filter(e => e.available && e.id !== selectedTask.assignedTo?.id).map(emp => ({
+                    ...EMPLOYEES_DATA.filter(e => e.available).map(emp => ({
                       value: emp.id,
                       label: `${emp.name} - ${emp.department} (${emp.activeTasks} مهام)`
                     }))
                   ]}
                 />
+
                 <SelectWithCopy
                   label="نوع التحويل"
                   id="transferType"
                   options={[
                     { value: 'full', label: 'تحويل كامل' },
-                    { value: 'continuation', label: 'استكمال (الاحتفاظ بال(progress)' },
-                    { value: 'restart', label: 'بداية جديدة (إعادة الت(progress)' },
+                    { value: 'continuation', label: 'استكمال (الاحتفاظ بالتقدم)' },
+                    { value: 'restart', label: 'بداية جديدة (إعادة التقدم)' },
                   ]}
                 />
               </div>
+
               <TextAreaWithCopy
                 label="سبب التحويل *"
                 id="transferReason"
                 placeholder="اكتب سبب تحويل المهمة..."
                 rows={2}
               />
+
               <TextAreaWithCopy
                 label="ملاحظات للموظف الجديد"
                 id="transferNotes"
                 placeholder="أي ملاحظات أو تعليمات للموظف الجديد..."
                 rows={2}
               />
+
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
                   <input type="checkbox" className="w-4 h-4" defaultChecked />
@@ -2959,18 +2742,20 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               </div>
             </div>
           )}
+
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={() => setShowTransferDialog(false)}>
               <X className="h-4 w-4 ml-1" />
               إلغاء
             </Button>
-            <Button className="bg-blue-500 hover:bg-blue-600" onClick={handleTransferTask}>
+            <Button className="bg-blue-500 hover:bg-blue-600">
               <Share2 className="h-4 w-4 ml-1" />
               تحويل المهمة
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       {/* نافذة تجميد المهمة */}
       <Dialog open={showFreezeDialog} onOpenChange={setShowFreezeDialog}>
         <DialogContent className="max-w-2xl" style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
@@ -2983,6 +2768,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               تجميد المهمة لفترة محددة أو غير محددة
             </DialogDescription>
           </DialogHeader>
+
           {selectedTask && (
             <div className="space-y-4">
               <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
@@ -2994,7 +2780,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-gray-600">الموظف: </span>
-                    <span className="font-medium">{selectedTask.assignedTo?.name || 'N/A'}</span>
+                    <span className="font-medium">{selectedTask.assignedTo}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">التقدم: </span>
@@ -3002,6 +2788,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </div>
                 </div>
               </div>
+
               <div>
                 <label className="text-sm font-medium mb-3 block">نوع التجميد</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -3016,6 +2803,7 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                       </div>
                     </CardContent>
                   </Card>
+
                   <Card className="cursor-pointer hover:shadow-md transition-shadow border-2 border-transparent hover:border-purple-500">
                     <CardContent className="p-3">
                       <div className="flex items-center gap-3">
@@ -3029,17 +2817,19 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   </Card>
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-3" id="freezePeriodSection">
                 <DateInputWithToday
                   label="تاريخ التجميد"
                   id="freezeStartDate"
-                  defaultValue={new Date().toISOString().split('T')[0]} // تاريخ اليوم
                 />
+
                 <DateInputWithToday
                   label="تاريخ إلغاء التجميد (للمؤقت)"
                   id="freezeEndDate"
                 />
               </div>
+
               <SelectWithCopy
                 label="سبب التجميد *"
                 id="freezeReasonSelect"
@@ -3053,12 +2843,14 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
                   { value: 'other', label: 'سبب آخر' },
                 ]}
               />
+
               <TextAreaWithCopy
                 label="تفاصيل التجميد *"
                 id="freezeDetails"
                 placeholder="اكتب تفاصيل سبب التجميد..."
                 rows={3}
               />
+
               <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-lg border border-orange-200">
                 <input type="checkbox" className="w-4 h-4" defaultChecked />
                 <div className="flex-1">
@@ -3068,12 +2860,13 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
               </div>
             </div>
           )}
+
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={() => setShowFreezeDialog(false)}>
               <X className="h-4 w-4 ml-1" />
               إلغاء
             </Button>
-            <Button className="bg-cyan-500 hover:bg-cyan-600" onClick={handleFreezeTask}>
+            <Button className="bg-cyan-500 hover:bg-cyan-600">
               <Snowflake className="h-4 w-4 ml-1" />
               تجميد المهمة
             </Button>
@@ -3083,4 +2876,5 @@ const TransactionTasksAssignment_Complete_825: React.FC = () => {
     </div>
   );
 };
+
 export default TransactionTasksAssignment_Complete_825;
