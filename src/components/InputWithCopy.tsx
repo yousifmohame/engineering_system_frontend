@@ -283,6 +283,9 @@ export const TextAreaWithCopy = React.forwardRef<
 TextAreaWithCopy.displayName = 'TextAreaWithCopy';
 
 
+// تعديل توقيع onChange ليدعم SyntheticEvent المزيف
+type SelectWithCopyChangeHandler = (event: React.ChangeEvent<HTMLSelectElement> | { target: { id: string; value: string } }) => void;
+
 interface SelectWithCopyProps {
   label?: string;
   copyable?: boolean;
@@ -291,7 +294,7 @@ interface SelectWithCopyProps {
   id?: string;
   value?: string;
   defaultValue?: string;
-  onChange?: (value: string) => void;
+  onChange?: SelectWithCopyChangeHandler;
   onClear?: () => void;
   required?: boolean;
   className?: string;
@@ -331,7 +334,7 @@ export const SelectWithCopy = React.forwardRef<
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       if (isControlled) {
         if (onChange) {
-          onChange(e.target.value);
+          onChange(e); // تمرير الحدث الكامل
         }
       } else {
         setLocalValue(e.target.value);
@@ -356,7 +359,8 @@ export const SelectWithCopy = React.forwardRef<
     const handleClear = () => {
       if (isControlled) {
         if (onChange) {
-          onChange('');
+          // 💡 تمرير SyntheticEvent مزيف مع id و value
+          onChange({ target: { id: id || '', value: '' } } as any);
         }
         if (onClear) {
           onClear();
@@ -407,9 +411,9 @@ export const SelectWithCopy = React.forwardRef<
             }}
           >
             {children ||
-              options?.map((option) => (
+              options?.map((option, index) => (
                 <option
-                  key={option.value}
+                  key={`${option.value}-${index}`} // Fixed: Use unique key
                   value={option.value}
                   style={{
                     fontSize: '13px',

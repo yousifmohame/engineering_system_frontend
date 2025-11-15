@@ -58,7 +58,6 @@ const TechnicalReports_Complete_950_v3 = lazy(() => import('./screens/TechnicalR
 
 // 800-899: العقود والمشاريع
 const OwnershipNumbers_Complete_800_v2 = lazy(() => import('./screens/OwnershipNumbers_Complete_800_v2'));
-const OwnershipDocuments_Complete_800 = lazy(() => import('./screens/OwnershipDocuments_Complete_800'));
 const ContractsManagement_Complete_814_v10 = lazy(() => import('./screens/ContractsManagement_Complete_814_v10_ALL_TABS_FINAL'));
 const QuotationsManagement_Complete_815_v10 = lazy(() => import('./screens/QuotationsManagement_Complete_815_v10'));
 const SalariesFees_Complete_816 = lazy(() => import('./screens/SalariesFees_Complete_816'));

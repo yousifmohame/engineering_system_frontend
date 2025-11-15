@@ -158,32 +158,43 @@ const FilesDocumentsManagement_Complete_900: React.FC = () => {
     <div className="space-y-6">
       {/* البطاقات الإحصائية */}
       <div className="grid grid-cols-6 gap-3">
-        {stats.map((stat, index) => (
-          <Card
-            key={index}
-            className="card-element card-rtl overflow-hidden"
-            style={{
-              background: `linear-gradient(135deg, var(--bg-from), var(--bg-to))`,
-              '--bg-from': stat.gradient.split(' ')[0].replace('from-', '#'),
-              '--bg-to': stat.gradient.split(' ')[2].replace('to-', '#'),
-              border: `2px solid ${stat.borderColor}`
-            } as React.CSSProperties}
-          >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-xs mb-1" style={{ fontFamily: 'Tajawal, sans-serif', color: '#6b7280' }}>
-                    {stat.label}
-                  </p>
-                  <p className="text-xl" style={{ fontFamily: 'Tajawal, sans-serif', color: '#1f2937', fontWeight: 700 }}>
-                    {stat.value}
-                  </p>
+        {stats.map((stat, index) => {
+          // التحقق من وجود gradient وتحليل الألوان
+          let bgFrom = '#f0f0f0'; // لون افتراضي
+          let bgTo = '#e0e0e0';   // لون افتراضي
+          if (stat.gradient && typeof stat.gradient === 'string') {
+            const parts = stat.gradient.split(' ');
+            if (parts.length >= 3) {
+              bgFrom = parts[0].replace('from-', '#');
+              bgTo = parts[2].replace('to-', '#');
+            }
+          }
+
+          return (
+            <Card
+              key={index}
+              className="card-element card-rtl overflow-hidden"
+              style={{
+                background: `linear-gradient(135deg, ${bgFrom}, ${bgTo})`,
+                border: `2px solid ${stat.borderColor || '#ccc'}`
+              } as React.CSSProperties}
+            >
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs mb-1" style={{ fontFamily: 'Tajawal, sans-serif', color: '#6b7280' }}>
+                      {stat.label}
+                    </p>
+                    <p className="text-xl" style={{ fontFamily: 'Tajawal, sans-serif', color: '#1f2937', fontWeight: 700 }}>
+                      {stat.value}
+                    </p>
+                  </div>
+                  <stat.icon className="h-8 w-8 opacity-70" style={{ color: stat.color }} />
                 </div>
-                <stat.icon className="h-8 w-8 opacity-70" style={{ color: stat.color }} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* أزرار البحث */}
