@@ -42,6 +42,7 @@ import {
 import { InputWithCopy, TextAreaWithCopy, SelectWithCopy } from '../InputWithCopy';
 import { EnhancedSwitch } from '../EnhancedSwitch';
 import { toast } from 'sonner@2.0.3';
+import Tab_701_01_TransactionTypes from './tabs/Tab_701_01_TransactionTypes';
 
 // ============================================================
 // واجهات البيانات الشاملة
@@ -2098,6 +2099,9 @@ const TransactionsSettings_Complete_701_v14: React.FC = () => {
   // ===== رندر محتوى التاب =====
   const renderTabContent = () => {
     switch (activeTab) {
+      case '701-01':
+        // --- (مهم) استدعاء التبويب الحقيقي ---
+        return <Tab_701_01_TransactionTypes />;
       case '701-17':
         return renderTab17_ProgressCalculator();
       case '701-18':

@@ -65,7 +65,7 @@ import { InputWithCopy, TextAreaWithCopy, SelectWithCopy } from '../InputWithCop
 import { EnhancedSwitch } from '../EnhancedSwitch';
 import UnifiedTabsSidebar, { TabConfig } from '../UnifiedTabsSidebar';
 import Tab_701_23_GroupClassifications from './Tab_701_23_GroupClassifications';
-
+import Tab_701_01_TransactionTypes from './tabs/Tab_701_01_TransactionTypes'; 
 // ============================================================
 // واجهات البيانات
 // ============================================================
@@ -1159,7 +1159,7 @@ export default function TransactionsSettings_Complete_701_v12() {
   const renderTabContent = () => {
     switch (activeTab) {
       case '701-01':
-        return render701_01_BasicSettings();
+        return <Tab_701_01_TransactionTypes />;
       case '701-02':
         return render701_02_NumberingSettings();
       case '701-03':

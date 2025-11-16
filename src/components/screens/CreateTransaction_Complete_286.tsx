@@ -1,39 +1,46 @@
 /**
- * الشاشة 286 - إنشاء معاملة جديدة - v8.0
+ * الشاشة 286 - إنشاء معاملة جديدة - v9.0 (متصل بالخلفية)
  * ===========================================
- * 
- * تحديث v8.0:
- * ✅ UnifiedTabsSidebar v1.1
- * ✅ هيدر احترافي v4.2.2
- * ✅ InputWithCopy & EnhancedSwitch
- * ✅ 12 تبويباً شاملاً
+ * * تحديث v9.0:
+ * ✅ إزالة البيانات التجريبية (transactionData) بالكامل.
+ * ✅ ربط بـ React Hook Form و Zod لإدارة التبويب الأول.
+ * ✅ تطبيق منطق "المعاملة أولاً" عبر useMutation لإنشاء مسودة.
+ * ✅ إدارة حالة transactionId ('new' أو ID حقيقي).
+ * ✅ تمرير الـ ID للتبويبات الفرعية وتفعيلها عند الإنشاء.
+ * ✅ تعطيل التبويبات الجانبية قبل إنشاء المعاملة.
  */
 
-import React, { useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { Progress } from '../ui/progress';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+// import { toast } from 'sonner';
+
+// --- (1. استيراد دوال الـ API والأنواع الصحيحة) ---
+import { createTransaction } from '../../api/transactionApi';
+import { Transaction, NewTransactionData } from '../../types/transactionTypes';
+
+// --- (2. إزالة imports واجهات المستخدم غير المستخدمة هنا) ---
 import {
-  FileText, Plus, Edit, Save, CheckCircle, Users, Calendar,
-  Upload, Paperclip, Clock, Target, AlertCircle, Settings,
-  Eye, Download, RefreshCw, User, Building, Activity, Trash2, List,
+  FileText, Plus, CheckCircle, Users, Calendar,
+  Paperclip, Target, AlertCircle, Settings,
+  Eye, User, Building, Activity, List,
   Layers, Navigation, Compass, Grid, MapPin
 } from 'lucide-react';
 import CodeDisplay from '../CodeDisplay';
 import UnifiedTabsSidebar, { TabConfig } from '../UnifiedTabsSidebar';
-import { InputWithCopy, SelectWithCopy, TextAreaWithCopy } from '../InputWithCopy';
-import { EnhancedSwitch } from '../EnhancedSwitch';
+
+// --- (3. استيراد جميع التبويبات الفرعية) ---
 import Tab_286_01_BasicInfo_UltraDense from './Tab_286_01_BasicInfo_UltraDense';
 import Tab_286_02_TransactionDetails_Complete from './Tab_286_02_TransactionDetails_Complete';
-import Tab_286_AllTabs_UltraDense, {
+import {
   Tab_286_05_Tasks_UltraDense,
   Tab_286_06_StaffAssignment_UltraDense,
   Tab_286_08_Attachments_UltraDense,
   Tab_286_10_Costs_UltraDense
 } from './Tab_286_AllTabs_UltraDense';
-import Tab_286_RestTabs, {
+import {
   Tab_286_07_ClientInfo,
   Tab_286_09_Appointments,
   Tab_286_11_Approvals,
@@ -50,6 +57,19 @@ import Tab_Components_Generic_Complete from './Tab_Components_Generic_Complete';
 import Tab_Boundaries_Neighbors_Complete from './Tab_Boundaries_Neighbors_Complete';
 import Tab_LandArea_Complete from './Tab_LandArea_Complete';
 
+// --- (4. تعريف المخطط والأنواع للفورم الأساسي) ---
+const basicInfoSchema = z.object({
+  title: z.string().min(1, "العنوان مطلوب"),
+  clientId: z.string().min(1, "يجب اختيار العميل"),
+  type: z.string().optional(), // سيحمل transactionTypeId
+  priority: z.string().default('medium'),
+  description: z.string().optional(),
+});
+
+// استخدام النوع الذي عرفناه في transactionTypes.ts
+type BasicInfoFormData = NewTransactionData;
+
+// (TABS_CONFIG تبقى كما هي)
 const TABS_CONFIG: TabConfig[] = [
   { id: '286-01', number: '286-01', title: 'معلومات أساسية', icon: FileText },
   { id: '286-02', number: '286-02', title: 'تفاصيل المعاملة', icon: Target },
@@ -77,357 +97,129 @@ const TABS_CONFIG: TabConfig[] = [
 
 const CreateTransaction_Complete_286: React.FC = () => {
   const [activeTab, setActiveTab] = useState('286-01');
-  const [autoAssign, setAutoAssign] = useState(true);
-  const [sendNotifications, setSendNotifications] = useState(true);
+  
+  // --- (5. إزالة State غير المستخدم) ---
+  // const [autoAssign, setAutoAssign] = useState(true);
+  // const [sendNotifications, setSendNotifications] = useState(true);
 
-  const transactionData = useMemo(() => ({
-    types: [
-      { id: '1', name: 'ترخيص بناء', tasks: 8, duration: '25 يوماً' },
-      { id: '2', name: 'إفراز', tasks: 7, duration: '30 يوماً' },
-      { id: '3', name: 'تعديل صك', tasks: 5, duration: '15 يوماً' },
-      { id: '4', name: 'استشارة هندسية', tasks: 4, duration: '10 أيام' },
-    ],
-    tasks: [
-      { id: '1', name: 'استقبال الطلب', duration: 1, assigned: 'أحمد محمد', status: 'pending' },
-      { id: '2', name: 'مراجعة المستندات', duration: 2, assigned: 'فاطمة سعيد', status: 'pending' },
-      { id: '3', name: 'فحص الموقع', duration: 3, assigned: 'خالد عبدالله', status: 'pending' },
-      { id: '4', name: 'إعداد المخططات', duration: 5, assigned: 'نورة حسن', status: 'pending' },
-    ],
-    attachments: [
-      { id: '1', name: 'صك الملكية.pdf', size: '2.3 MB', type: 'PDF', date: '2025-10-20' },
-      { id: '2', name: 'خريطة الموقع.jpg', size: '1.8 MB', type: 'صورة', date: '2025-10-21' },
-      { id: '3', name: 'الهوية الوطنية.pdf', size: '850 KB', type: 'PDF', date: '2025-10-22' },
-    ],
-  }), []);
+  const [transactionId, setTransactionId] = useState<'new' | string>('new');
+  const queryClient = useQueryClient();
 
-  const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, { label: string; color: string }> = {
-      pending: { label: 'قيد الانتظار', color: 'bg-yellow-500' },
-      'in-progress': { label: 'قيد التنفيذ', color: 'bg-blue-500' },
-      completed: { label: 'مكتمل', color: 'bg-green-500' },
-      cancelled: { label: 'ملغي', color: 'bg-red-500' },
-    };
-    const s = statusMap[status] || { label: status, color: 'bg-gray-500' };
-    return <Badge className={`text-xs px-1.5 py-0 h-5 ${s.color} text-white`}>{s.label}</Badge>;
+  const form = useForm<BasicInfoFormData>({
+    resolver: zodResolver(basicInfoSchema),
+    defaultValues: {
+      title: "",
+      clientId: "",
+      type: "",
+      priority: "medium",
+      description: "",
+    },
+  });
+
+  // --- (6. تحديث Mutation لاستخدام الدالة الصحيحة) ---
+  const createTransactionMutation = useMutation({
+    mutationFn: (data: BasicInfoFormData) => createTransaction(data),
+    onSuccess: (createdTransaction: Transaction) => {
+      setTransactionId(createdTransaction.id);
+      // toast.success('تم إنشاء المعاملة (مسودة) بنجاح!');
+      // --- 3. (مُعدل) الانتقال إلى التبويب 2 لاختيار النوع ---
+      setActiveTab('286-02'); 
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+    onError: (error: Error) => {
+      // toast.error(`فشل إنشاء المعاملة: ${error.message}`);
+      console.error("Mutation Error:", error);
+    },
+  });
+
+  const onSubmitBasicInfo = (data: BasicInfoFormData) => {
+    console.log('بيانات الفورم الأساسي:', data);
+    createTransactionMutation.mutate(data);
   };
 
+  // --- (7. إزالة دالة getStatusBadge غير المستخدمة) ---
+
+  // --- (8. تنظيف renderTabContent بالكامل) ---
   const renderTabContent = () => {
+    const isDisabled = transactionId === 'new';
+
     switch (activeTab) {
       case '286-01':
         return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>معلومات أساسية</h2>
-              <Button size="sm" className="h-8 text-xs bg-blue-500"><Save className="h-3 w-3 ml-1" />حفظ</Button>
-            </div>
-
-            <Card className="card-element card-rtl">
-              <CardContent className="p-3 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="form-rtl">
-                    <InputWithCopy
-                      id="transaction-number"
-                      label="رقم المعاملة"
-                      value="TR-2025-001234"
-                      onChange={() => {}}
-                      copyable={true}
-                      clearable={false}
-                      disabled
-                    />
-                  </div>
-
-                  <div className="form-rtl">
-                    <SelectWithCopy
-                      id="transaction-type"
-                      label="نوع المعاملة"
-                      value=""
-                      onChange={() => {}}
-                      options={transactionData.types.map(t => ({ value: t.id, label: t.name }))}
-                      copyable={false}
-                      clearable={true}
-                    />
-                  </div>
-
-                  <div className="form-rtl">
-                    <InputWithCopy
-                      id="transaction-title"
-                      label="عنوان المعاملة"
-                      value=""
-                      onChange={() => {}}
-                      placeholder="أدخل عنوان المعاملة"
-                      copyable={true}
-                      clearable={true}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-rtl">
-                    <SelectWithCopy
-                      id="priority"
-                      label="الأولوية"
-                      value="medium"
-                      onChange={() => {}}
-                      options={[
-                        { value: 'low', label: 'منخفضة' },
-                        { value: 'medium', label: 'متوسطة' },
-                        { value: 'high', label: 'عالية' },
-                        { value: 'urgent', label: 'عاجلة' }
-                      ]}
-                      copyable={false}
-                      clearable={false}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-rtl">
-                  <TextAreaWithCopy
-                    id="description"
-                    label="الوصف"
-                    value=""
-                    onChange={() => {}}
-                    placeholder="وصف تفصيلي للمعاملة"
-                    rows={3}
-                    copyable={true}
-                    clearable={true}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <Tab_286_01_BasicInfo_UltraDense
+            form={form} 
+            isSaving={createTransactionMutation.isPending}
+          />
         );
-
+      
       case '286-02':
         return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>تفاصيل المعاملة</h2>
-            </div>
-
-            <div className="grid grid-cols-4 gap-2">
-              {transactionData.types.map((type) => (
-                <Card key={type.id} className="card-element card-rtl">
-                  <CardContent className="p-3">
-                    <div className="flex items-start justify-between mb-2">
-                      <FileText className="h-5 w-5 text-blue-600" />
-                      <Badge variant="outline" className="text-xs px-1.5 py-0">{type.tasks} مهام</Badge>
-                    </div>
-                    <h3 className="text-sm mb-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>{type.name}</h3>
-                    <p className="text-xs text-gray-600 mb-2">المدة المتوقعة: {type.duration}</p>
-                    <Button size="sm" variant="outline" className="w-full h-7 text-xs">اختيار</Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
+          <Tab_286_02_TransactionDetails_Complete
+            transactionId={transactionId}
+            // (تمرير دالة للانتقال للتبويب التالي عند الاختيار)
+            onTypeSelected={() => setActiveTab('286-03')}
+          />
         );
-
+      
       case '286-03':
-        return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهمات</h2>
-              <Button size="sm" className="h-8 text-xs bg-blue-500"><Plus className="h-3 w-3 ml-1" />مهمة جديدة</Button>
-            </div>
-
-            <Card className="card-element card-rtl">
-              <CardContent className="p-2">
-                <Table className="table-rtl dense-table">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهمة</TableHead>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المدة</TableHead>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المسؤول</TableHead>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجراءات</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactionData.tasks.map((task) => (
-                      <TableRow key={task.id} className="hover:bg-blue-50 transition-colors">
-                        <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{task.name}</TableCell>
-                        <TableCell className="text-right py-2 text-xs">{task.duration} يوم</TableCell>
-                        <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{task.assigned}</TableCell>
-                        <TableCell className="text-right py-2">{getStatusBadge(task.status)}</TableCell>
-                        <TableCell className="text-right py-2">
-                          <div className="flex gap-1 justify-end">
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><Edit className="h-3 w-3" /></Button>
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-        );
-
-      case '286-06':
-        return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>المرفقات</h2>
-              <Button size="sm" className="h-8 text-xs bg-blue-500"><Upload className="h-3 w-3 ml-1" />رفع ملف</Button>
-            </div>
-
-            <Card className="card-element card-rtl">
-              <CardContent className="p-2">
-                <Table className="table-rtl dense-table">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>اسم الملف</TableHead>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>النوع</TableHead>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحجم</TableHead>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التاريخ</TableHead>
-                      <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجراءات</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactionData.attachments.map((att) => (
-                      <TableRow key={att.id} className="hover:bg-blue-50 transition-colors">
-                        <TableCell className="text-right py-2 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>{att.name}</TableCell>
-                        <TableCell className="text-right py-2 text-xs">{att.type}</TableCell>
-                        <TableCell className="text-right py-2 text-xs">{att.size}</TableCell>
-                        <TableCell className="text-right py-2 text-xs">{att.date}</TableCell>
-                        <TableCell className="text-right py-2">
-                          <div className="flex gap-1 justify-end">
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><Eye className="h-3 w-3" /></Button>
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><Download className="h-3 w-3" /></Button>
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-        );
-
-      case '286-12':
-        return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg" style={{ fontFamily: 'Tajawal, sans-serif' }}>إعدادات المعاملة</h2>
-              <Button size="sm" className="h-8 text-xs bg-blue-500">حفظ التغييرات</Button>
-            </div>
-
-            <Card className="card-element card-rtl">
-              <CardHeader className="p-2 pb-1">
-                <CardTitle className="text-sm flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  <Settings className="h-4 w-4" />
-                  الإعدادات العامة
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-2 pt-0 space-y-2">
-                <EnhancedSwitch
-                  id="auto-assign"
-                  label="الإسناد التلقائي"
-                  description="إسناد المهمات تلقائياً للموظفين المتاحين"
-                  checked={autoAssign}
-                  onCheckedChange={setAutoAssign}
-                  size="sm"
-                  variant="default"
-                />
-
-                <EnhancedSwitch
-                  id="notifications"
-                  label="إرسال التنبيهات"
-                  description="إرسال إشعارات للموظفين عند إسناد المهمات"
-                  checked={sendNotifications}
-                  onCheckedChange={setSendNotifications}
-                  size="sm"
-                  variant="success"
-                />
-
-                <div className="form-rtl">
-                  <SelectWithCopy
-                    id="approval-level"
-                    label="مستوى الموافقة المطلوب"
-                    value="manager"
-                    onChange={() => {}}
-                    options={[
-                      { value: 'none', label: 'لا يوجد' },
-                      { value: 'supervisor', label: 'مشرف' },
-                      { value: 'manager', label: 'مدير' },
-                      { value: 'director', label: 'مدير عام' }
-                    ]}
-                    copyable={false}
-                    clearable={false}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
-
-      case '286-01':
-        return <Tab_286_01_BasicInfo_UltraDense />;
-
-      case '286-02':
-        return <Tab_286_02_TransactionDetails_Complete />;
-
-      case '286-03':
-        return <Tab_RequestPurpose_Brief_Complete transactionId="NEW" readOnly={false} />;
-
+        return <Tab_RequestPurpose_Brief_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      
       case '286-04':
-        return <Tab_RequestPurpose_Detailed_Complete transactionId="NEW" readOnly={false} />;
-
+        return <Tab_RequestPurpose_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      
       case '286-05':
-        return <Tab_286_05_Tasks_UltraDense />;
-
+        return <Tab_286_05_Tasks_UltraDense transactionId={transactionId} />;
+      
       case '286-06':
-        return <Tab_286_06_StaffAssignment_UltraDense />;
-
+        return <Tab_286_06_StaffAssignment_UltraDense transactionId={transactionId} />;
+      
       case '286-07':
-        return <Tab_286_07_ClientInfo />;
-
+        return <Tab_286_07_ClientInfo transactionId={transactionId} />;
+      
       case '286-08':
-        return <Tab_286_08_Attachments_UltraDense />;
-
+        return <Tab_286_08_Attachments_UltraDense transactionId={transactionId} />;
+      
       case '286-09':
-        return <Tab_286_09_Appointments />;
-
+        return <Tab_286_09_Appointments transactionId={transactionId} />;
+      
       case '286-10':
-        return <Tab_286_10_Costs_UltraDense />;
-
+        return <Tab_286_10_Costs_UltraDense transactionId={transactionId} />;
+      
       case '286-11':
-        return <Tab_286_11_Approvals />;
-
+        return <Tab_286_11_Approvals transactionId={transactionId} />;
+      
       case '286-12':
-        return <Tab_286_12_Notes />;
-
+        return <Tab_286_12_Notes transactionId={transactionId} />;
+      
       case '286-13':
-        return <Tab_286_13_Preview />;
-
+        return <Tab_286_13_Preview transactionId={transactionId} />;
+      
       case '286-14':
-        return <Tab_286_14_Settings />;
-
+        return <Tab_286_14_Settings transactionId={transactionId} />;
+      
       case '286-15':
-        return <Tab_FloorsNaming_Complete transactionId="NEW" readOnly={false} />;
-
+        return <Tab_FloorsNaming_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      
       case '286-16':
-        return <Tab_Setbacks_AllFloors_Complete transactionId="NEW" readOnly={false} />;
-
+        return <Tab_Setbacks_AllFloors_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      
       case '286-17':
-        return <Tab_FinalComponents_Detailed_Complete transactionId="NEW" readOnly={false} />;
-
+        return <Tab_FinalComponents_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      
       case '286-18':
-        return <Tab_Components_Generic_Complete transactionId="NEW" readOnly={false} type="old-license" />;
-
+        return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="old-license" />;
+      
       case '286-19':
-        return <Tab_Components_Generic_Complete transactionId="NEW" readOnly={false} type="proposed" />;
-
+        return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="proposed" />;
+      
       case '286-20':
-        return <Tab_Components_Generic_Complete transactionId="NEW" readOnly={false} type="existing" />;
-
+        return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="existing" />;
+      
       case '286-21':
-        return <Tab_Boundaries_Neighbors_Complete transactionId="NEW" readOnly={false} />;
-
+        return <Tab_Boundaries_Neighbors_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      
       case '286-22':
-        return <Tab_LandArea_Complete transactionId="NEW" readOnly={false} />;
+        return <Tab_LandArea_Complete transactionId={transactionId} readOnly={isDisabled} />;
 
       default:
         return (
@@ -448,7 +240,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
     <div className="w-full h-full" dir="rtl">
       <CodeDisplay code="SCR-286" position="top-right" />
       
-      {/* هيدر الشاشة v4.2.2 */}
+      {/* هيدر الشاشة v4.2.2 (يبقى كما هو) */}
       <div
         style={{
           position: 'sticky',
@@ -583,10 +375,20 @@ const CreateTransaction_Complete_286: React.FC = () => {
           tabs={TABS_CONFIG}
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          // --- (10. إضافة منطق تعطيل التبويبات) ---
+          disabledTabs={TABS_CONFIG
+            .map(t => t.id)
+            .filter(id => id !== '286-01' && transactionId === 'new')}
         />
         
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 220px)', paddingLeft: '16px', paddingRight: '16px' }}>
-          {renderTabContent()}
+          {/* هذا الفورم يغلف جميع التبويبات.
+            عندما يتم الضغط على الزر "submit" داخل (Tab_286_01)، 
+            سيتم تفعيل دالة onSubmitBasicInfo
+          */}
+          <form onSubmit={form.handleSubmit(onSubmitBasicInfo)}>
+            {renderTabContent()}
+          </form>
         </div>
       </div>
     </div>

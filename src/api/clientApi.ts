@@ -8,6 +8,12 @@ import {
   ClientPayload // استيراد الأنواع من الملف المركزي
 } from '../types/clientTypes'; // نفترض أنك قمت بنقل الواجهات إلى src/types/clientTypes.ts
 
+
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
 /**
  * ============================================================================
  * 1. جلب جميع العملاء
@@ -132,6 +138,17 @@ export const updateClient = async (clientId: string, clientData: any): Promise<C
   } catch (error: any) {
     console.error('Error updating client:', error);
     throw new Error(error.response?.data?.message || 'فشل في تحديث العميل');
+  }
+};
+
+export const getSimpleClients = async (): Promise<SelectOption[]> => {
+  try {
+    // هذا هو المسار الجديد الذي أضفناه في الـ backend
+    const { data } = await api.get('/clients/simple');
+    return data; // (الـ backend يعيدها جاهزة كـ [{ value: '..', label: '..' }])
+  } catch (error: any) {
+    console.error('Error fetching simple clients list:', error);
+    throw new Error(error.response?.data?.message || 'فشل في جلب قائمة العملاء');
   }
 };
 
