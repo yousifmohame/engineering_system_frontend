@@ -112,6 +112,16 @@ export const fetchEmployees = async (): Promise<Employee[]> => {
   }
 };
 
+export const getEmployees = async (): Promise<Employee[]> => {
+  try {
+    const { data } = await api.get('/employees');
+    return data;
+  } catch (error) {
+    console.error('Error fetching employees:', error);
+    return []; // إرجاع مصفوفة فارغة عند الفشل
+  }
+};
+
 /**
  * (تاب 2) إنشاء موظف جديد
  */

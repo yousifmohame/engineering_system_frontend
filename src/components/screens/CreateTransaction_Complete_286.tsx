@@ -1,23 +1,37 @@
 /**
- * Screen 286 - Create New Transaction - v9.1 (Fixed Navigation)
+ * Screen 286 - Create New Transaction - v10.0 (Dynamic Tasks)
  * ===========================================
- * * Update v9.1:
- * ✅ Added "handlePurposeSave" function to navigate to the next tab.
- * ✅ Passed "onSave" to tab "286-03".
+ * * Update v10.0:
+ * ✅ Re-architected to be a stateful container.
+ * ✅ Fetches employees using useQuery.
+ * ✅ Stores the selected 'TransactionType' from tab 2.
+ * ✅ Stores tasks from tab 5 in its own state.
+ * ✅ Correctly wires 'templateTasks', 'employees', and 'onChange' to Tab_286_05.
+ * ✅ Correctly wires 'onSave' for tabs 3 and 4 to update state and navigate.
  */
 
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'; // (Added useQuery)
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 // import { toast } from 'sonner';
 
-// --- (1. Import correct API functions and types) ---
+// --- (1. Import API functions and types) ---
 import { createTransaction } from '../../api/transactionApi';
-import { Transaction, NewTransactionData } from '../../types/transactionTypes';
+// (Need to import employee API)
+import { getEmployees } from '../../api/employeeApi'; 
+// (Import all necessary types - assuming structure from previous context)
+import { 
+  Transaction, 
+  NewTransactionData, 
+  TransactionType,  
+  Employee 
+} from '../../types/transactionTypes'; // (Adjust path as needed)
 
-// --- (2. Remove unused UI component imports here) ---
+import { Task } from '../../types/taskTypes';
+
+// --- (2. UI Imports) ---
 import {
   FileText, Plus, CheckCircle, Users, Calendar,
   Paperclip, Target, AlertCircle, Settings,
@@ -52,20 +66,20 @@ import Tab_FinalComponents_Detailed_Complete from './Tab_FinalComponents_Detaile
 import Tab_Components_Generic_Complete from './Tab_Components_Generic_Complete';
 import Tab_Boundaries_Neighbors_Complete from './Tab_Boundaries_Neighbors_Complete';
 import Tab_LandArea_Complete from './Tab_LandArea_Complete';
+import { Skeleton } from '../ui/skeleton'; // (Import Skeleton for loading)
 
-// --- (4. Define schema and types for basic form) ---
+// --- (4. Define schema and types) ---
 const basicInfoSchema = z.object({
   title: z.string().min(1, "العنوان مطلوب"),
   clientId: z.string().min(1, "يجب اختيار العميل"),
-  type: z.string().optional(), // Will carry transactionTypeId
+  type: z.string().optional(),
   priority: z.string().default('medium'),
   description: z.string().optional(),
 });
 
-// Use the type we defined in transactionTypes.ts
 type BasicInfoFormData = NewTransactionData;
 
-// (TABS_CONFIG stays the same)
+// (Tabs config remains the same)
 const TABS_CONFIG: TabConfig[] = [
   { id: '286-01', number: '286-01', title: 'معلومات أساسية', icon: FileText },
   { id: '286-02', number: '286-02', title: 'تفاصيل المعاملة', icon: Target },
@@ -93,15 +107,16 @@ const TABS_CONFIG: TabConfig[] = [
 
 const CreateTransaction_Complete_286: React.FC = () => {
   const [activeTab, setActiveTab] = useState('286-01');
-  
-  
-  // --- (5. Remove unused State) ---
-  // const [autoAssign, setAutoAssign] = useState(true);
-  // const [sendNotifications, setSendNotifications] = useState(true);
-
   const [transactionId, setTransactionId] = useState<'new' | string>('new');
   const queryClient = useQueryClient();
 
+  // --- (5. New Master State for Transaction Data) ---
+  // This holds data from all tabs
+  const [transactionData, setTransactionData] = useState<Partial<Transaction>>({});
+  // This holds the selected template object
+  const [selectedType, setSelectedType] = useState<TransactionType | null>(null);
+
+  // --- (6. Form for Tab 1) ---
   const form = useForm<BasicInfoFormData>({
     resolver: zodResolver(basicInfoSchema),
     defaultValues: {
@@ -113,14 +128,21 @@ const CreateTransaction_Complete_286: React.FC = () => {
     },
   });
 
-  // --- (6. Update Mutation to use correct function) ---
+  // --- (7. Fetch Employees for Task Assignment) ---
+  const { data: employees, isLoading: isLoadingEmployees } = useQuery<Employee[]>({
+    queryKey: ['employees'],
+    queryFn: getEmployees, // (This function must be created in 'employeeApi.ts')
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+
+  // --- (8. Create Transaction Mutation) ---
   const createTransactionMutation = useMutation({
     mutationFn: (data: BasicInfoFormData) => createTransaction(data),
     onSuccess: (createdTransaction: Transaction) => {
       setTransactionId(createdTransaction.id);
+      setTransactionData(createdTransaction); // (Initialize master state)
       // toast.success('Transaction (draft) created successfully!');
-      // --- 3. (Modified) Navigate to tab 2 to select type ---
-      setActiveTab('286-02'); 
+      setActiveTab('286-02'); // (Navigate to tab 2)
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
     onError: (error: Error) => {
@@ -129,21 +151,38 @@ const CreateTransaction_Complete_286: React.FC = () => {
     },
   });
 
+  // --- (9. Handlers for Data Flow between Tabs) ---
+  
   const onSubmitBasicInfo = (data: BasicInfoFormData) => {
     console.log('Basic form data:', data);
     createTransactionMutation.mutate(data);
   };
 
-  // --- (7. Remove unused getStatusBadge function) ---
-
-  // --- ✅ [Fix] Add function to navigate after saving ---
-  const handlePurposeSave = () => {
-    console.log("CreateTransaction_Complete_286: Purpose saved. Moving to 286-04");
-    setActiveTab('286-04'); // <-- ينتقل إلى التبويب التالي
+  const handleTypeSelected = (type: TransactionType) => {
+    setSelectedType(type);
+    setTransactionData(prev => ({...prev, type: type.id})); // Save type ID
+    setActiveTab('286-03');
   };
-  // --------------------------------------------------
 
-  // --- (8. Completely clean renderTabContent) ---
+  const handleBriefPurposeSave = (purposes: any) => {
+    console.log("CreateTransaction: Brief purposes saved.", purposes);
+    setTransactionData(prev => ({...prev, requestPurposes: purposes})); // (Assuming 'requestPurposes' is the field)
+    setActiveTab('286-04'); // (Navigate to next tab)
+  };
+  
+  const handleDetailedPurposeSave = (purposes: any) => {
+    console.log("CreateTransaction: Detailed purposes saved.", purposes);
+    // (Here you would merge detailed purposes with brief purposes)
+    setTransactionData(prev => ({...prev, detailedPurposes: purposes})); // (Use a separate field or merge)
+    setActiveTab('286-05'); // (Navigate to next tab)
+  };
+  
+  const handleTasksChange = (tasks: Task[]) => {
+    console.log("CreateTransaction: Tasks updated.", tasks);
+    setTransactionData(prev => ({...prev, tasks: tasks}));
+  };
+
+  // --- (10. Updated renderTabContent) ---
   const renderTabContent = () => {
     const isDisabled = transactionId === 'new';
 
@@ -160,8 +199,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
         return (
           <Tab_286_02_TransactionDetails_Complete
             transactionId={transactionId}
-            // (Pass function to navigate to next tab on selection)
-            onTypeSelected={() => setActiveTab('286-03')}
+            onTypeSelected={handleTypeSelected} // (Updated prop)
           />
         );
       
@@ -170,42 +208,66 @@ const CreateTransaction_Complete_286: React.FC = () => {
           <Tab_RequestPurpose_Brief_Complete 
             transactionId={transactionId} 
             readOnly={isDisabled} 
-            onSave={handlePurposeSave} // <-- ✅ [Fix] Pass function here
+            onSave={handleBriefPurposeSave} // (Updated prop)
           />
         );
       
       case '286-04':
-        return <Tab_RequestPurpose_Detailed_Complete transactionId={transactionId} />;
+        return (
+          <Tab_RequestPurpose_Detailed_Complete 
+            transactionId={transactionId} 
+            readOnly={isDisabled}
+            onSave={handleDetailedPurposeSave} // (Updated prop)
+          />
+        );
       
       case '286-05':
-        return <Tab_286_05_Tasks_UltraDense transactionId={transactionId} />;
+        // --- This is the main fix ---
+        if (isLoadingEmployees) {
+          return (
+            <div className="space-y-2 pt-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          );
+        }
+        const templateTasks = selectedType?.tasks || []; // Get tasks from selected type
+        return (
+          <Tab_286_05_Tasks_UltraDense
+            templateTasks={templateTasks}
+            employees={employees || []}
+            onChange={handleTasksChange}
+          />
+        );
       
       case '286-06':
-        return <Tab_286_06_StaffAssignment_UltraDense transactionId={transactionId} />;
+        return <Tab_286_06_StaffAssignment_UltraDense /* transactionId={transactionId} */ />;
       
       case '286-07':
-        return <Tab_286_07_ClientInfo transactionId={transactionId} />;
+        return <Tab_286_07_ClientInfo /* transactionId={transactionId} */ />;
       
       case '286-08':
-        return <Tab_286_08_Attachments_UltraDense transactionId={transactionId} />;
+        return <Tab_286_08_Attachments_UltraDense /* transactionId={transactionId} */ />;
       
       case '286-09':
-        return <Tab_286_09_Appointments transactionId={transactionId} />;
+        return <Tab_286_09_Appointments /* transactionId={transactionId} */ />;
       
       case '286-10':
-        return <Tab_286_10_Costs_UltraDense transactionId={transactionId} />;
+        return <Tab_286_10_Costs_UltraDense /* transactionId={transactionId} */ />;
       
       case '286-11':
-        return <Tab_286_11_Approvals transactionId={transactionId} />;
+        return <Tab_286_11_Approvals /* transactionId={transactionId} */ />;
       
       case '286-12':
-        return <Tab_286_12_Notes transactionId={transactionId} />;
+        return <Tab_286_12_Notes /* transactionId={transactionId} */ />;
       
       case '286-13':
-        return <Tab_286_13_Preview transactionId={transactionId} />;
+        // (This tab should receive the 'transactionData' object)
+        return <Tab_286_13_Preview /* transactionId={transactionId} data={transactionData} */ />;
       
       case '286-14':
-        return <Tab_286_14_Settings transactionId={transactionId} />;
+        return <Tab_286_14_Settings /* transactionId={transactionId} */ />;
       
       case '286-15':
         return <Tab_FloorsNaming_Complete transactionId={transactionId} readOnly={isDisabled} />;
@@ -250,7 +312,8 @@ const CreateTransaction_Complete_286: React.FC = () => {
     <div className="w-full h-full" dir="rtl">
       <CodeDisplay code="SCR-286" position="top-right" />
       
-      {/* Screen header v4.2.2 (stays the same) */}
+      {/* --- (11. Screen Header) --- */}
+      {/* (No changes to the header section) */}
       <div
         style={{
           position: 'sticky',
@@ -379,23 +442,18 @@ const CreateTransaction_Complete_286: React.FC = () => {
         </div>
       </div>
 
-      {/* Content */}
+      {/* --- (12. Content Area) --- */}
       <div className="flex" style={{ gap: '4px', paddingTop: '16px' }}>
         <UnifiedTabsSidebar
           tabs={TABS_CONFIG}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          // --- (10. Add tab disabling logic) ---
           disabledTabs={TABS_CONFIG
             .map(t => t.id)
             .filter(id => id !== '286-01' && transactionId === 'new')}
         />
         
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 220px)', paddingLeft: '16px', paddingRight: '16px' }}>
-          {/* This form wraps all tabs.
-            When the submit button inside (Tab_286_01) is pressed, 
-            the onSubmitBasicInfo function will be triggered
-          */}
           <form onSubmit={form.handleSubmit(onSubmitBasicInfo)}>
             {renderTabContent()}
           </form>

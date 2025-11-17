@@ -1,45 +1,198 @@
 /**
  * جميع تابات الشاشة 286 - نسخة مكثفة جداً Ultra Dense
  * =========================================================
- * 
- * التكثيف الفائق v2.0 - جميع التابات:
+ * * التكثيف الفائق v2.0 - جميع التابات:
  * - استغلال 95%+ من المساحة
  * - لا حاجة للتمرير
  * - جداول مكثفة
  * - بطاقات صغيرة جداً
  * - نوافذ منبثقة للتفاصيل
  * - grid layouts متقدمة
+ * * --- تحديث v2.1 (TAB 286-05) ---
+ * - تاب المهام أصبح ديناميكياً بالكامل.
+ * - يستقبل المهام من القالب عبر props.
+ * - يتيح إسناد الموظفين عبر قائمة منسدلة.
+ * - يتيح إضافة/تعديل/حذف المهام عبر مودال.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select'; // <-- إضافة
+import { Input } from '../ui/input'; // <-- إضافة
+import { Label } from '../ui/label'; // <-- إضافة
 import {
   CheckCircle, Users, Paperclip, Calendar as CalendarIcon, DollarSign,
   FileText, Eye, Settings, Plus, Edit2, Trash2, Upload, Download,
-  Clock, User, Building, Hash, Flag, Target, Mail, Phone
+  Clock, User, Building, Hash, Flag, Target, Mail, Phone, Loader2
 } from 'lucide-react';
 import CodeDisplay from '../CodeDisplay';
+import { ScrollArea } from '../ui/scroll-area'; // <-- إضافة ScrollArea
+import { nanoid } from 'nanoid'; // (أو استخدم crypto.randomUUID)
 
 // ============================================
-// TAB 286-05: المهمات - مكثف جداً
+// واجهات (Interfaces) جديدة للمهام
 // ============================================
-export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
-  const [tasks] = useState([
-    { id: '1', name: 'استقبال الطلب', duration: 1, assignedTo: 'أحمد العلي', priority: 'high', status: 'completed' },
-    { id: '2', name: 'مراجعة المستندات', duration: 2, assignedTo: 'فاطمة محمد', priority: 'high', status: 'in-progress' },
-    { id: '3', name: 'فحص الموقع', duration: 3, assignedTo: 'خالد السعيد', priority: 'medium', status: 'pending' },
-    { id: '4', name: 'إعداد المخططات', duration: 5, assignedTo: 'نورة الحسن', priority: 'high', status: 'pending' },
-    { id: '5', name: 'المراجعة الفنية', duration: 4, assignedTo: 'علي أحمد', priority: 'high', status: 'pending' },
-    { id: '6', name: 'موافقة الدفاع المدني', duration: 7, assignedTo: 'سارة خالد', priority: 'urgent', status: 'pending' },
-    { id: '7', name: 'موافقة البلدية', duration: 5, assignedTo: 'محمد عبدالله', priority: 'urgent', status: 'pending' },
-    { id: '8', name: 'إصدار الترخيص', duration: 2, assignedTo: 'ليلى محمد', priority: 'high', status: 'pending' }
-  ]);
 
+// واجهة للمهمة (مبسطة)
+interface Task {
+  id: string; // ID فريد
+  name: string;
+  duration: number;
+  assignedToId: string | null; // ID الموظف المسند إليه
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'pending' | 'in-progress' | 'completed';
+}
+
+// واجهة للموظف (مبسطة)
+interface Employee {
+  id: string;
+  name: string;
+}
+
+// واجهة لخصائص (Props) التاب
+interface TasksTabProps {
+  templateTasks: any[]; // المهام القادمة من القالب (JSON)
+  employees: Employee[]; // قائمة الموظفين
+  onChange: (tasks: Task[]) => void; // دالة لإرجاع المهام المحدثة
+}
+
+// واجهة لنموذج المهمة (Add/Edit)
+type TaskFormData = Omit<Task, 'id' | 'status' | 'assignedToId'>;
+
+
+// ============================================
+// TAB 286-05: المهمات - (نسخة ديناميكية جديدة v2.1)
+// ============================================
+
+// مودال (Dialog) لإضافة/تعديل مهمة
+const TaskEditDialog: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (taskData: TaskFormData) => void;
+  task: TaskFormData | null; // null للإضافة, وبيانات للتعديل
+}> = ({ isOpen, onClose, onSave, task }) => {
+  const [formData, setFormData] = useState<TaskFormData>({
+    name: '',
+    duration: 1,
+    priority: 'medium',
+    ...task,
+  });
+
+  useEffect(() => {
+    setFormData({
+      name: '',
+      duration: 1,
+      priority: 'medium',
+      ...task,
+    });
+  }, [task, isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name) {
+      alert('الرجاء إدخال اسم المهمة');
+      return;
+    }
+    onSave(formData);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="card-rtl">
+        <DialogHeader>
+          <DialogTitle>{task ? 'تعديل مهمة' : 'إضافة مهمة جديدة'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          <div>
+            <Label htmlFor="task-name">اسم المهمة</Label>
+            <Input
+              id="task-name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="task-duration">المدة (أيام)</Label>
+              <Input
+                id="task-duration"
+                type="number"
+                value={formData.duration}
+                onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 1 })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="task-priority">الأولوية</Label>
+              <Select
+                value={formData.priority}
+                onValueChange={(val: Task['priority']) => setFormData({ ...formData, priority: val })}
+              >
+                <SelectTrigger id="task-priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">منخفضة</SelectItem>
+                  <SelectItem value="medium">متوسطة</SelectItem>
+                  <SelectItem value="high">عالية</SelectItem>
+                  <SelectItem value="urgent">عاجلة</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>إلغاء</Button>
+            <Button type="submit">حفظ</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
+  templateTasks,
+  employees,
+  onChange
+}) => {
+  // الحالة الداخلية للمهام
+  const [tasks, setTasks] = useState<Task[]>([]);
+  
+  // حالات المودال
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+  // 1. مزامنة المهام عند تغيير القالب
+  useEffect(() => {
+    const newTasks: Task[] = (templateTasks || []).map((t: any) => ({
+      id: nanoid(10), // ID فريد للمهمة
+      name: t.name || 'مهمة بدون اسم',
+      duration: t.duration || 1,
+      assignedToId: null, // يبدأ غير مسند
+      priority: t.priority || 'medium',
+      status: 'pending', // يبدأ معلق
+    }));
+    setTasks(newTasks);
+  }, [templateTasks]);
+
+  // 2. إبلاغ الشاشة الرئيسية عند أي تغيير في المهام
+  useEffect(() => {
+    if(onChange) {
+      onChange(tasks);
+    }
+  }, [tasks, onChange]);
+
+  // 3. دوال الألوان (كما هي)
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'low': return '#6b7280';
@@ -49,7 +202,6 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
       default: return '#6b7280';
     }
   };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return '#10b981';
@@ -59,10 +211,56 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
     }
   };
 
+  // 4. دوال معالجة المهام (Handlers)
+  const handleAssignTask = (taskId: string, employeeId: string) => {
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.id === taskId ? { ...task, assignedToId: employeeId } : task
+      )
+    );
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+  };
+
+  const handleOpenAddTask = () => {
+    setEditingTask(null);
+    setIsTaskDialogOpen(true);
+  };
+
+  const handleOpenEditTask = (task: Task) => {
+    setEditingTask(task);
+    setIsTaskDialogOpen(true);
+  };
+
+  const handleSaveTask = (taskData: TaskFormData) => {
+    if (editingTask) {
+      // تعديل
+      setTasks(prevTasks =>
+        prevTasks.map(task =>
+          task.id === editingTask.id ? { ...task, ...taskData } : task
+        )
+      );
+    } else {
+      // إضافة
+      const newTask: Task = {
+        ...taskData,
+        id: nanoid(10),
+        assignedToId: null,
+        status: 'pending',
+      };
+      setTasks(prevTasks => [...prevTasks, newTask]);
+    }
+    setIsTaskDialogOpen(false);
+    setEditingTask(null);
+  };
+
+  // 5. حساب الإحصائيات (أصبح ديناميكياً)
   const stats = [
     { label: 'إجمالي المهام', value: tasks.length, color: '#3b82f6' },
     { label: 'مكتملة', value: tasks.filter(t => t.status === 'completed').length, color: '#10b981' },
-    { label: 'قيد التنفيذ', value: tasks.filter(t => t.status === 'in-progress').length, color: '#f59e0b' },
+    { label: 'مسندة', value: tasks.filter(t => !!t.assignedToId).length, color: '#f59e0b' },
     { label: 'قيد الانتظار', value: tasks.filter(t => t.status === 'pending').length, color: '#6b7280' },
     { label: 'المدة الكلية', value: `${tasks.reduce((sum, t) => sum + t.duration, 0)} يوم`, color: '#8b5cf6' },
     { label: 'عاجلة', value: tasks.filter(t => t.priority === 'urgent').length, color: '#ef4444' }
@@ -70,7 +268,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
 
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: 'calc(100vh - 180px)' }}>
-      <CodeDisplay code="TAB-286-05-DENSE" position="top-right" />
+      <CodeDisplay code="TAB-286-05-DYN" position="top-right" />
       
       {/* بطاقات إحصائية */}
       <div className="grid grid-cols-6 gap-1 mb-2">
@@ -86,23 +284,22 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
 
       {/* جدول المهمات المكثف */}
       <Card style={{ height: 'calc(100% - 70px)' }}>
-        <CardContent className="p-2">
-          <div className="flex items-center justify-between mb-2">
+        <CardContent className="p-2 h-full flex flex-col">
+          <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <h3 className="text-sm font-bold">قائمة المهمات التفصيلية</h3>
-            <Button size="sm" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}>
+            <Button size="sm" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }} onClick={handleOpenAddTask}>
               <Plus className="h-3 w-3 ml-1" />
               مهمة جديدة
             </Button>
           </div>
           
-          <div style={{ height: 'calc(100% - 40px)', overflow: 'auto' }}>
+          <ScrollArea className="flex-grow">
             <Table className="table-rtl">
               <TableHeader>
                 <TableRow style={{ height: '28px' }}>
-                  <TableHead className="text-right text-[10px] py-1" style={{ width: '40px' }}>#</TableHead>
                   <TableHead className="text-right text-[10px] py-1">اسم المهمة</TableHead>
                   <TableHead className="text-right text-[10px] py-1" style={{ width: '70px' }}>المدة</TableHead>
-                  <TableHead className="text-right text-[10px] py-1" style={{ width: '120px' }}>المسؤول</TableHead>
+                  <TableHead className="text-right text-[10px] py-1" style={{ width: '150px' }}>المسؤول</TableHead>
                   <TableHead className="text-right text-[10px] py-1" style={{ width: '80px' }}>الأولوية</TableHead>
                   <TableHead className="text-right text-[10px] py-1" style={{ width: '90px' }}>الحالة</TableHead>
                   <TableHead className="text-right text-[10px] py-1" style={{ width: '80px' }}>إجراءات</TableHead>
@@ -111,9 +308,6 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
               <TableBody>
                 {tasks.map((task, index) => (
                   <TableRow key={task.id} style={{ height: '32px' }}>
-                    <TableCell className="text-right text-[10px] py-1 font-semibold">
-                      {index + 1}
-                    </TableCell>
                     <TableCell className="text-right text-[10px] py-1">
                       {task.name}
                     </TableCell>
@@ -124,10 +318,22 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
                       </div>
                     </TableCell>
                     <TableCell className="text-right text-[10px] py-1">
-                      <div className="flex items-center gap-1">
-                        <User className="h-3 w-3" style={{ color: '#3b82f6' }} />
-                        {task.assignedTo}
-                      </div>
+                      {/* --- ✅ قائمة منسدلة لإسناد الموظفين --- */}
+                      <Select
+                        value={task.assignedToId || ''}
+                        onValueChange={(val) => handleAssignTask(task.id, val)}
+                      >
+                        <SelectTrigger className="h-6 text-[10px] p-1">
+                          <SelectValue placeholder="اختر موظف..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employees.map(emp => (
+                            <SelectItem key={emp.id} value={emp.id} className="text-[10px]">
+                              {emp.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell className="text-right py-1">
                       <Badge style={{
@@ -143,6 +349,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right py-1">
+                      {/* (يمكن جعل الحالة قابلة للتعديل بنفس طريقة الإسناد) */}
                       <Badge style={{
                         background: getStatusColor(task.status),
                         color: '#ffffff',
@@ -156,10 +363,10 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
                     </TableCell>
                     <TableCell className="text-right py-1">
                       <div className="flex gap-0.5">
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }} onClick={() => handleOpenEditTask(task)}>
                           <Edit2 className="h-3 w-3" />
                         </Button>
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }} onClick={() => handleDeleteTask(task.id)}>
                           <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
                         </Button>
                       </div>
@@ -168,9 +375,17 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </ScrollArea>
         </CardContent>
       </Card>
+
+      {/* --- ✅ مودال إضافة/تعديل المهام --- */}
+      <TaskEditDialog
+        isOpen={isTaskDialogOpen}
+        onClose={() => setIsTaskDialogOpen(false)}
+        onSave={handleSaveTask}
+        task={editingTask ? { name: editingTask.name, duration: editingTask.duration, priority: editingTask.priority } : null}
+      />
     </div>
   );
 };
@@ -179,6 +394,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC = () => {
 // TAB 286-06: إسناد الموظفين - مكثف جداً
 // ============================================
 export const Tab_286_06_StaffAssignment_UltraDense: React.FC = () => {
+  // ( ... الكود الخاص بهذا التاب يبقى كما هو ... )
   const teamMembers = [
     { id: '1', name: 'المهندس أحمد العلي', role: 'مدير المشروع', email: 'ahmed@office.sa', phone: '0501234567', tasks: 5, hours: 120 },
     { id: '2', name: 'المهندسة فاطمة محمد', role: 'مهندس معماري', email: 'fatima@office.sa', phone: '0507654321', tasks: 3, hours: 90 },
@@ -211,8 +427,8 @@ export const Tab_286_06_StaffAssignment_UltraDense: React.FC = () => {
       </div>
 
       <Card style={{ height: 'calc(100% - 70px)' }}>
-        <CardContent className="p-2">
-          <div className="flex items-center justify-between mb-2">
+        <CardContent className="p-2 h-full flex flex-col">
+          <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <h3 className="text-sm font-bold">فريق العمل</h3>
             <Button size="sm" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}>
               <Plus className="h-3 w-3 ml-1" />
@@ -220,63 +436,67 @@ export const Tab_286_06_StaffAssignment_UltraDense: React.FC = () => {
             </Button>
           </div>
           
-          <Table className="table-rtl">
-            <TableHeader>
-              <TableRow style={{ height: '28px' }}>
-                <TableHead className="text-right text-[10px] py-1">الاسم</TableHead>
-                <TableHead className="text-right text-[10px] py-1">الدور</TableHead>
-                <TableHead className="text-right text-[10px] py-1">البريد</TableHead>
-                <TableHead className="text-right text-[10px] py-1">الجوال</TableHead>
-                <TableHead className="text-right text-[10px] py-1">المهام</TableHead>
-                <TableHead className="text-right text-[10px] py-1">الساعات</TableHead>
-                <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {teamMembers.map((member) => (
-                <TableRow key={member.id} style={{ height: '32px' }}>
-                  <TableCell className="text-right text-[10px] py-1 font-semibold">{member.name}</TableCell>
-                  <TableCell className="text-right text-[10px] py-1">{member.role}</TableCell>
-                  <TableCell className="text-right text-[10px] py-1">
-                    <div className="flex items-center gap-1">
-                      <Mail className="h-3 w-3" style={{ color: '#64748b' }} />
-                      {member.email}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right text-[10px] py-1">
-                    <div className="flex items-center gap-1">
-                      <Phone className="h-3 w-3" style={{ color: '#64748b' }} />
-                      {member.phone}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right py-1">
-                    <Badge style={{ fontSize: '9px', padding: '2px 6px' }}>{member.tasks}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-[10px] py-1">{member.hours}ساعة</TableCell>
-                  <TableCell className="text-right py-1">
-                    <div className="flex gap-0.5">
-                      <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                        <Edit2 className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                        <Eye className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          <ScrollArea className="flex-grow">
+            <Table className="table-rtl">
+              <TableHeader>
+                <TableRow style={{ height: '28px' }}>
+                  <TableHead className="text-right text-[10px] py-1">الاسم</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">الدور</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">البريد</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">الجوال</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">المهام</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">الساعات</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {teamMembers.map((member) => (
+                  <TableRow key={member.id} style={{ height: '32px' }}>
+                    <TableCell className="text-right text-[10px] py-1 font-semibold">{member.name}</TableCell>
+                    <TableCell className="text-right text-[10px] py-1">{member.role}</TableCell>
+                    <TableCell className="text-right text-[10px] py-1">
+                      <div className="flex items-center gap-1">
+                        <Mail className="h-3 w-3" style={{ color: '#64748b' }} />
+                        {member.email}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right text-[10px] py-1">
+                      <div className="flex items-center gap-1">
+                        <Phone className="h-3 w-3" style={{ color: '#64748b' }} />
+                        {member.phone}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right py-1">
+                      <Badge style={{ fontSize: '9px', padding: '2px 6px' }}>{member.tasks}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-[10px] py-1">{member.hours}ساعة</TableCell>
+                    <TableCell className="text-right py-1">
+                      <div className="flex gap-0.5">
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
+                          <Eye className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
         </CardContent>
       </Card>
     </div>
   );
 };
 
+
 // ============================================
 // TAB 286-08: المرفقات - مكثف جداً
 // ============================================
 export const Tab_286_08_Attachments_UltraDense: React.FC = () => {
+  // ( ... الكود الخاص بهذا التاب يبقى كما هو ... )
   const attachments = [
     { id: '1', name: 'صورة الصك.pdf', type: 'PDF', size: '2.3 MB', date: '2025-10-26', category: 'مستندات', status: 'مراجع' },
     { id: '2', name: 'خريطة الموقع.jpg', type: 'صورة', size: '1.8 MB', date: '2025-10-26', category: 'خرائط', status: 'معتمد' },
@@ -309,8 +529,8 @@ export const Tab_286_08_Attachments_UltraDense: React.FC = () => {
       </div>
 
       <Card style={{ height: 'calc(100% - 70px)' }}>
-        <CardContent className="p-2">
-          <div className="flex items-center justify-between mb-2">
+        <CardContent className="p-2 h-full flex flex-col">
+          <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <h3 className="text-sm font-bold">المرفقات والمستندات</h3>
             <Button size="sm" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}>
               <Upload className="h-3 w-3 ml-1" />
@@ -318,60 +538,62 @@ export const Tab_286_08_Attachments_UltraDense: React.FC = () => {
             </Button>
           </div>
           
-          <Table className="table-rtl">
-            <TableHeader>
-              <TableRow style={{ height: '28px' }}>
-                <TableHead className="text-right text-[10px] py-1">اسم الملف</TableHead>
-                <TableHead className="text-right text-[10px] py-1">النوع</TableHead>
-                <TableHead className="text-right text-[10px] py-1">التصنيف</TableHead>
-                <TableHead className="text-right text-[10px] py-1">الحجم</TableHead>
-                <TableHead className="text-right text-[10px] py-1">التاريخ</TableHead>
-                <TableHead className="text-right text-[10px] py-1">الحالة</TableHead>
-                <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {attachments.map((file) => (
-                <TableRow key={file.id} style={{ height: '32px' }}>
-                  <TableCell className="text-right text-[10px] py-1 font-semibold">
-                    <div className="flex items-center gap-1">
-                      <Paperclip className="h-3 w-3" style={{ color: '#64748b' }} />
-                      {file.name}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right py-1">
-                    <Badge variant="outline" style={{ fontSize: '9px', padding: '2px 6px' }}>{file.type}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-[10px] py-1">{file.category}</TableCell>
-                  <TableCell className="text-right text-[10px] py-1">{file.size}</TableCell>
-                  <TableCell className="text-right text-[10px] py-1">{file.date}</TableCell>
-                  <TableCell className="text-right py-1">
-                    <Badge style={{
-                      background: file.status === 'معتمد' ? '#10b981' : file.status === 'قيد المراجعة' ? '#f59e0b' : '#6b7280',
-                      color: '#ffffff',
-                      fontSize: '9px',
-                      padding: '2px 6px'
-                    }}>
-                      {file.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right py-1">
-                    <div className="flex gap-0.5">
-                      <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                        <Eye className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                        <Download className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                        <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
-                      </Button>
-                    </div>
-                  </TableCell>
+          <ScrollArea className="flex-grow">
+            <Table className="table-rtl">
+              <TableHeader>
+                <TableRow style={{ height: '28px' }}>
+                  <TableHead className="text-right text-[10px] py-1">اسم الملف</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">النوع</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">التصنيف</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">الحجم</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">التاريخ</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">الحالة</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {attachments.map((file) => (
+                  <TableRow key={file.id} style={{ height: '32px' }}>
+                    <TableCell className="text-right text-[10px] py-1 font-semibold">
+                      <div className="flex items-center gap-1">
+                        <Paperclip className="h-3 w-3" style={{ color: '#64748b' }} />
+                        {file.name}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right py-1">
+                      <Badge variant="outline" style={{ fontSize: '9px', padding: '2px 6px' }}>{file.type}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-[10px] py-1">{file.category}</TableCell>
+                    <TableCell className="text-right text-[10px] py-1">{file.size}</TableCell>
+                    <TableCell className="text-right text-[10px] py-1">{file.date}</TableCell>
+                    <TableCell className="text-right py-1">
+                      <Badge style={{
+                        background: file.status === 'معتمد' ? '#10b981' : file.status === 'قيد المراجعة' ? '#f59e0b' : '#6b7280',
+                        color: '#ffffff',
+                        fontSize: '9px',
+                        padding: '2px 6px'
+                      }}>
+                        {file.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right py-1">
+                      <div className="flex gap-0.5">
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
+                          <Eye className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
+                          <Download className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
+                          <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
         </CardContent>
       </Card>
     </div>
@@ -382,6 +604,7 @@ export const Tab_286_08_Attachments_UltraDense: React.FC = () => {
 // TAB 286-10: التكاليف - مكثف جداً مع تفاصيل شاملة
 // ============================================
 export const Tab_286_10_Costs_UltraDense: React.FC = () => {
+  // ( ... الكود الخاص بهذا التاب يبقى كما هو ... )
   const costBreakdown = [
     { category: 'رسوم الجهات الحكومية', items: [
       { name: 'رسوم البلدية', amount: 5000, paid: 5000, remaining: 0, status: 'مدفوع' },
@@ -431,9 +654,9 @@ export const Tab_286_10_Costs_UltraDense: React.FC = () => {
       </div>
 
       <Card style={{ height: 'calc(100% - 70px)' }}>
-        <CardContent className="p-2">
-          <Tabs defaultValue="cat-0" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-2" style={{ height: '28px' }}>
+        <CardContent className="p-2 h-full flex flex-col">
+          <Tabs defaultValue="cat-0" className="w-full flex flex-col flex-grow">
+            <TabsList className="grid w-full grid-cols-3 mb-2 flex-shrink-0" style={{ height: '28px' }}>
               {costBreakdown.map((cat, index) => (
                 <TabsTrigger key={index} value={`cat-${index}`} style={{ fontSize: '10px', padding: '4px 8px' }}>
                   {cat.category}
@@ -441,66 +664,74 @@ export const Tab_286_10_Costs_UltraDense: React.FC = () => {
               ))}
             </TabsList>
             
-            {costBreakdown.map((cat, catIndex) => (
-              <TabsContent key={catIndex} value={`cat-${catIndex}`} className="mt-0">
-                <Table className="table-rtl">
-                  <TableHeader>
-                    <TableRow style={{ height: '28px' }}>
-                      <TableHead className="text-right text-[10px] py-1">البند</TableHead>
-                      <TableHead className="text-right text-[10px] py-1">المبلغ الكلي</TableHead>
-                      <TableHead className="text-right text-[10px] py-1">المدفوع</TableHead>
-                      <TableHead className="text-right text-[10px] py-1">المتبقي</TableHead>
-                      <TableHead className="text-right text-[10px] py-1">النسبة</TableHead>
-                      <TableHead className="text-right text-[10px] py-1">الحالة</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {cat.items.map((item, index) => (
-                      <TableRow key={index} style={{ height: '32px' }}>
-                        <TableCell className="text-right text-[10px] py-1 font-semibold">{item.name}</TableCell>
-                        <TableCell className="text-right text-[10px] py-1">{item.amount.toLocaleString()} ر.س</TableCell>
-                        <TableCell className="text-right text-[10px] py-1" style={{ color: '#10b981' }}>
-                          {item.paid.toLocaleString()} ر.س
-                        </TableCell>
-                        <TableCell className="text-right text-[10px] py-1" style={{ color: '#ef4444' }}>
-                          {item.remaining.toLocaleString()} ر.س
-                        </TableCell>
-                        <TableCell className="text-right text-[10px] py-1">
-                          {((item.paid / item.amount) * 100).toFixed(0)}%
-                        </TableCell>
-                        <TableCell className="text-right py-1">
-                          <Badge style={{
-                            background: item.status === 'مدفوع' ? '#10b981' : 
-                                      item.status === 'جزئي' ? '#f59e0b' : '#6b7280',
-                            color: '#ffffff',
-                            fontSize: '9px',
-                            padding: '2px 6px'
-                          }}>
-                            {item.status}
-                          </Badge>
-                        </TableCell>
+            <ScrollArea className="flex-grow">
+              {costBreakdown.map((cat, catIndex) => (
+                <TabsContent key={catIndex} value={`cat-${catIndex}`} className="mt-0">
+                  <Table className="table-rtl">
+                    <TableHeader>
+                      <TableRow style={{ height: '28px' }}>
+                        <TableHead className="text-right text-[10px] py-1">البند</TableHead>
+                        <TableHead className="text-right text-[10px] py-1">المبلغ الكلي</TableHead>
+                        <TableHead className="text-right text-[10px] py-1">المدفوع</TableHead>
+                        <TableHead className="text-right text-[10px] py-1">المتبقي</TableHead>
+                        <TableHead className="text-right text-[10px] py-1">النسبة</TableHead>
+                        <TableHead className="text-right text-[10px] py-1">الحالة</TableHead>
                       </TableRow>
-                    ))}
-                    <TableRow style={{ height: '32px', background: '#f8fafc' }}>
-                      <TableCell className="text-right text-[10px] py-1 font-bold">المجموع الفرعي</TableCell>
-                      <TableCell className="text-right text-[10px] py-1 font-bold">
-                        {cat.items.reduce((s, i) => s + i.amount, 0).toLocaleString()} ر.س
-                      </TableCell>
-                      <TableCell className="text-right text-[10px] py-1 font-bold" style={{ color: '#10b981' }}>
-                        {cat.items.reduce((s, i) => s + i.paid, 0).toLocaleString()} ر.س
-                      </TableCell>
-                      <TableCell className="text-right text-[10px] py-1 font-bold" style={{ color: '#ef4444' }}>
-                        {cat.items.reduce((s, i) => s + i.remaining, 0).toLocaleString()} ر.س
-                      </TableCell>
-                      <TableCell className="text-right text-[10px] py-1 font-bold">
-                        {((cat.items.reduce((s, i) => s + i.paid, 0) / cat.items.reduce((s, i) => s + i.amount, 0)) * 100).toFixed(1)}%
-                      </TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TabsContent>
-            ))}
+                    </TableHeader>
+                    <TableBody>
+                      {cat.items.map((item, index) => (
+                        <TableRow key={index} style={{ height: '32px' }}>
+                          <TableCell className="text-right text-[10px] py-1 font-semibold">{item.name}</TableCell>
+                          <TableCell className="text-right text-[10px] py-1">{item.amount.toLocaleString()} ر.س</TableCell>
+                          <TableCell className="text-right text-[10px] py-1" style={{ color: '#10b981' }}>
+                            {item.paid.toLocaleString()} ر.س
+                          </TableCell>
+                          <TableCell className="text-right text-[10px] py-1" style={{ color: '#ef4444' }}>
+                            {item.remaining.toLocaleString()} ر.س
+                          </TableCell>
+                          <TableCell className="text-right text-[10px] py-1">
+                            {item.amount > 0 ? ((item.paid / item.amount) * 100).toFixed(0) : 0}%
+                          </TableCell>
+                          <TableCell className="text-right py-1">
+                            <Badge style={{
+                              background: item.status === 'مدفوع' ? '#10b981' : 
+                                          item.status === 'جزئي' ? '#f59e0b' : '#6b7280',
+                              color: '#ffffff',
+                              fontSize: '9px',
+                              padding: '2px 6px'
+                            }}>
+                              {item.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow style={{ height: '32px', background: '#f8fafc' }}>
+                        <TableCell className="text-right text-[10px] py-1 font-bold">المجموع الفرعي</TableCell>
+                        <TableCell className="text-right text-[10px] py-1 font-bold">
+                          {cat.items.reduce((s, i) => s + i.amount, 0).toLocaleString()} ر.س
+                        </TableCell>
+                        <TableCell className="text-right text-[10px] py-1 font-bold" style={{ color: '#10b981' }}>
+                          {cat.items.reduce((s, i) => s + i.paid, 0).toLocaleString()} ر.س
+                        </TableCell>
+                        <TableCell className="text-right text-[10px] py-1 font-bold" style={{ color: '#ef4444' }}>
+                          {cat.items.reduce((s, i) => s + i.remaining, 0).toLocaleString()} ر.س
+                        </TableCell>
+                        <TableCell className="text-right text-[10px] py-1 font-bold">
+                          {
+                            (() => {
+                              const total = cat.items.reduce((s, i) => s + i.amount, 0);
+                              const paid = cat.items.reduce((s, i) => s + i.paid, 0);
+                              return total > 0 ? ((paid / total) * 100).toFixed(1) : 0;
+                            })()
+                          }%
+                        </TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TabsContent>
+              ))}
+            </ScrollArea>
           </Tabs>
         </CardContent>
       </Card>
@@ -508,6 +739,8 @@ export const Tab_286_10_Costs_UltraDense: React.FC = () => {
   );
 };
 
+// --- ملاحظة ---
+// الـ export سيبقى كما هو ليناسب طريقة الاستيراد في الشاشة الرئيسية
 export default {
   Tab_286_05_Tasks_UltraDense,
   Tab_286_06_StaffAssignment_UltraDense,

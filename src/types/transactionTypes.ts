@@ -120,6 +120,36 @@ export type NewTransactionData = {
   description?: string;
 };
 
+export interface Employee {
+  id: string;
+  employeeCode: string;
+  name: string;
+  nameEn?: string | null;
+  nationalId: string;
+  email: string;
+  phone: string;
+  position: string;
+  department: string;
+  hireDate: string; // أو Date
+  baseSalary?: number | null;
+  type: string;
+  status: string;
+  nationality?: string | null;
+  gosiNumber?: string | null;
+  iqamaNumber?: string | null;
+  performanceRating?: number | null;
+  frozenUntil?: string | null; // أو Date
+  frozenReason?: string | null;
+  jobLevel?: number | null;
+  
+  // حقول إضافية نحتاجها
+  permissionsCount?: number; // (من الواجهة)
+  
+  // بيانات مرتبطة (للتوضيح)
+  // attachments?: Attachment[];
+  // assignedTasks?: Task[];
+}
+
 /**
  * 5. (مُعدل) نوع بيانات تحديث المعاملة
  * (يحتوي على جميع الحقول القابلة للتعديل)

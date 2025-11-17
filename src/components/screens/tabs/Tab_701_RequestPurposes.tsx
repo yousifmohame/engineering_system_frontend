@@ -1,12 +1,9 @@
 /**
  * Tab_701_RequestPurposes.tsx
- * * تاب جديد يُضاف إلى شاشة "إعدادات المعاملات" (701)
- * للتحكم في القائمة الموحدة (Global) لأغراض الطلبات (المختصرة والتفصيلية)
- * * يعتمد على نموذج `RequestPurpose` الجديد في قاعدة البيانات
- * ويستخدم الـ Endpoints من `settingsController.js`
+ * * (إصدار معدل v2.0 - يدعم منشئ النماذج الديناميكي)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
@@ -23,7 +20,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from '../../ui/dialog';
 import {
@@ -41,31 +37,20 @@ import { Label } from '../../ui/label';
 import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Switch } from '../../ui/switch';
 import { Skeleton } from '../../ui/skeleton';
-import { PlusCircle, Edit, Trash2, Loader2, AlertCircle, ListChecks } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, AlertCircle, ListChecks, Settings } from 'lucide-react';
 import { Badge } from '../../ui/badge';
 
-// --- (ملحوظة) ---
-// ستحتاج إلى إنشاء هذه الدوال في ملف API جديد
-// (مثل `src/api/settingsApi.ts`)
-// بناءً على المسارات التي أضفناها في `settingsRoutes.js`
+// استيراد الدوال والواجهات من ملف API المركزي
 import { 
   getRequestPurposes, 
   createRequestPurpose, 
   updateRequestPurpose, 
-  deleteRequestPurpose 
-} from '../../../api/settingsApi'; // (افترض أن هذا الملف موجود)
+  deleteRequestPurpose,
+  RequestPurpose // الواجهة المحدثة
+} from '../../../api/settingsApi'; 
 
-// الواجهة (Interface) المطابقة لنموذج Prisma
-interface RequestPurpose {
-  id: string;
-  type: 'brief' | 'detailed';
-  name: string;
-  nameEn: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  isActive: boolean;
-}
+// استيراد منشئ النماذج
+import DynamicFormBuilder from '../DynamicFormBuilder'; 
 
 // نوع البيانات للنموذج (Form)
 type PurposeFormData = Omit<RequestPurpose, 'id'>;
@@ -77,6 +62,9 @@ const Tab_701_RequestPurposes: React.FC = () => {
   const [isAlertOpen, setIsAlertOpen] = React.useState(false);
   const [editingPurpose, setEditingPurpose] = React.useState<RequestPurpose | null>(null);
   const [deletingPurposeId, setDeletingPurposeId] = React.useState<string | null>(null);
+  
+  // State جديدة لفتح "منشئ النماذج"
+  const [isFormBuilderOpen, setIsFormBuilderOpen] = React.useState(false);
 
   // --- 1. جلب البيانات ---
   const { data: purposes, isLoading, isError } = useQuery<RequestPurpose[]>({
@@ -125,6 +113,7 @@ const Tab_701_RequestPurposes: React.FC = () => {
   const handleOpenDialog = (purpose: RequestPurpose | null = null) => {
     setEditingPurpose(purpose);
     setIsDialogOpen(true);
+    setIsFormBuilderOpen(false); // إغلاق "المنشئ" عند فتح هذا المودال
   };
 
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -135,6 +124,7 @@ const Tab_701_RequestPurposes: React.FC = () => {
       name: formData.get('name') as string,
       nameEn: formData.get('nameEn') as string,
       description: formData.get('description') as string,
+      // (تم حذف componentKey)
       icon: formData.get('icon') as string,
       color: formData.get('color') as string,
       isActive: (formData.get('isActive') as string) === 'on',
@@ -251,7 +241,7 @@ const Tab_701_RequestPurposes: React.FC = () => {
 
       {/* نموذج الإضافة والتعديل */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="card-rtl">
           <DialogHeader>
             <DialogTitle>
               {editingPurpose ? 'تعديل غرض' : 'إضافة غرض جديد'}
@@ -290,6 +280,26 @@ const Tab_701_RequestPurposes: React.FC = () => {
               />
               <Label htmlFor="isActive">نشط (فعال)</Label>
             </div>
+            
+            {/* --- ✅ زر فتح "منشئ النماذج" --- */}
+            {editingPurpose && currentType === 'detailed' && (
+              <div className="pt-4 border-t">
+                <Label>إعدادات النموذج</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  قم بتصميم الحقول التي ستظهر للمستخدم عند تفعيل هذا الغرض.
+                </p>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => setIsFormBuilderOpen(true)}
+                >
+                  <Settings className="ml-2 h-4 w-4" />
+                  تصميم نموذج الغرض
+                </Button>
+              </div>
+            )}
+            
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isLoadingMutation}>
                 إلغاء
@@ -305,7 +315,7 @@ const Tab_701_RequestPurposes: React.FC = () => {
 
       {/* تأكيد الحذف */}
       <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="card-rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
             <AlertDialogDescription>
@@ -325,6 +335,15 @@ const Tab_701_RequestPurposes: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* --- ✅ مودال "منشئ النماذج" --- */}
+      {isFormBuilderOpen && editingPurpose && (
+        <DynamicFormBuilder
+          purposeId={editingPurpose.id}
+          purposeName={editingPurpose.name}
+          onClose={() => setIsFormBuilderOpen(false)}
+        />
+      )}
     </Card>
   );
 };
