@@ -1,12 +1,12 @@
 /**
- * TAB: Brief Request Purpose (v4.0 - Server Connected)
+ * TAB: Brief Request Purpose (v5.0 - Full Dynamic Backend)
  * =========================================================
  *
  * Function:
- * - [Enabled] Use mock data (DEFAULT_PURPOSES) as default template.
- * - [Enabled] Fetch transaction data (transactionId) from server using useQuery.
- * - [Enabled] Initialize state (purposes) from saved data (transaction.requestPurposes) if exists.
- * - [Enabled] Save changes (purposes) to server using useMutation (instead of localStorage).
+ * - [NEW] Fetches available purposes from global settings (API).
+ * - [Enabled] Fetch transaction data (transactionId) from server.
+ * - [NEW] Merges global list with saved data (transaction.requestPurposes).
+ * - [NEW] Works in 'NEW' mode (for creation) and 'EDIT' mode (for updates).
  */
 
 import React, { useState, useEffect } from 'react';
@@ -15,7 +15,6 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
 import { CheckSquare, Square, Save, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
-import { EnhancedSwitch } from '../EnhancedSwitch';
 import CodeDisplay from '../CodeDisplay';
 import { Skeleton } from '../ui/skeleton';
 
@@ -24,20 +23,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // import { toast } from 'sonner';
 
 // --- [Modified] ---
-// Now we need to fetch and update the transaction
 import { getTransactionById, updateTransaction } from '../../api/transactionApi'; 
 import { Transaction, TransactionUpdateData } from '../../types/transactionTypes'; 
+// Import the new function from our settings API
+import { getRequestPurposes } from '../../api/settingsApi'; 
 // --------------------
 
 
 // ==================== Interfaces ====================
 
+// This interface now matches our Prisma Model
 interface BriefPurpose {
   id: string;
   name: string;
   nameEn: string;
   description: string;
-  isSelected: boolean;
+  isSelected: boolean; // This is client-side state
   color: string;
   icon: string;
 }
@@ -48,65 +49,6 @@ interface TabProps {
   readOnly?: boolean;
 }
 
-// ==================== Default Data (Stays as Template) ====================
-
-const DEFAULT_PURPOSES: BriefPurpose[] = [
-  {
-    id: 'issuance',
-    name: 'إصدار',
-    nameEn: 'Issuance',
-    description: 'إصدار رخصة أو تصريح جديد',
-    isSelected: false,
-    color: '#2563eb',
-    icon: '📋'
-  },
-  {
-    id: 'modify-components',
-    name: 'تعديل مكونات',
-    nameEn: 'Modify Components',
-    description: 'تعديل المكونات الموجودة في الرخصة الحالية',
-    isSelected: false,
-    color: '#f59e0b',
-    icon: '🔧'
-  },
-  {
-    id: 'add-components',
-    name: 'إضافة مكونات',
-    nameEn: 'Add Components',
-    description: 'إضافة مكونات جديدة للرخصة الحالية',
-    isSelected: false,
-    color: '#10b981',
-    icon: '➕'
-  },
-  {
-    id: 'renewal-only',
-    name: 'تجديد فقط',
-    nameEn: 'Renewal Only',
-    description: 'تجديد الرخصة بدون أي تعديلات',
-    isSelected: false,
-    color: '#8b5cf6',
-    icon: '🔄'
-  },
-  {
-    id: 'renewal-modify',
-    name: 'تجديد وتعديل مكونات',
-    nameEn: 'Renewal & Modify',
-    description: 'تجديد الرخصة مع تعديل المكونات',
-    isSelected: false,
-    color: '#ec4899',
-    icon: '🔄🔧'
-  },
-  {
-    id: 'correction',
-    name: 'تصحيح وضع مبنى قائم',
-    nameEn: 'Building Status Correction',
-    description: 'تصحيح وضع مبنى موجود وفق الأنظمة',
-    isSelected: false,
-    color: '#ef4444',
-    icon: '🏗️'
-  }
-];
-
 // ==================== Main Component ====================
 
 const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
@@ -115,42 +57,61 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
   readOnly = false
 }) => {
   const queryClient = useQueryClient();
-  const [purposes, setPurposes] = useState<BriefPurpose[]>(DEFAULT_PURPOSES);
+  // Start with an empty array, data will be loaded from API
+  const [purposes, setPurposes] = useState<BriefPurpose[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // --- [New] Fetch current transaction data ---
-  const { data: transaction, isLoading: isLoadingTransaction, isError } = useQuery<Transaction>({
+  // --- [Query 1] Fetch current transaction data (if editing) ---
+  const { 
+    data: transaction, 
+    isLoading: isLoadingTransaction, 
+    isError: isErrorTransaction 
+  } = useQuery<Transaction>({
     queryKey: ['transaction', transactionId],
     queryFn: () => getTransactionById(transactionId),
     enabled: transactionId !== 'NEW', // Don't try to fetch if it's a new transaction
   });
 
-  // --- [Modified] Load data from server (instead of localStorage) ---
-  useEffect(() => {
-    // If transaction fetching succeeds and contains purpose data
-    if (transaction && transaction.requestPurposes) {
-      // (requestPurposes) is stored as Json in server
-      setPurposes(transaction.requestPurposes as BriefPurpose[]);
-    } else {
-      // If it's a new transaction or has no data, use default
-      setPurposes(DEFAULT_PURPOSES);
-    }
-  }, [transaction]); // Runs when transaction data loads
+  // --- [Query 2] Fetch the global list of purposes from settings ---
+  const { 
+    data: globalPurposes, 
+    isLoading: isLoadingPurposes, 
+    isError: isErrorPurposes 
+  } = useQuery<BriefPurpose[]>({
+    queryKey: ['requestPurposes', 'brief'], // Cache key for brief purposes
+    queryFn: () => getRequestPurposes('brief'), // Use the new API function
+    staleTime: 1000 * 60 * 5, // Cache this list for 5 minutes
+  });
 
-  // --- [New] Save data to server ---
+  // --- [Modified] Merge global list with saved data ---
+  useEffect(() => {
+    // Wait until the global list is loaded
+    if (globalPurposes) {
+      
+      // Get the saved selections (if any) from the transaction
+      const savedPurposes = (transaction?.requestPurposes || []) as BriefPurpose[];
+
+      // Merge the global list with the saved selections
+      const mergedPurposes = globalPurposes.map(globalPurpose => ({
+        ...globalPurpose,
+        // Check if this ID exists in the saved list AND isSelected is true
+        isSelected: savedPurposes.some(saved => saved.id === globalPurpose.id && saved.isSelected)
+      }));
+      
+      setPurposes(mergedPurposes);
+    }
+  }, [transaction, globalPurposes]); // Re-run when transaction or global purposes load
+
+  // --- [Save data] ---
   const updateMutation = useMutation({
     mutationFn: (updatedPurposes: BriefPurpose[]) => 
       updateTransaction(transactionId, { requestPurposes: updatedPurposes } as Partial<TransactionUpdateData>),
     
     onSuccess: (updatedData) => {
-      // (updatedData is the fully updated transaction)
-      // Update transaction data in cache
       queryClient.setQueryData(['transaction', transactionId], updatedData);
-      queryClient.invalidateQueries({ queryKey: ['transactions'] }); // Update main list
-      
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
       setHasChanges(false);
       // toast.success("Purposes saved successfully");
-      
 
       if (onSave) {
         onSave(updatedData.requestPurposes as BriefPurpose[]);
@@ -163,27 +124,43 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
   });
 
 
-  // --- [Modified] Save data (calls useMutation) ---
+  // --- [Modified] HandleSave now works for NEW and EDIT modes ---
   const handleSave = () => {
-    // Send updated purposes array to server
-    updateMutation.mutate(purposes);
+    if (transactionId === 'NEW') {
+      // In CREATE mode, pass data to parent component (e.g., Screen 286)
+      if (onSave) {
+        onSave(purposes);
+      }
+      setHasChanges(false);
+      // toast.success("Purposes staged for creation");
+    } else {
+      // In EDIT mode, save directly to the server
+      updateMutation.mutate(purposes);
+    }
   };
 
   // Toggle purpose selection (stays the same)
   const togglePurpose = (id: string) => {
     if (readOnly || updateMutation.isPending) return;
     
-    setPurposes(purposes.map(p => 
+    const newPurposes = purposes.map(p => 
       p.id === id ? { ...p, isSelected: !p.isSelected } : p
-    ));
+    );
+    
+    setPurposes(newPurposes);
     setHasChanges(true);
+
+    // In 'NEW' mode, we can also call onSave instantly if needed,
+    // but handleSave is better as it respects the "Save" button.
   };
 
-  // Reset (stays the same)
+  // --- [Modified] HandleReset now uses the dynamic global list ---
   const handleReset = () => {
-    if (readOnly || updateMutation.isPending) return;
+    if (readOnly || updateMutation.isPending || !globalPurposes) return;
     if (confirm('Are you sure you want to reset all purposes?')) {
-      setPurposes(DEFAULT_PURPOSES);
+      // Reset using the loaded global list, setting all to false
+      const resetPurposes = globalPurposes.map(p => ({ ...p, isSelected: false }));
+      setPurposes(resetPurposes);
       setHasChanges(true);
     }
   };
@@ -191,22 +168,12 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
   // Calculate selected purposes (stays the same)
   const selectedCount = purposes.filter(p => p.isSelected).length;
 
-  // --- [New] Handle loading and error states ---
-  if (transactionId === 'NEW') {
-    return (
-      <Card className="card-element card-rtl">
-        <CardContent className="p-6 flex flex-col items-center justify-center text-center h-60">
-          <AlertCircle className="h-12 w-12 text-yellow-500 mb-4" />
-          <h3 className="text-lg">الخطوة 3: الغرض من الطلب</h3>
-          <p className="text-sm text-gray-600 mt-1">
-            يجب حفظ "المعلومات الأساسية" و "نوع المعاملة" أولاً.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // --- [Modified] Handle combined loading and error states ---
+  const isLoading = (transactionId !== 'NEW' && isLoadingTransaction) || isLoadingPurposes;
+  const isError = (transactionId !== 'NEW' && isErrorTransaction) || isErrorPurposes;
 
-  if (isLoadingTransaction) {
+  // This block now handles loading for BOTH queries
+  if (isLoading) {
     return (
       <div className="p-4 space-y-4">
         <Skeleton className="h-16 w-full" />
@@ -220,24 +187,26 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
     );
   }
 
+  // This block now handles errors from BOTH queries
   if (isError) {
     return (
       <Card className="border-destructive">
         <CardContent className="p-6 text-center">
           <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-2" />
-          <h3 className="text-lg font-semibold text-destructive">فشل تحميل بيانات المعاملة</h3>
+          <h3 className="text-lg font-semibold text-destructive">
+            {isErrorTransaction ? "فشل تحميل بيانات المعاملة" : "فشل تحميل قائمة الأغراض"}
+          </h3>
         </CardContent>
       </Card>
     );
   }
 
-  // --- UI (stays the same, with minor save button modification) ---
+  // --- UI (The rest of the JSX stays exactly the same) ---
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: '100%' }}>
       <CodeDisplay code="TAB-PURPOSE-BRIEF" position="top-right" />
       
       <ScrollArea style={{ height: 'calc(100vh - 180px)' }}>
-        {/* (Scroll CSS codes stay the same) */}
         <style>{`
           .scroll-area-viewport::-webkit-scrollbar { width: 8px !important; display: block !important; }
           .scroll-area-viewport::-webkit-scrollbar-track { background: rgba(37, 99, 235, 0.1) !important; border-radius: 4px !important; }
@@ -406,7 +375,7 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
               <div className="flex items-start gap-2">
                 <span style={{ fontSize: '16px' }}>💡</span>
                 <div>
-                  <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '12px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>
+                  <p style={{ fontFamily: 'Tajawal, sans-Gserif', fontSize: '12px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>
                     ملاحظة هامة
                   </p>
                   <p style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px', color: '#78350f', lineHeight: '1.6' }}>

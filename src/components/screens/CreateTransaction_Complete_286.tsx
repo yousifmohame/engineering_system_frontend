@@ -94,6 +94,7 @@ const TABS_CONFIG: TabConfig[] = [
 const CreateTransaction_Complete_286: React.FC = () => {
   const [activeTab, setActiveTab] = useState('286-01');
   
+  
   // --- (5. Remove unused State) ---
   // const [autoAssign, setAutoAssign] = useState(true);
   // const [sendNotifications, setSendNotifications] = useState(true);

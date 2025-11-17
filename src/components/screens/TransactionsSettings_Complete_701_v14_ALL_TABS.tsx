@@ -43,6 +43,7 @@ import { InputWithCopy, TextAreaWithCopy, SelectWithCopy } from '../InputWithCop
 import { EnhancedSwitch } from '../EnhancedSwitch';
 import { toast } from 'sonner@2.0.3';
 import Tab_701_01_TransactionTypes from './tabs/Tab_701_01_TransactionTypes';
+import Tab_701_RequestPurposes from './tabs/Tab_701_RequestPurposes';
 
 // ============================================================
 // واجهات البيانات الشاملة
@@ -240,7 +241,7 @@ const ALL_284_TABS: TabConfig[] = [
 // تابات شاشة 701 - الإعدادات
 const SETTINGS_TABS: TabConfig[] = [
   { id: '701-01', number: '701-01', title: 'الإعدادات الأساسية', icon: Settings },
-  { id: '701-02', number: '701-02', title: 'إعدادات الترقيم', icon: Hash },
+  { id: '701-02', number: '701-02', title: 'إدارة أغراض الطلبات', icon: Hash },
   { id: '701-03', number: '701-03', title: 'المراحل', icon: GitBranch },
   { id: '701-04', number: '701-04', title: 'حالات المعاملات', icon: Activity },
   { id: '701-05', number: '701-05', title: 'الأولويات', icon: Zap },
@@ -2102,6 +2103,11 @@ const TransactionsSettings_Complete_701_v14: React.FC = () => {
       case '701-01':
         // --- (مهم) استدعاء التبويب الحقيقي ---
         return <Tab_701_01_TransactionTypes />;
+
+      case '701-02':
+        // --- (مهم) استدعاء التبويب الحقيقي ---
+        return <Tab_701_RequestPurposes />;
+
       case '701-17':
         return renderTab17_ProgressCalculator();
       case '701-18':

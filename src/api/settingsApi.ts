@@ -30,6 +30,57 @@ export const getClientClassifications = async (): Promise<ClientClassification[]
   }
 };
 
+interface RequestPurposeData {
+  type: 'brief' | 'detailed';
+  name: string;
+  nameEn: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  isActive?: boolean;
+}
+
+/**
+ * جلب جميع أغراض الطلبات (مع فلترة حسب النوع)
+ * GET /api/settings/request-purposes
+ */
+export const getRequestPurposes = async (type: 'brief' | 'detailed') => {
+  const { data } = await api.get('/settings/request-purposes', {
+    params: { type } // (e.g., /api/settings/request-purposes?type=brief)
+  });
+  return data;
+};
+
+/**
+ * إنشاء غرض طلب جديد
+ * POST /api/settings/request-purposes
+ */
+export const createRequestPurpose = async (purposeData: RequestPurposeData) => {
+  const { data } = await api.post('/settings/request-purposes', purposeData);
+  return data;
+};
+
+/**
+ * تعديل غرض طلب موجود
+ * PUT /api/settings/request-purposes/:id
+ */
+export const updateRequestPurpose = async (
+  id: string,
+  updates: Partial<RequestPurposeData> // Partial<> means we can send only the changed fields
+) => {
+  const { data } = await api.put(`/settings/request-purposes/${id}`, updates);
+  return data;
+};
+
+/**
+ * حذف غرض طلب
+ * DELETE /api/settings/request-purposes/:id
+ */
+export const deleteRequestPurpose = async (id: string) => {
+  const { data } = await api.delete(`/settings/request-purposes/${id}`);
+  return data; // (عادة ما يكون الرد فارغاً أو { success: true })
+};
+
 // يمكنك إضافة دوال لتحديث الإعدادات هنا مستقبلاً
 // مثال:
 /*
