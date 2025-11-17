@@ -1,46 +1,51 @@
 /**
- * التاب 286-02 - اختيار نوع المعاملة (v3.0 - متصل بالخلفية)
+ * TAB 286-02 - Transaction Type Selection (v3.0 - Backend Connected)
  * =========================================================
  *
- * المميزات:
- * - [مُفعل] جلب بيانات القوالب (Transaction Types) مباشرة من الـ Backend.
- * - [مُفعل] استخدام useMutation لتحديث المعاملة عند اختيار النوع.
- * - [مُفعل] الاحتفاظ بالواجهة المفصلة (الكروت، التفاصيل، البحث، الفلترة).
- * - [مُفعل] عرض حالات التحميل (Loading) والخطأ (Error) والحالة الأولية (Initial).
+ * Features:
+ * - [Enabled] Fetch Transaction Types data directly from Backend.
+ * - [Enabled] Use useMutation to update transaction when type is selected.
+ * - [Enabled] Keep detailed UI (cards, details, search, filtering).
+ * - [Enabled] Show Loading, Error, and Initial states.
  */
 
 import React, { useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'; //
-import { Badge } from '../ui/badge'; //
-import { Button } from '../ui/button'; //
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'; //
-import { ScrollArea } from '../ui/scroll-area'; //
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { ScrollArea } from '../ui/scroll-area';
 import {
   Target, FileText, Clock, DollarSign, CheckCircle, AlertCircle,
   Users, Building, MapPin, Briefcase, Settings, Calendar, Eye,
   ChevronRight, Search, Filter, X, List, Layers, Shield, Hash,
   TrendingUp, Activity, FileCheck, Paperclip, Info, Loader2
 } from 'lucide-react';
-import CodeDisplay from '../CodeDisplay'; //
-import { InputWithCopy, SelectWithCopy } from '../InputWithCopy'; //
-import { Skeleton } from '../ui/skeleton'; //
+import CodeDisplay from '../CodeDisplay';
+import { InputWithCopy, SelectWithCopy } from '../InputWithCopy';
+import { Skeleton } from '../ui/skeleton';
 
-// --- 1. استيراد دوال الـ API والأنواع ---
+// --- 1. Import API functions and types ---
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // import { toast } from 'sonner';
-import { getFullTransactionTypes, updateTransactionType } from '../../api/transactionApi'; //
+
+// --- ✅ [Modified] ---
+// Imported "updateTransaction" instead of "updateTransactionType"
+// because we want to update the transaction (286), not the type template (701).
+import { getFullTransactionTypes, updateTransaction } from '../../api/transactionApi';
+// --------------------
+
 import { 
   TransactionType, 
   TransactionUpdateData, 
   TransactionTask, 
   TransactionFee, 
   TransactionStage 
-} from '../../types/transactionTypes'; //
-
+} from '../../types/transactionTypes';
 
 interface Props {
   transactionId: string | 'new';
-  onTypeSelected: () => void; // دالة للانتقال للتبويب التالي
+  onTypeSelected: () => void; // Function to navigate to the next tab
 }
 
 const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({ 
@@ -54,8 +59,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
   const [showDetailsId, setShowDetailsId] = useState<string | null>(null);
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
 
-
-  // --- 2. التحقق من الـ ID (قبل جلب البيانات) ---
+  // --- 2. Verify ID (before fetching data) ---
   if (transactionId === 'new') {
     return (
       <Card className="card-element card-rtl">
@@ -70,39 +74,44 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
     );
   }
 
-  // --- 3. جلب البيانات (Read) - (استبدال البيانات التجريبية) ---
+  // --- 3. Fetch data (Read) - (Replace mock data) ---
   const { data: transactionTypes, isLoading, isError } = useQuery<TransactionType[]>({
-    queryKey: ['fullTransactionTypes'], // (جلب البيانات الكاملة)
-    queryFn: getFullTransactionTypes, //
+    queryKey: ['fullTransactionTypes'], // (Fetch full data)
+    queryFn: getFullTransactionTypes,
   });
 
-  // --- 4. عملية الحفظ (Update) ---
+  // --- 4. Update operation ---
   const updateMutation = useMutation({
-    mutationFn: (typeId: string) => updateTransactionType(
+    // --- ✅ [Modified] ---
+    // Changed function to "updateTransaction"
+    // Now it calls (PUT /api/transactions/:id) which is the correct path
+    mutationFn: (typeId: string) => updateTransaction(
       transactionId, 
       { transactionTypeId: typeId } as Partial<TransactionUpdateData>
     ),
+    // --------------------
+
     onSuccess: (updatedData) => {
       // toast.success("تم تحديد نوع المعاملة بنجاح");
-      // تحديث بيانات المعاملة في الـ cache
+      // Update transaction data in cache
       queryClient.setQueryData(['transaction', transactionId], updatedData);
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       
-      // الانتقال للتبويب التالي
+      // Navigate to next tab
       onTypeSelected();
     },
     onError: (error: Error) => {
       // toast.error(`فشل تحديد النوع: ${error.message}`);
-      setSelectedTypeId(null); // إلغاء الاختيار عند الفشل
+      setSelectedTypeId(null); // Cancel selection on failure
     }
   });
 
-  // --- 5. منطق الفلترة (يستخدم البيانات من useQuery) ---
+  // --- 5. Filtering logic (uses data from useQuery) ---
   const filteredTypes = useMemo(() => {
     if (!transactionTypes) return [];
     return transactionTypes.filter(type => {
       const matchesSearch = type.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            (type.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+                          (type.description || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = filterCategory === 'all' || type.category === filterCategory;
       const matchesComplexity = filterComplexity === 'all' || type.complexity === filterComplexity;
       
@@ -110,7 +119,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
     });
   }, [transactionTypes, searchTerm, filterCategory, filterComplexity]);
 
-  // (دوال مساعدة كما هي)
+  // (Helper functions as they are)
   const getComplexityColor = (complexity: string | null | undefined) => {
     switch (complexity) {
       case 'simple': return { bg: '#dcfce7', text: '#065f46', label: 'بسيط' };
@@ -125,9 +134,9 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
     updateMutation.mutate(typeId);
   };
 
-  // --- 6. واجهة المستخدم (Render) ---
+  // --- 6. UI Render ---
 
-  // (حالة التحميل)
+  // (Loading state)
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -140,7 +149,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
     );
   }
 
-  // (حالة الخطأ)
+  // (Error state)
   if (isError) {
     return (
       <Card className="border-destructive">
@@ -152,12 +161,12 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
     );
   }
 
-  // (الحالة الطبيعية)
+  // (Normal state)
   return (
     <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
       <CodeDisplay code="TAB-286-02" position="top-right" />
       
-      {/* الهيدر مع البحث والتصفية */}
+      {/* Header with search and filter */}
       <Card className="card-rtl" style={{ 
         background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
         border: '2px solid #0ea5e9'
@@ -193,7 +202,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
             </Badge>
           </div>
 
-          {/* البحث والفلتر */}
+          {/* Search and filter */}
           <div className="grid grid-cols-3 gap-3">
             <InputWithCopy
               label="بحث"
@@ -245,7 +254,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
       <ScrollArea style={{ height: 'calc(100vh - 280px)' }}>
         <div className="space-y-4 pl-4">
           
-          {/* البطاقات التفاعلية */}
+          {/* Interactive cards */}
           <div className="grid grid-cols-2 gap-4">
             {filteredTypes.map((type) => {
               const complexityColor = getComplexityColor(type.complexity);
@@ -294,7 +303,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {/* المعلومات الأساسية */}
+                    {/* Basic information */}
                     <div className="grid grid-cols-3 gap-2">
                       <div className="p-2" style={{ background: 'rgba(59, 130, 246, 0.1)', borderRadius: '6px' }}>
                         <div className="flex items-center gap-1 mb-1">
@@ -327,7 +336,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                       </div>
                     </div>
 
-                    {/* الأزرار */}
+                    {/* Buttons */}
                     <div className="flex gap-2">
                       <Button
                         onClick={() => setShowDetailsId(isExpanded ? null : type.id)}
@@ -356,11 +365,11 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                       </Button>
                     </div>
 
-                    {/* التفاصيل الموسعة */}
+                    {/* Expanded details */}
                     {isExpanded && (
                       <div className="space-y-3 pt-3" style={{ borderTop: '1px solid #e5e7eb' }}>
                         
-                        {/* المهام */}
+                        {/* Tasks */}
                         {type.tasks && type.tasks.length > 0 && (
                           <div>
                             <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#1f2937', margin: '0 0 8px 0' }}>
@@ -402,8 +411,8 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                             </div>
                           </div>
                         )}
-
-                        {/* المستندات */}
+                        
+                        {/* Documents */}
                         {type.documents && type.documents.length > 0 && (
                           <div>
                             <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#1f2937', margin: '0 0 8px 0' }}>
@@ -426,7 +435,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           </div>
                         )}
 
-                        {/* الجهات */}
+                        {/* Authorities */}
                         {type.authorities && type.authorities.length > 0 && (
                           <div>
                             <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#1f2937', margin: '0 0 8px 0' }}>
@@ -443,7 +452,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           </div>
                         )}
 
-                        {/* الرسوم */}
+                        {/* Fees */}
                         {type.fees && type.fees.length > 0 && (
                           <div>
                             <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#1f2937', margin: '0 0 8px 0' }}>
@@ -471,7 +480,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           </div>
                         )}
 
-                        {/* المراحل */}
+                        {/* Stages */}
                         {type.stages && type.stages.length > 0 && (
                           <div>
                             <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#1f2937', margin: '0 0 8px 0' }}>
@@ -509,7 +518,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           </div>
                         )}
 
-                        {/* التحذيرات */}
+                        {/* Warnings */}
                         {type.warnings && type.warnings.length > 0 && (
                           <div className="p-3" style={{ 
                             background: 'rgba(239, 68, 68, 0.1)', 
@@ -532,7 +541,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           </div>
                         )}
 
-                        {/* الملاحظات */}
+                        {/* Notes */}
                         {type.notes && type.notes.length > 0 && (
                           <div className="p-3" style={{ 
                             background: 'rgba(59, 130, 246, 0.1)', 
@@ -562,7 +571,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
             })}
           </div>
 
-          {/* لا توجد نتائج */}
+          {/* No results */}
           {filteredTypes.length === 0 && (
             <Card className="card-rtl">
               <CardContent className="p-8 text-center">

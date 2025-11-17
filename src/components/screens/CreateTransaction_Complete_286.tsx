@@ -1,13 +1,9 @@
 /**
- * الشاشة 286 - إنشاء معاملة جديدة - v9.0 (متصل بالخلفية)
+ * Screen 286 - Create New Transaction - v9.1 (Fixed Navigation)
  * ===========================================
- * * تحديث v9.0:
- * ✅ إزالة البيانات التجريبية (transactionData) بالكامل.
- * ✅ ربط بـ React Hook Form و Zod لإدارة التبويب الأول.
- * ✅ تطبيق منطق "المعاملة أولاً" عبر useMutation لإنشاء مسودة.
- * ✅ إدارة حالة transactionId ('new' أو ID حقيقي).
- * ✅ تمرير الـ ID للتبويبات الفرعية وتفعيلها عند الإنشاء.
- * ✅ تعطيل التبويبات الجانبية قبل إنشاء المعاملة.
+ * * Update v9.1:
+ * ✅ Added "handlePurposeSave" function to navigate to the next tab.
+ * ✅ Passed "onSave" to tab "286-03".
  */
 
 import React, { useState } from 'react';
@@ -17,11 +13,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 // import { toast } from 'sonner';
 
-// --- (1. استيراد دوال الـ API والأنواع الصحيحة) ---
+// --- (1. Import correct API functions and types) ---
 import { createTransaction } from '../../api/transactionApi';
 import { Transaction, NewTransactionData } from '../../types/transactionTypes';
 
-// --- (2. إزالة imports واجهات المستخدم غير المستخدمة هنا) ---
+// --- (2. Remove unused UI component imports here) ---
 import {
   FileText, Plus, CheckCircle, Users, Calendar,
   Paperclip, Target, AlertCircle, Settings,
@@ -31,7 +27,7 @@ import {
 import CodeDisplay from '../CodeDisplay';
 import UnifiedTabsSidebar, { TabConfig } from '../UnifiedTabsSidebar';
 
-// --- (3. استيراد جميع التبويبات الفرعية) ---
+// --- (3. Import all sub-tabs) ---
 import Tab_286_01_BasicInfo_UltraDense from './Tab_286_01_BasicInfo_UltraDense';
 import Tab_286_02_TransactionDetails_Complete from './Tab_286_02_TransactionDetails_Complete';
 import {
@@ -57,19 +53,19 @@ import Tab_Components_Generic_Complete from './Tab_Components_Generic_Complete';
 import Tab_Boundaries_Neighbors_Complete from './Tab_Boundaries_Neighbors_Complete';
 import Tab_LandArea_Complete from './Tab_LandArea_Complete';
 
-// --- (4. تعريف المخطط والأنواع للفورم الأساسي) ---
+// --- (4. Define schema and types for basic form) ---
 const basicInfoSchema = z.object({
   title: z.string().min(1, "العنوان مطلوب"),
   clientId: z.string().min(1, "يجب اختيار العميل"),
-  type: z.string().optional(), // سيحمل transactionTypeId
+  type: z.string().optional(), // Will carry transactionTypeId
   priority: z.string().default('medium'),
   description: z.string().optional(),
 });
 
-// استخدام النوع الذي عرفناه في transactionTypes.ts
+// Use the type we defined in transactionTypes.ts
 type BasicInfoFormData = NewTransactionData;
 
-// (TABS_CONFIG تبقى كما هي)
+// (TABS_CONFIG stays the same)
 const TABS_CONFIG: TabConfig[] = [
   { id: '286-01', number: '286-01', title: 'معلومات أساسية', icon: FileText },
   { id: '286-02', number: '286-02', title: 'تفاصيل المعاملة', icon: Target },
@@ -98,7 +94,7 @@ const TABS_CONFIG: TabConfig[] = [
 const CreateTransaction_Complete_286: React.FC = () => {
   const [activeTab, setActiveTab] = useState('286-01');
   
-  // --- (5. إزالة State غير المستخدم) ---
+  // --- (5. Remove unused State) ---
   // const [autoAssign, setAutoAssign] = useState(true);
   // const [sendNotifications, setSendNotifications] = useState(true);
 
@@ -116,30 +112,37 @@ const CreateTransaction_Complete_286: React.FC = () => {
     },
   });
 
-  // --- (6. تحديث Mutation لاستخدام الدالة الصحيحة) ---
+  // --- (6. Update Mutation to use correct function) ---
   const createTransactionMutation = useMutation({
     mutationFn: (data: BasicInfoFormData) => createTransaction(data),
     onSuccess: (createdTransaction: Transaction) => {
       setTransactionId(createdTransaction.id);
-      // toast.success('تم إنشاء المعاملة (مسودة) بنجاح!');
-      // --- 3. (مُعدل) الانتقال إلى التبويب 2 لاختيار النوع ---
+      // toast.success('Transaction (draft) created successfully!');
+      // --- 3. (Modified) Navigate to tab 2 to select type ---
       setActiveTab('286-02'); 
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
     onError: (error: Error) => {
-      // toast.error(`فشل إنشاء المعاملة: ${error.message}`);
+      // toast.error(`Failed to create transaction: ${error.message}`);
       console.error("Mutation Error:", error);
     },
   });
 
   const onSubmitBasicInfo = (data: BasicInfoFormData) => {
-    console.log('بيانات الفورم الأساسي:', data);
+    console.log('Basic form data:', data);
     createTransactionMutation.mutate(data);
   };
 
-  // --- (7. إزالة دالة getStatusBadge غير المستخدمة) ---
+  // --- (7. Remove unused getStatusBadge function) ---
 
-  // --- (8. تنظيف renderTabContent بالكامل) ---
+  // --- ✅ [Fix] Add function to navigate after saving ---
+  const handlePurposeSave = () => {
+    console.log("CreateTransaction_Complete_286: Purpose saved. Moving to 286-04");
+    setActiveTab('286-04'); // <-- ينتقل إلى التبويب التالي
+  };
+  // --------------------------------------------------
+
+  // --- (8. Completely clean renderTabContent) ---
   const renderTabContent = () => {
     const isDisabled = transactionId === 'new';
 
@@ -156,16 +159,22 @@ const CreateTransaction_Complete_286: React.FC = () => {
         return (
           <Tab_286_02_TransactionDetails_Complete
             transactionId={transactionId}
-            // (تمرير دالة للانتقال للتبويب التالي عند الاختيار)
+            // (Pass function to navigate to next tab on selection)
             onTypeSelected={() => setActiveTab('286-03')}
           />
         );
       
       case '286-03':
-        return <Tab_RequestPurpose_Brief_Complete transactionId={transactionId} readOnly={isDisabled} />;
+        return (
+          <Tab_RequestPurpose_Brief_Complete 
+            transactionId={transactionId} 
+            readOnly={isDisabled} 
+            onSave={handlePurposeSave} // <-- ✅ [Fix] Pass function here
+          />
+        );
       
       case '286-04':
-        return <Tab_RequestPurpose_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
+        return <Tab_RequestPurpose_Detailed_Complete transactionId={transactionId} />;
       
       case '286-05':
         return <Tab_286_05_Tasks_UltraDense transactionId={transactionId} />;
@@ -226,9 +235,9 @@ const CreateTransaction_Complete_286: React.FC = () => {
           <div className="flex items-center justify-center h-96">
             <div className="text-center">
               <Activity className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <p className="text-lg text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>محتوى التبويب قيد التطوير</p>
+              <p className="text-lg text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>Tab content in development</p>
               <p className="text-sm text-gray-500 mt-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                التاب: {activeTab}
+                Tab: {activeTab}
               </p>
             </div>
           </div>
@@ -240,7 +249,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
     <div className="w-full h-full" dir="rtl">
       <CodeDisplay code="SCR-286" position="top-right" />
       
-      {/* هيدر الشاشة v4.2.2 (يبقى كما هو) */}
+      {/* Screen header v4.2.2 (stays the same) */}
       <div
         style={{
           position: 'sticky',
@@ -369,22 +378,22 @@ const CreateTransaction_Complete_286: React.FC = () => {
         </div>
       </div>
 
-      {/* المحتوى */}
+      {/* Content */}
       <div className="flex" style={{ gap: '4px', paddingTop: '16px' }}>
         <UnifiedTabsSidebar
           tabs={TABS_CONFIG}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          // --- (10. إضافة منطق تعطيل التبويبات) ---
+          // --- (10. Add tab disabling logic) ---
           disabledTabs={TABS_CONFIG
             .map(t => t.id)
             .filter(id => id !== '286-01' && transactionId === 'new')}
         />
         
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 220px)', paddingLeft: '16px', paddingRight: '16px' }}>
-          {/* هذا الفورم يغلف جميع التبويبات.
-            عندما يتم الضغط على الزر "submit" داخل (Tab_286_01)، 
-            سيتم تفعيل دالة onSubmitBasicInfo
+          {/* This form wraps all tabs.
+            When the submit button inside (Tab_286_01) is pressed, 
+            the onSubmitBasicInfo function will be triggered
           */}
           <form onSubmit={form.handleSubmit(onSubmitBasicInfo)}>
             {renderTabContent()}

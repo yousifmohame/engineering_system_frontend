@@ -42,10 +42,7 @@ const BuildingSafety_Complete_915 = lazy(() => import('./screens/BuildingSafety_
 const OrganizationalPlans_Complete_918_v8 = lazy(() => import('./screens/OrganizationalPlans_Complete_918_v8'));
 
 // 700-799: المعاملات والتقارير
-const MainTransactionsScreen_Complete_284_v9 = lazy(() => import('./screens/MainTransactionsScreen_Complete_284_v9'));
-const MainTransactionsScreen_Complete_284_v10 = lazy(() => import('./screens/MainTransactionsScreen_Complete_284_v10'));
-const TransactionsSettings_Complete_701_v11 = lazy(() => import('./screens/TransactionsSettings_Complete_701_v11'));
-const TransactionsSettings_Complete_701_v12_ALL_TABS = lazy(() => import('./screens/TransactionsSettings_Complete_701_v12_ALL_TABS'));
+const MainTransactionsScreen_Complete_284_v10 = lazy(() => import('./screens/MainTransactionsScreen_Complete_284'));
 const TransactionsSettings_Complete_701_v14_ALL_TABS = lazy(() => import('./screens/TransactionsSettings_Complete_701_v14_ALL_TABS'));
 const ContractSettings_Advanced_777_v2 = lazy(() => import('./screens/ContractSettings_Advanced_777_v2'));
 const ContractSettings_Advanced_777_v3 = lazy(() => import('./screens/ContractSettings_Advanced_777_v3_WITH_CONTRACT_TYPES'));

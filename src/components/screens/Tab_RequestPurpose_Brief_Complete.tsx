@@ -1,15 +1,12 @@
 /**
- * التاب: الغرض المختصر من الطلب
- * ====================================
- * 
- * يُستخدم في:
- * - الشاشة 286: إنشاء معاملة جديدة
- * - الشاشة 284: معالجة المعاملات
- * 
- * الوظيفة:
- * - اختيار متعدد من 6 أغراض رئيسية
- * - إمكانية اختيار أكثر من غرض واحد
- * - حفظ تلقائي في localStorage
+ * TAB: Brief Request Purpose (v4.0 - Server Connected)
+ * =========================================================
+ *
+ * Function:
+ * - [Enabled] Use mock data (DEFAULT_PURPOSES) as default template.
+ * - [Enabled] Fetch transaction data (transactionId) from server using useQuery.
+ * - [Enabled] Initialize state (purposes) from saved data (transaction.requestPurposes) if exists.
+ * - [Enabled] Save changes (purposes) to server using useMutation (instead of localStorage).
  */
 
 import React, { useState, useEffect } from 'react';
@@ -17,11 +14,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
-import { CheckSquare, Square, Save, RefreshCw } from 'lucide-react';
+import { CheckSquare, Square, Save, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import { EnhancedSwitch } from '../EnhancedSwitch';
 import CodeDisplay from '../CodeDisplay';
+import { Skeleton } from '../ui/skeleton';
 
-// ==================== الواجهات ====================
+// --- 1. Import API functions and types ---
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+// import { toast } from 'sonner';
+
+// --- [Modified] ---
+// Now we need to fetch and update the transaction
+import { getTransactionById, updateTransaction } from '../../api/transactionApi'; 
+import { Transaction, TransactionUpdateData } from '../../types/transactionTypes'; 
+// --------------------
+
+
+// ==================== Interfaces ====================
 
 interface BriefPurpose {
   id: string;
@@ -39,7 +48,7 @@ interface TabProps {
   readOnly?: boolean;
 }
 
-// ==================== البيانات الافتراضية ====================
+// ==================== Default Data (Stays as Template) ====================
 
 const DEFAULT_PURPOSES: BriefPurpose[] = [
   {
@@ -98,42 +107,71 @@ const DEFAULT_PURPOSES: BriefPurpose[] = [
   }
 ];
 
-// ==================== المكون الرئيسي ====================
+// ==================== Main Component ====================
 
 const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
   transactionId = 'NEW',
   onSave,
   readOnly = false
 }) => {
+  const queryClient = useQueryClient();
   const [purposes, setPurposes] = useState<BriefPurpose[]>(DEFAULT_PURPOSES);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // تحميل البيانات من localStorage
-  useEffect(() => {
-    const savedData = localStorage.getItem(`request_purpose_brief_${transactionId}`);
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData);
-        setPurposes(parsed);
-      } catch (error) {
-        console.error('Error loading saved purposes:', error);
-      }
-    }
-  }, [transactionId]);
+  // --- [New] Fetch current transaction data ---
+  const { data: transaction, isLoading: isLoadingTransaction, isError } = useQuery<Transaction>({
+    queryKey: ['transaction', transactionId],
+    queryFn: () => getTransactionById(transactionId),
+    enabled: transactionId !== 'NEW', // Don't try to fetch if it's a new transaction
+  });
 
-  // حفظ البيانات
-  const handleSave = () => {
-    localStorage.setItem(`request_purpose_brief_${transactionId}`, JSON.stringify(purposes));
-    setHasChanges(false);
-    if (onSave) {
-      onSave(purposes);
+  // --- [Modified] Load data from server (instead of localStorage) ---
+  useEffect(() => {
+    // If transaction fetching succeeds and contains purpose data
+    if (transaction && transaction.requestPurposes) {
+      // (requestPurposes) is stored as Json in server
+      setPurposes(transaction.requestPurposes as BriefPurpose[]);
+    } else {
+      // If it's a new transaction or has no data, use default
+      setPurposes(DEFAULT_PURPOSES);
     }
-    alert('تم حفظ الأغراض المختصرة بنجاح!');
+  }, [transaction]); // Runs when transaction data loads
+
+  // --- [New] Save data to server ---
+  const updateMutation = useMutation({
+    mutationFn: (updatedPurposes: BriefPurpose[]) => 
+      updateTransaction(transactionId, { requestPurposes: updatedPurposes } as Partial<TransactionUpdateData>),
+    
+    onSuccess: (updatedData) => {
+      // (updatedData is the fully updated transaction)
+      // Update transaction data in cache
+      queryClient.setQueryData(['transaction', transactionId], updatedData);
+      queryClient.invalidateQueries({ queryKey: ['transactions'] }); // Update main list
+      
+      setHasChanges(false);
+      // toast.success("Purposes saved successfully");
+      
+
+      if (onSave) {
+        onSave(updatedData.requestPurposes as BriefPurpose[]);
+      }
+    },
+    onError: (error: Error) => {
+      // toast.error(`Save failed: ${error.message}`);
+      alert(`Save failed: ${error.message}`);
+    }
+  });
+
+
+  // --- [Modified] Save data (calls useMutation) ---
+  const handleSave = () => {
+    // Send updated purposes array to server
+    updateMutation.mutate(purposes);
   };
 
-  // تبديل اختيار غرض
+  // Toggle purpose selection (stays the same)
   const togglePurpose = (id: string) => {
-    if (readOnly) return;
+    if (readOnly || updateMutation.isPending) return;
     
     setPurposes(purposes.map(p => 
       p.id === id ? { ...p, isSelected: !p.isSelected } : p
@@ -141,43 +179,74 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
     setHasChanges(true);
   };
 
-  // إعادة تعيين
+  // Reset (stays the same)
   const handleReset = () => {
-    if (confirm('هل أنت متأكد من إعادة تعيين جميع الأغراض؟')) {
+    if (readOnly || updateMutation.isPending) return;
+    if (confirm('Are you sure you want to reset all purposes?')) {
       setPurposes(DEFAULT_PURPOSES);
       setHasChanges(true);
     }
   };
 
-  // حساب الأغراض المختارة
+  // Calculate selected purposes (stays the same)
   const selectedCount = purposes.filter(p => p.isSelected).length;
 
+  // --- [New] Handle loading and error states ---
+  if (transactionId === 'NEW') {
+    return (
+      <Card className="card-element card-rtl">
+        <CardContent className="p-6 flex flex-col items-center justify-center text-center h-60">
+          <AlertCircle className="h-12 w-12 text-yellow-500 mb-4" />
+          <h3 className="text-lg">الخطوة 3: الغرض من الطلب</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            يجب حفظ "المعلومات الأساسية" و "نوع المعاملة" أولاً.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoadingTransaction) {
+    return (
+      <div className="p-4 space-y-4">
+        <Skeleton className="h-16 w-full" />
+        <div className="grid grid-cols-2 gap-3">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-destructive">
+        <CardContent className="p-6 text-center">
+          <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-2" />
+          <h3 className="text-lg font-semibold text-destructive">فشل تحميل بيانات المعاملة</h3>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // --- UI (stays the same, with minor save button modification) ---
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: '100%' }}>
       <CodeDisplay code="TAB-PURPOSE-BRIEF" position="top-right" />
       
       <ScrollArea style={{ height: 'calc(100vh - 180px)' }}>
-        {/* سكرول ظاهر دائماً */}
+        {/* (Scroll CSS codes stay the same) */}
         <style>{`
-          .scroll-area-viewport::-webkit-scrollbar {
-            width: 8px !important;
-            display: block !important;
-          }
-          .scroll-area-viewport::-webkit-scrollbar-track {
-            background: rgba(37, 99, 235, 0.1) !important;
-            border-radius: 4px !important;
-          }
-          .scroll-area-viewport::-webkit-scrollbar-thumb {
-            background: #2563eb !important;
-            border-radius: 4px !important;
-          }
-          .scroll-area-viewport::-webkit-scrollbar-thumb:hover {
-            background: #1e40af !important;
-          }
+          .scroll-area-viewport::-webkit-scrollbar { width: 8px !important; display: block !important; }
+          .scroll-area-viewport::-webkit-scrollbar-track { background: rgba(37, 99, 235, 0.1) !important; border-radius: 4px !important; }
+          .scroll-area-viewport::-webkit-scrollbar-thumb { background: #2563eb !important; border-radius: 4px !important; }
+          .scroll-area-viewport::-webkit-scrollbar-thumb:hover { background: #1e40af !important; }
         `}</style>
         
         <div className="p-4 space-y-4">
-          {/* شريط الإحصائيات والإجراءات */}
+          {/* Stats and actions bar */}
           <Card className="card-rtl">
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
@@ -203,7 +272,7 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  {hasChanges && (
+                  {hasChanges && !updateMutation.isPending && (
                     <Badge style={{ background: '#f59e0b', color: '#fff' }}>
                       تغييرات غير محفوظة
                     </Badge>
@@ -211,13 +280,27 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
                   
                   {!readOnly && (
                     <>
-                      <Button onClick={handleReset} variant="outline" size="sm">
+                      <Button 
+                        onClick={handleReset} 
+                        variant="outline" 
+                        size="sm"
+                        disabled={updateMutation.isPending}
+                      >
                         <RefreshCw className="h-4 w-4 ml-1" />
                         إعادة تعيين
                       </Button>
-                      <Button onClick={handleSave} size="sm" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
-                        <Save className="h-4 w-4 ml-1" />
-                        حفظ
+                      <Button 
+                        onClick={handleSave} 
+                        size="sm" 
+                        style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                        disabled={!hasChanges || updateMutation.isPending}
+                      >
+                        {updateMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 ml-1 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4 ml-1" />
+                        )}
+                        {updateMutation.isPending ? 'جاري الحفظ...' : 'حفظ'}
                       </Button>
                     </>
                   )}
@@ -226,7 +309,7 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
             </CardContent>
           </Card>
 
-          {/* قائمة الأغراض */}
+          {/* Purposes list */}
           <div className="grid grid-cols-2 gap-3">
             {purposes.map((purpose) => (
               <Card
@@ -238,8 +321,8 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
                   background: purpose.isSelected 
                     ? `linear-gradient(135deg, ${purpose.color}15 0%, ${purpose.color}05 100%)` 
                     : '#ffffff',
-                  opacity: readOnly && !purpose.isSelected ? 0.5 : 1,
-                  cursor: readOnly ? 'default' : 'pointer'
+                  opacity: (readOnly || updateMutation.isPending) && !purpose.isSelected ? 0.5 : 1,
+                  cursor: (readOnly || updateMutation.isPending) ? 'not-allowed' : 'pointer'
                 }}
               >
                 <CardContent className="p-4">
@@ -288,7 +371,7 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
             ))}
           </div>
 
-          {/* ملخص الأغراض المختارة */}
+          {/* Selected purposes summary */}
           {selectedCount > 0 && (
             <Card className="card-rtl" style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)' }}>
               <CardHeader>
@@ -317,7 +400,7 @@ const Tab_RequestPurpose_Brief_Complete: React.FC<TabProps> = ({
             </Card>
           )}
 
-          {/* معلومات إضافية */}
+          {/* Additional info */}
           <Card className="card-rtl" style={{ background: '#fef3c7', borderColor: '#f59e0b' }}>
             <CardContent className="p-3">
               <div className="flex items-start gap-2">

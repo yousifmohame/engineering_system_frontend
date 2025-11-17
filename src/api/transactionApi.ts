@@ -4,6 +4,7 @@ import {
   NewTransactionData,
   TransactionType,
   SelectOption,
+  TransactionUpdateData,
   // (استيراد الأنواع الفرعية)
   TransactionTask,
   TransactionFee,
@@ -99,6 +100,33 @@ export const updateTransactionType = async (id: string, typeData: Partial<Transa
   } catch (error: any) {
     console.error('Error updating transaction type:', error);
     throw new Error(error.response?.data?.message || 'فشل في تعديل نوع المعاملة');
+  }
+};
+
+
+export const updateTransaction = async (
+  id: string, 
+  data: Partial<TransactionUpdateData>
+): Promise<Transaction> => {
+  try {
+    // يستدعي المسار الصحيح في الخادم
+    // (PUT /api/transactions/:id)
+    const response = await api.put<Transaction>(`/transactions/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    // أعد إرسال الخطأ ليتم التقاطه بواسطة useMutation
+    throw error;
+  }
+};
+
+export const getTransactionById = async (id: string): Promise<Transaction> => {
+  try {
+    const response = await api.get<Transaction>(`/transactions/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching transaction by ID:', error);
+    throw error;
   }
 };
 

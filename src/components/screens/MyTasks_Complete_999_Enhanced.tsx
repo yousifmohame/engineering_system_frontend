@@ -1,16 +1,23 @@
 /**
- * الشاشة 999 - مهامي الشخصية v8.1 - محسّنة ومكثفة
+ * My Tasks Screen - Complete Task Management v9.1
  * ====================================================
- * 
- * نسخة محسّنة ومكثفة مع:
- * - تكثيف المحتوى واستغلال المساحة
- * - تصغير أحجام البطاقات
- * - تصغير منطقة البحث
- * - قائمة منسدلة لاختيار المهام
- * - تحسينات عامة في الأداء والواجهة
+ *
+ * Update v9.1:
+ * - [New] Added useMutation for updating task status and progress.
+ * - [New] Converted Dialog to edit form.
+ * - [New] Added useState to track edits (newStatus, newProgress).
+ * - [Enabled] Fetching tasks from server (useQuery).
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+// import { toast } from 'sonner';
+
+// --- 1. Import API functions and types ---
+import { getMyTasks, updateTask } from '../../api/taskApi';
+import { Task, TaskStatus, TaskPriority } from '../../types/taskTypes'; // (Ensure TaskPriority exists)
+
+// --- 2. Import components ---
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -24,254 +31,127 @@ import {
   Search, Filter, Download, RefreshCw, Eye, Edit,
   TrendingUp, Target, Activity, Bell, ChevronRight,
   PlayCircle, Archive, Star, Flag, MessageSquare,
-  Paperclip, BarChart3, ClipboardCheck, DollarSign, Zap
+  Paperclip, BarChart3, ClipboardCheck, DollarSign, Zap, Loader2, Save // <-- Added
 } from 'lucide-react';
 import { InputWithCopy } from '../InputWithCopy';
-
-// أنواع حالات المهام
-type TaskStatus = 'unassigned' | 'processing' | 'completed' | 'cancelled' | 'overdue' | 'pending';
-
-interface Task {
-  id: string;
-  taskNumber: string;
-  title: string;
-  description: string;
-  transactionId: string;
-  transactionNumber: string;
-  assignedBy: string;
-  assignedDate: string;
-  dueDate: string;
-  receivedDate?: string;
-  completedDate?: string;
-  status: TaskStatus;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  progress: number;
-  category: string;
-  notes?: string;
-  attachments?: number;
-  comments?: number;
-  fees?: {
-    total: number;
-    paid: number;
-    paymentStatus: 'paid' | 'partial' | 'unpaid';
-    paymentPercentage: number;
-  };
-}
-
-// بيانات تجريبية للمهام
-const SAMPLE_TASKS: Task[] = [
-  {
-    id: 'TSK-001',
-    taskNumber: 'TSK-2025-001',
-    title: 'مراجعة مخططات المشروع السكني',
-    description: 'مراجعة شاملة للمخططات الهندسية والتأكد من مطابقتها للمواصفات',
-    transactionId: 'TXN-2025-156',
-    transactionNumber: '2025/156',
-    assignedBy: 'م. أحمد السعيد',
-    assignedDate: '2025-01-15',
-    dueDate: '2025-01-25',
-    receivedDate: '2025-01-16',
-    status: 'processing',
-    priority: 'high',
-    progress: 65,
-    category: 'مراجعة فنية',
-    attachments: 5,
-    comments: 3,
-    fees: {
-      total: 15000,
-      paid: 10000,
-      paymentStatus: 'partial',
-      paymentPercentage: 67
-    }
-  },
-  {
-    id: 'TSK-002',
-    taskNumber: 'TSK-2025-002',
-    title: 'إعداد تقرير الموقع',
-    description: 'إعداد تقرير تفصيلي عن حالة الموقع',
-    transactionId: 'TXN-2025-157',
-    transactionNumber: '2025/157',
-    assignedBy: 'م. خالد العمري',
-    assignedDate: '2025-01-18',
-    dueDate: '2025-01-22',
-    status: 'unassigned',
-    priority: 'urgent',
-    progress: 0,
-    category: 'تقارير',
-    attachments: 2,
-    fees: {
-      total: 8000,
-      paid: 0,
-      paymentStatus: 'unpaid',
-      paymentPercentage: 0
-    }
-  },
-  {
-    id: 'TSK-003',
-    taskNumber: 'TSK-2025-003',
-    title: 'موافقة على تعديلات المخطط',
-    description: 'مراجعة والموافقة على التعديلات المقترحة',
-    transactionId: 'TXN-2025-155',
-    transactionNumber: '2025/155',
-    assignedBy: 'م. فهد الدوسري',
-    assignedDate: '2025-01-17',
-    dueDate: '2025-01-20',
-    receivedDate: '2025-01-17',
-    status: 'processing',
-    priority: 'medium',
-    progress: 40,
-    category: 'موافقات',
-    comments: 5,
-    fees: {
-      total: 12000,
-      paid: 4800,
-      paymentStatus: 'partial',
-      paymentPercentage: 40
-    }
-  },
-  {
-    id: 'TSK-004',
-    taskNumber: 'TSK-2025-004',
-    title: 'استلام المستندات الأصلية',
-    description: 'استلام ومراجعة المستندات الأصلية من العميل',
-    transactionId: 'TXN-2025-158',
-    transactionNumber: '2025/158',
-    assignedBy: 'م. سعود القحطاني',
-    assignedDate: '2025-01-14',
-    dueDate: '2025-01-18',
-    status: 'overdue',
-    priority: 'urgent',
-    progress: 30,
-    category: 'مستندات',
-    attachments: 1,
-    fees: {
-      total: 20000,
-      paid: 5000,
-      paymentStatus: 'partial',
-      paymentPercentage: 25
-    }
-  },
-  {
-    id: 'TSK-005',
-    taskNumber: 'TSK-2025-005',
-    title: 'مراجعة الحسابات المالية',
-    description: 'التحقق من الحسابات والفواتير',
-    transactionId: 'TXN-2025-150',
-    transactionNumber: '2025/150',
-    assignedBy: 'م. عبدالله الزهراني',
-    assignedDate: '2025-01-10',
-    dueDate: '2025-01-15',
-    receivedDate: '2025-01-11',
-    completedDate: '2025-01-14',
-    status: 'completed',
-    priority: 'low',
-    progress: 100,
-    category: 'مالية',
-    fees: {
-      total: 10000,
-      paid: 10000,
-      paymentStatus: 'paid',
-      paymentPercentage: 100
-    }
-  },
-  {
-    id: 'TSK-006',
-    taskNumber: 'TSK-2025-006',
-    title: 'إعداد جدول الكميات',
-    description: 'إعداد جدول كميات تفصيلي للمشروع',
-    transactionId: 'TXN-2025-159',
-    transactionNumber: '2025/159',
-    assignedBy: 'م. محمد الغامدي',
-    assignedDate: '2025-01-19',
-    dueDate: '2025-01-26',
-    receivedDate: '2025-01-19',
-    status: 'processing',
-    priority: 'high',
-    progress: 20,
-    category: 'فنية',
-    attachments: 3,
-    comments: 2,
-    fees: {
-      total: 18000,
-      paid: 9000,
-      paymentStatus: 'partial',
-      paymentPercentage: 50
-    }
-  }
-];
+import { Skeleton } from '../ui/skeleton';
+import { Label } from '../ui/label';
+import { Input } from '../ui/input'; // <-- Added
+import { Slider } from '../ui/slider'; // <-- Added
+import { format } from 'date-fns'; // Add this import for date formatting
+import { ar } from 'date-fns/locale'; // Import Arabic locale if needed
 
 const MyTasks_Complete_999_Enhanced: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('processing');
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<TaskStatus | 'all'>('processing');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterPriority, setFilterPriority] = useState<TaskPriority | 'all'>('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [showTaskDialog, setShowTaskDialog] = useState(false);
 
-  // إحصائيات المهام
+  // --- [New] States for edit data inside Dialog ---
+  const [newStatus, setNewStatus] = useState<TaskStatus>('pending');
+  const [newProgress, setNewProgress] = useState<number>(0);
+  // ---------------------------------------------------
+
+  const { data: tasksData, isLoading, isError, isRefetching } = useQuery<Task[]>({
+    queryKey: ['myTasks'],
+    queryFn: getMyTasks,
+  });
+
+  const tasks = tasksData || [];
+
+  // --- [New] Update Mutation ---
+  const updateTaskMutation = useMutation({
+    mutationFn: (data: { id: string; status: TaskStatus; progress: number }) => 
+      updateTask(data.id, { status: data.status, progress: data.progress }),
+    
+    onSuccess: (updatedTask) => {
+      // toast.success(`Task updated: ${updatedTask.taskNumber}`);
+      
+      // Update cache immediately
+      queryClient.setQueryData(['myTasks'], (oldData: Task[] | undefined) => {
+        return oldData ? oldData.map(task => 
+          task.id === updatedTask.id ? updatedTask : task
+        ) : [];
+      });
+      
+      setShowTaskDialog(false); // Close dialog
+    },
+    onError: (error: Error) => {
+      // toast.error(`Update failed: ${error.message}`);
+    }
+  });
+  // ---------------------------------------------
+
+  // (useEffect to populate edit data when Dialog opens)
+  useEffect(() => {
+    if (selectedTask) {
+      setNewStatus(selectedTask.status);
+      setNewProgress(selectedTask.progress || 0);
+    }
+  }, [selectedTask]);
+
+  // (Task statistics - remains unchanged)
   const statistics = useMemo(() => {
-    const totalFees = SAMPLE_TASKS.reduce((sum, task) => sum + (task.fees?.total || 0), 0);
-    const paidFees = SAMPLE_TASKS.reduce((sum, task) => sum + (task.fees?.paid || 0), 0);
+    const validTasks = tasks || [];
+    const totalFees = validTasks.reduce((sum, task) => sum + (task.fees?.total || 0), 0);
+    const paidFees = validTasks.reduce((sum, task) => sum + (task.fees?.paid || 0), 0);
     const unpaidFees = totalFees - paidFees;
     const paidPercentage = totalFees > 0 ? Math.round((paidFees / totalFees) * 100) : 0;
 
     return {
-      processing: SAMPLE_TASKS.filter(t => t.status === 'processing').length,
-      unassigned: SAMPLE_TASKS.filter(t => t.status === 'unassigned').length,
-      completed: SAMPLE_TASKS.filter(t => t.status === 'completed').length,
-      overdue: SAMPLE_TASKS.filter(t => t.status === 'overdue').length,
-      total: SAMPLE_TASKS.length,
-      highPriority: SAMPLE_TASKS.filter(t => t.priority === 'high' || t.priority === 'urgent').length,
+      processing: validTasks.filter(t => t.status === 'processing').length,
+      unassigned: validTasks.filter(t => t.status === 'unassigned' || t.status === 'not-received').length,
+      completed: validTasks.filter(t => t.status === 'completed').length,
+      overdue: validTasks.filter(t => t.status === 'overdue').length,
+      total: validTasks.length,
+      highPriority: validTasks.filter(t => t.priority === 'high' || t.priority === 'urgent').length,
       totalFees,
       paidFees,
       unpaidFees,
       paidPercentage
     };
-  }, []);
+  }, [tasks]);
 
-  // فلترة المهام
+  // (Filter tasks - remains unchanged)
   const filteredTasks = useMemo(() => {
-    let tasks = SAMPLE_TASKS;
-
+    let filtered = tasks || [];
     if (activeTab !== 'all') {
-      tasks = tasks.filter(t => t.status === activeTab);
+      filtered = filtered.filter(t => t.status === activeTab);
     }
-
     if (searchQuery) {
-      tasks = tasks.filter(t =>
+      filtered = filtered.filter(t =>
         t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.taskNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.transactionNumber.toLowerCase().includes(searchQuery.toLowerCase())
+        (t.taskNumber && t.taskNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (t.transactionNumber && t.transactionNumber.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
-
     if (filterPriority !== 'all') {
-      tasks = tasks.filter(t => t.priority === filterPriority);
+      filtered = filtered.filter(t => t.priority === filterPriority);
     }
-
     if (filterCategory !== 'all') {
-      tasks = tasks.filter(t => t.category === filterCategory);
+      filtered = filtered.filter(t => t.category === filterCategory);
     }
+    return filtered;
+  }, [tasks, activeTab, searchQuery, filterPriority, filterCategory]);
 
-    return tasks;
-  }, [activeTab, searchQuery, filterPriority, filterCategory]);
-
-  // دالة لعرض المهمة المحددة من القائمة المنسدلة
+  // (Helper functions - remains unchanged)
   const handleTaskSelect = (taskId: string) => {
     setSelectedTaskId(taskId);
-    const task = SAMPLE_TASKS.find(t => t.taskNumber === taskId);
+    const task = tasks.find(t => t.taskNumber === taskId);
     if (task) {
       setSelectedTask(task);
       setShowTaskDialog(true);
     }
   };
 
-  // ألوان الحالات
   const getStatusColor = (status: TaskStatus) => {
     switch (status) {
-      case 'processing': return 'bg-blue-100 text-blue-700';
-      case 'unassigned': return 'bg-yellow-100 text-yellow-700';
+      case 'processing': case 'in-progress': return 'bg-blue-100 text-blue-700';
+      case 'unassigned': case 'not-received': return 'bg-yellow-100 text-yellow-700';
       case 'completed': return 'bg-green-100 text-green-700';
       case 'overdue': return 'bg-red-100 text-red-700';
       case 'cancelled': return 'bg-gray-100 text-gray-700';
@@ -281,12 +161,12 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
 
   const getStatusText = (status: TaskStatus) => {
     switch (status) {
-      case 'processing': return 'قيد المعالجة';
-      case 'unassigned': return 'غير مستلمة';
-      case 'completed': return 'مكتملة';
-      case 'overdue': return 'متأخرة';
-      case 'cancelled': return 'ملغاة';
-      default: return 'معلقة';
+      case 'processing': case 'in-progress': return 'Processing';
+      case 'unassigned': case 'not-received': return 'Not Received';
+      case 'completed': return 'Completed';
+      case 'overdue': return 'Overdue';
+      case 'cancelled': return 'Cancelled';
+      default: return 'Pending';
     }
   };
 
@@ -302,11 +182,11 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
 
   const getPriorityText = (priority: string) => {
     switch (priority) {
-      case 'urgent': return 'عاجل';
-      case 'high': return 'عالية';
-      case 'medium': return 'متوسطة';
-      case 'low': return 'منخفضة';
-      default: return 'عادية';
+      case 'urgent': return 'Urgent';
+      case 'high': return 'High';
+      case 'medium': return 'Medium';
+      case 'low': return 'Low';
+      default: return 'Normal';
     }
   };
 
@@ -321,42 +201,52 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
 
   const getPaymentStatusText = (status: 'paid' | 'partial' | 'unpaid') => {
     switch (status) {
-      case 'paid': return 'مسددة';
-      case 'partial': return 'جزئي';
-      case 'unpaid': return 'غير مسددة';
-      default: return 'غير محدد';
+      case 'paid': return 'Paid';
+      case 'partial': return 'Partial';
+      case 'unpaid': return 'Unpaid';
+      default: return 'Undefined';
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-SA', {
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined) amount = 0;
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'SAR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     }).format(amount);
+  };
+  
+  // --- [New] Function to execute update ---
+  const handleUpdateTask = () => {
+    if (!selectedTask) return;
+    updateTaskMutation.mutate({
+      id: selectedTask.id,
+      status: newStatus,
+      progress: newProgress,
+    });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50 to-amber-50" style={{ direction: 'rtl' }}>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50 to-amber-50">
       <div className="container mx-auto p-4 space-y-4">
         
-        {/* Header - مكثف */}
+        {/* Header - Dense */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center shadow-md">
               <ClipboardCheck className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl" style={{ fontFamily: 'Tajawal, sans-serif', fontWeight: '700' }}>
-                مهامي الشخصية
+              <h1 className="text-xl font-bold">
+                My Tasks
               </h1>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                إدارة ومتابعة المهام الموكلة إليك
+              <p className="text-xs text-gray-600">
+                Manage and track your assigned tasks
               </p>
             </div>
           </div>
-
           <div className="flex items-center gap-2">
             <Badge className="bg-orange-100 text-orange-700 text-xs">
               <code>SCR-999</code>
@@ -364,33 +254,33 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
           </div>
         </div>
 
-        {/* إحصائيات سريعة - مكثفة */}
+        {/* Quick Stats - Dense */}
         <div className="grid grid-cols-8 gap-2">
           {[
-            { label: 'تحت المعالجة', value: statistics.processing, icon: PlayCircle, color: '#2563eb', tab: 'processing' },
-            { label: 'غير مستلمة', value: statistics.unassigned, icon: Bell, color: '#f59e0b', tab: 'unassigned' },
-            { label: 'متأخرة', value: statistics.overdue, icon: AlertCircle, color: '#ef4444', tab: 'overdue' },
-            { label: 'مكتملة', value: statistics.completed, icon: CheckCircle, color: '#10b981', tab: 'completed' },
-            { label: 'عالية الأولوية', value: statistics.highPriority, icon: Flag, color: '#f97316', tab: 'all' },
-            { label: 'إجمالي المهام', value: statistics.total, icon: Target, color: '#8b5cf6', tab: 'all' },
-            { label: 'إجمالي الأتعاب', value: `${statistics.totalFees / 1000}K`, icon: DollarSign, color: '#06b6d4', tab: 'all' },
-            { label: 'نسبة التحصيل', value: `${statistics.paidPercentage}%`, icon: TrendingUp, color: '#10b981', tab: 'all' }
+            { label: 'Processing', value: statistics.processing, icon: PlayCircle, color: '#2563eb', tab: 'processing' },
+            { label: 'Not Received', value: statistics.unassigned, icon: Bell, color: '#f59e0b', tab: 'unassigned' },
+            { label: 'Overdue', value: statistics.overdue, icon: AlertCircle, color: '#ef4444', tab: 'overdue' },
+            { label: 'Completed', value: statistics.completed, icon: CheckCircle, color: '#10b981', tab: 'completed' },
+            { label: 'High Priority', value: statistics.highPriority, icon: Flag, color: '#f97316', tab: 'all' },
+            { label: 'Total Tasks', value: statistics.total, icon: Target, color: '#8b5cf6', tab: 'all' },
+            { label: 'Total Fees', value: `$${(statistics.totalFees / 1000).toFixed(0)}K`, icon: DollarSign, color: '#06b6d4', tab: 'all' },
+            { label: 'Collection Rate', value: `${statistics.paidPercentage}%`, icon: TrendingUp, color: '#10b981', tab: 'all' }
           ].map((stat, i) => (
             <Card 
               key={i} 
-              className="card-rtl hover:shadow-md transition-all cursor-pointer border-l-4"
+              className="hover:shadow-md transition-all cursor-pointer border-l-4"
               style={{ borderLeftColor: stat.color }}
-              onClick={() => setActiveTab(stat.tab)}
+              onClick={() => setActiveTab(stat.tab as TaskStatus | 'all')}
             >
               <CardContent className="p-2">
                 <div className="flex flex-col items-center text-center gap-1">
                   <div style={{ color: stat.color }}>
                     {React.createElement(stat.icon, { className: 'h-4 w-4' })}
                   </div>
-                  <span className="text-base" style={{ fontFamily: 'Tajawal, sans-serif', fontWeight: '700', color: stat.color }}>
+                  <span className="text-base font-bold" style={{ color: stat.color }}>
                     {stat.value}
                   </span>
-                  <p className="text-[10px] text-gray-600 leading-tight" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                  <p className="text-[10px] text-gray-600 leading-tight">
                     {stat.label}
                   </p>
                 </div>
@@ -399,11 +289,11 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
           ))}
         </div>
 
-        {/* شريط الأدوات - مكثف */}
-        <Card className="card-rtl">
+        {/* Toolbar - Dense */}
+        <Card>
           <CardContent className="p-2">
             <div className="grid grid-cols-12 gap-2 items-center">
-              {/* البحث - أصغر */}
+              {/* Search - Smaller */}
               <div className="col-span-3">
                 <div className="relative">
                   <Search className="absolute right-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
@@ -412,7 +302,7 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
                     id="search"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="ابحث..."
+                    placeholder="Search..."
                     className="pr-8 text-xs h-8"
                     copyable={false}
                     clearable={true}
@@ -420,14 +310,14 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
                 </div>
               </div>
 
-              {/* اختيار مهمة من القائمة - جديد */}
+              {/* Task Selection - New */}
               <div className="col-span-3">
                 <Select value={selectedTaskId} onValueChange={handleTaskSelect}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="اختر مهمة..." />
+                  <SelectTrigger className="h-8 text-xs" disabled={isLoading}>
+                    <SelectValue placeholder={isLoading ? "Loading..." : "Select task..."} />
                   </SelectTrigger>
                   <SelectContent>
-                    {SAMPLE_TASKS.map((task) => (
+                    {tasks.map((task) => (
                       <SelectItem key={task.id} value={task.taskNumber} className="text-xs">
                         {task.taskNumber} - {task.title.substring(0, 30)}...
                       </SelectItem>
@@ -436,18 +326,18 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
                 </Select>
               </div>
 
-              {/* فلاتر - أصغر */}
+              {/* Filters - Smaller */}
               <div className="col-span-2">
-                <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <Select value={filterPriority} onValueChange={(value) => setFilterPriority(value as TaskPriority | 'all')}>
                   <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="الأولوية" />
+                    <SelectValue placeholder="Priority" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">جميع الأولويات</SelectItem>
-                    <SelectItem value="urgent">عاجل</SelectItem>
-                    <SelectItem value="high">عالية</SelectItem>
-                    <SelectItem value="medium">متوسطة</SelectItem>
-                    <SelectItem value="low">منخفضة</SelectItem>
+                    <SelectItem value="all">All Priorities</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -455,93 +345,119 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
               <div className="col-span-2">
                 <Select value={filterCategory} onValueChange={setFilterCategory}>
                   <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="الفئة" />
+                    <SelectValue placeholder="Category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">جميع الفئات</SelectItem>
-                    <SelectItem value="مراجعة فنية">مراجعة فنية</SelectItem>
-                    <SelectItem value="تقارير">تقارير</SelectItem>
-                    <SelectItem value="موافقات">موافقات</SelectItem>
-                    <SelectItem value="مستندات">مستندات</SelectItem>
-                    <SelectItem value="مالية">مالية</SelectItem>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {/* [New] Create categories dynamically */}
+                    {Array.from(new Set(tasks.map(t => t.category))).map(category => (
+                      category && <SelectItem key={category} value={category}>{category}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* أزرار - أصغر */}
+              {/* Buttons - Smaller */}
               <div className="col-span-2 flex gap-1">
-                <Button size="sm" variant="outline" className="h-8 text-xs flex-1">
-                  <RefreshCw className="h-3 w-3 ml-1" />
-                  تحديث
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="h-8 text-xs flex-1"
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ['myTasks'] })}
+                  disabled={isRefetching}
+                >
+                  {isRefetching ? (
+                    <Loader2 className="h-3 w-3 ml-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 ml-1" />
+                  )}
+                  Refresh
                 </Button>
                 <Button size="sm" className="h-8 text-xs flex-1">
                   <Download className="h-3 w-3 ml-1" />
-                  تصدير
+                  Export
                 </Button>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* الجدول - مكثف */}
-        <Card className="card-rtl">
+        {/* Table - Dense */}
+        <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <Table className="table-rtl dense-table">
+              <Table>
                 <TableHeader>
                   <TableRow className="bg-gradient-to-r from-orange-50 to-amber-50">
-                    <TableHead className="text-right text-[10px] p-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهمة</TableHead>
-                    <TableHead className="text-right text-[10px] p-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>العنوان</TableHead>
-                    <TableHead className="text-right text-[10px] p-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعاملة</TableHead>
-                    <TableHead className="text-right text-[10px] p-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>الأتعاب</TableHead>
-                    <TableHead className="text-right text-[10px] p-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
-                    <TableHead className="text-right text-[10px] p-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>التقدم</TableHead>
-                    <TableHead className="text-right text-[10px] p-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>الموعد</TableHead>
-                    <TableHead className="text-right text-[10px] p-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>الإجراءات</TableHead>
+                    <TableHead className="text-left text-[10px] p-2">Task</TableHead>
+                    <TableHead className="text-left text-[10px] p-2">Title</TableHead>
+                    <TableHead className="text-left text-[10px] p-2">Transaction</TableHead>
+                    <TableHead className="text-left text-[10px] p-2">Fees</TableHead>
+                    <TableHead className="text-left text-[10px] p-2">Status</TableHead>
+                    <TableHead className="text-left text-[10px] p-2">Progress</TableHead>
+                    <TableHead className="text-left text-[10px] p-2">Due Date</TableHead>
+                    <TableHead className="text-left text-[10px] p-2">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTasks.length === 0 ? (
+                  {isLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell colSpan={8} className="p-2">
+                          <Skeleton className="h-8 w-full" />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : isError ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center p-8 text-destructive">
+                        <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+                        <p className="text-xs">
+                          Error occurred while fetching tasks
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredTasks.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center p-8">
                         <FileText className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                        <p className="text-xs text-gray-500" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                          لا توجد مهام تطابق معايير البحث
+                        <p className="text-xs text-gray-500">
+                          No tasks match search criteria
                         </p>
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredTasks.map((task) => (
                       <TableRow key={task.id} className="hover:bg-orange-50 transition-colors">
-                        <TableCell className="text-right p-2">
+                        <TableCell className="p-2">
                           <div className="flex flex-col gap-0.5">
-                            <code className="text-[10px] text-blue-600" style={{ fontFamily: 'Courier New, monospace' }}>
+                            <code className="text-[10px] text-blue-600 font-mono">
                               {task.taskNumber}
                             </code>
-                            <Badge className={`${getPriorityColor(task.priority)} text-[9px] px-1 py-0`}>
-                              {getPriorityText(task.priority)}
+                            <Badge className={`${getPriorityColor(task.priority || 'medium')} text-[9px] px-1 py-0`}>
+                              {getPriorityText(task.priority || 'medium')}
                             </Badge>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right p-2">
+                        <TableCell className="p-2">
                           <div className="flex flex-col gap-0.5">
-                            <p className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                            <p className="text-xs">
                               {task.title}
                             </p>
-                            <p className="text-[9px] text-gray-500" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                            <p className="text-[9px] text-gray-500">
                               {task.category}
                             </p>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right p-2">
-                          <code className="text-[10px] text-purple-600" style={{ fontFamily: 'Courier New, monospace' }}>
+                        <TableCell className="p-2">
+                          <code className="text-[10px] text-purple-600 font-mono">
                             {task.transactionNumber}
                           </code>
                         </TableCell>
-                        <TableCell className="text-right p-2">
+                        <TableCell className="p-2">
                           {task.fees && (
                             <div className="flex flex-col gap-0.5">
-                              <p className="text-xs" style={{ fontFamily: 'Tajawal, sans-serif', fontWeight: '600' }}>
+                              <p className="text-xs font-semibold">
                                 {formatCurrency(task.fees.total)}
                               </p>
                               <div className="flex items-center gap-1">
@@ -552,24 +468,26 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className="text-right p-2">
+                        <TableCell className="p-2">
                           <Badge className={`${getStatusColor(task.status)} text-[9px] px-1 py-0`}>
                             {getStatusText(task.status)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right p-2">
+                        <TableCell className="p-2">
                           <div className="flex flex-col gap-1">
                             <Progress value={task.progress} className="h-1.5 w-16" />
                             <span className="text-[9px] text-gray-600">{task.progress}%</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right p-2">
+                        <TableCell className="p-2">
                           <div className="flex items-center gap-1">
                             <Calendar className="h-3 w-3 text-gray-400" />
-                            <span className="text-[10px] text-gray-600">{task.dueDate}</span>
+                            <span className="text-[10px] text-gray-600">
+                              {task.dueDate ? format(new Date(task.dueDate), 'yyyy/MM/dd') : 'N/A'}
+                            </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right p-2">
+                        <TableCell className="p-2">
                           <div className="flex items-center gap-1">
                             <Button 
                               size="sm" 
@@ -580,9 +498,6 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
                                 setShowTaskDialog(true);
                               }}
                             >
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
                               <Edit className="h-3 w-3" />
                             </Button>
                           </div>
@@ -596,16 +511,16 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* ملخص سريع */}
+        {/* Quick Summary (unchanged) */}
         <div className="grid grid-cols-3 gap-2">
-          <Card className="card-rtl bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+          <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] text-blue-600 mb-0.5" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    إجمالي الأتعاب
+                  <p className="text-[10px] text-blue-600 mb-0.5">
+                    Total Fees
                   </p>
-                  <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif', fontWeight: '700', color: '#1e40af' }}>
+                  <p className="text-sm font-bold text-blue-800">
                     {formatCurrency(statistics.totalFees)}
                   </p>
                 </div>
@@ -614,14 +529,14 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="card-rtl bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] text-green-600 mb-0.5" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    المحصّل
+                  <p className="text-[10px] text-green-600 mb-0.5">
+                    Collected
                   </p>
-                  <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif', fontWeight: '700', color: '#15803d' }}>
+                  <p className="text-sm font-bold text-green-700">
                     {formatCurrency(statistics.paidFees)}
                   </p>
                 </div>
@@ -630,14 +545,14 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="card-rtl bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200">
+          <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200">
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] text-orange-600 mb-0.5" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    المتبقي
+                  <p className="text-[10px] text-orange-600 mb-0.5">
+                    Remaining
                   </p>
-                  <p className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif', fontWeight: '700', color: '#c2410c' }}>
+                  <p className="text-sm font-bold text-orange-600">
                     {formatCurrency(statistics.unpaidFees)}
                   </p>
                 </div>
@@ -648,61 +563,93 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
         </div>
       </div>
 
-      {/* Dialog تفاصيل المهمة */}
+      {/* --- [Updated] Edit Task Dialog --- */}
       {selectedTask && (
         <Dialog open={showTaskDialog} onOpenChange={setShowTaskDialog}>
-          <DialogContent className="max-w-2xl" style={{ direction: 'rtl' }}>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle style={{ fontFamily: 'Tajawal, sans-serif', textAlign: 'right' }}>
-                تفاصيل المهمة: {selectedTask.taskNumber}
+              <DialogTitle>
+                Update Task: {selectedTask.taskNumber}
               </DialogTitle>
-              <DialogDescription style={{ fontFamily: 'Tajawal, sans-serif', textAlign: 'right' }}>
+              <DialogDescription>
                 {selectedTask.title}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+            <div className="space-y-4 py-4">
+              
+              {/* Display fields (for static information) */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-xs text-gray-600">Transaction Number</Label>
+                  <p className="text-sm font-medium">{selectedTask.transactionNumber}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-600">Priority</Label>
+                  <Badge className={`${getPriorityColor(selectedTask.priority || 'medium')} text-xs`}>
+                    {getPriorityText(selectedTask.priority || 'medium')}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-600">Due Date</Label>
+                  <p className="text-sm font-medium">
+                    {selectedTask.dueDate ? format(new Date(selectedTask.dueDate), 'yyyy/MM/dd') : 'N/A'}
+                  </p>
+                </div>
+              </div>
+              
+              <Separator />
+
+              {/* Edit fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-xs text-gray-600">رقم المعاملة</Label>
-                  <p className="text-sm">{selectedTask.transactionNumber}</p>
+                  <Label htmlFor="task-status" className="text-xs text-gray-600">Status</Label>
+                  <Select value={newStatus} onValueChange={(value) => setNewStatus(value as TaskStatus)}>
+                    <SelectTrigger id="task-status" className="h-9">
+                      <SelectValue placeholder="Select status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="not-received">Not Received</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="overdue">Overdue</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-600">الحالة</Label>
-                  <Badge className={`${getStatusColor(selectedTask.status)} text-xs`}>
-                    {getStatusText(selectedTask.status)}
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-600">الأولوية</Label>
-                  <Badge className={`${getPriorityColor(selectedTask.priority)} text-xs`}>
-                    {getPriorityText(selectedTask.priority)}
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-600">التقدم</Label>
-                  <div className="flex items-center gap-2">
-                    <Progress value={selectedTask.progress} className="h-2 flex-1" />
-                    <span className="text-xs">{selectedTask.progress}%</span>
+                  <Label htmlFor="task-progress" className="text-xs text-gray-600">
+                    Progress ({newProgress}%)
+                  </Label>
+                  <div className="flex items-center gap-2 pt-2">
+                    <Slider
+                      id="task-progress"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={[newProgress]}
+                      onValueChange={(value) => setNewProgress(value[0])}
+                      className="flex-1"
+                    />
                   </div>
                 </div>
               </div>
 
               {selectedTask.fees && (
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <h4 className="text-xs mb-2" style={{ fontWeight: '700' }}>معلومات الأتعاب</h4>
+                  <h4 className="text-xs mb-2 font-semibold">Fee Information</h4>
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div>
-                      <span className="text-gray-600">الإجمالي:</span>
-                      <p style={{ fontWeight: '600' }}>{formatCurrency(selectedTask.fees.total)}</p>
+                      <span className="text-gray-600">Total:</span>
+                      <p className="font-semibold">{formatCurrency(selectedTask.fees.total)}</p>
                     </div>
                     <div>
-                      <span className="text-gray-600">المدفوع:</span>
-                      <p style={{ fontWeight: '600', color: '#15803d' }}>{formatCurrency(selectedTask.fees.paid)}</p>
+                      <span className="text-gray-600">Paid:</span>
+                      <p className="font-semibold text-green-700">{formatCurrency(selectedTask.fees.paid)}</p>
                     </div>
                     <div>
-                      <span className="text-gray-600">المتبقي:</span>
-                      <p style={{ fontWeight: '600', color: '#c2410c' }}>
+                      <span className="text-gray-600">Remaining:</span>
+                      <p className="font-semibold text-orange-600">
                         {formatCurrency(selectedTask.fees.total - selectedTask.fees.paid)}
                       </p>
                     </div>
@@ -711,18 +658,28 @@ const MyTasks_Complete_999_Enhanced: React.FC = () => {
               )}
 
               <div>
-                <Label className="text-xs text-gray-600">الوصف</Label>
-                <p className="text-sm text-gray-700">{selectedTask.description}</p>
+                <Label className="text-xs text-gray-600">Description</Label>
+                <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded-md border">
+                  {selectedTask.description || "No description."}
+                </p>
               </div>
             </div>
 
             <DialogFooter>
               <Button onClick={() => setShowTaskDialog(false)} variant="outline" size="sm">
-                إغلاق
+                Close
               </Button>
-              <Button size="sm">
-                <Edit className="h-3 w-3 ml-1" />
-                تعديل
+              <Button 
+                size="sm" 
+                onClick={handleUpdateTask} 
+                disabled={updateTaskMutation.isPending}
+              >
+                {updateTaskMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 ml-1 animate-spin" />
+                ) : (
+                  <Save className="h-3 w-3 ml-1" />
+                )}
+                {updateTaskMutation.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </DialogFooter>
           </DialogContent>
