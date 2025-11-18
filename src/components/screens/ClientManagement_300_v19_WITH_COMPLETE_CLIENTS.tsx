@@ -1,4 +1,3 @@
-
 /**
  * ============================================================================
  * الشاشة 300 - إدارة العملاء - v20.0 (مربوطة 100% بالـ Backend)
@@ -33,7 +32,9 @@ import {
   ChevronLeft, FileCheck, Wallet, Receipt, History, PieChart, FileBarChart,
   UserPlus, Building, IdCard, Navigation, CreditCard, Percent as PercentIcon,
   MessageCircle, TrendingUpIcon, ListChecks, ArrowRight, ArrowLeft, Check,
-  PlayCircle, PauseCircle, Circle, CheckCircle2, XCircle, MinusCircle, Loader2
+  PlayCircle, PauseCircle, Circle, CheckCircle2, XCircle, MinusCircle, Loader2,
+  // ✅ إضافة أيقونة التثبيت
+  Pin
 } from 'lucide-react';
 import { InputWithCopy, TextAreaWithCopy, SelectWithCopy } from '../InputWithCopy';
 import { EnhancedSwitch } from '../EnhancedSwitch';
@@ -72,11 +73,9 @@ interface ClientDraft {
   data: Partial<Client>;
   lastSaved: string;
 }
-
 // ============================================================================
 // المكونات الفرعية للتابات (لحل مشكلة ترتيب الـ Hooks)
 // ============================================================================
-
 // مكون تاب 300-02: البيانات الأساسية
 const TabBasicData: React.FC<{
   client: Client | null;
@@ -86,7 +85,6 @@ const TabBasicData: React.FC<{
 }> = ({ client, classifications, onClientUpdate, onClientsUpdate }) => {
   const [localClient, setLocalClient] = useState(client);
   useEffect(() => setLocalClient(client), [client]);
-
   const handleSave = async () => {
     if (!localClient) return;
     try {
@@ -104,9 +102,7 @@ const TabBasicData: React.FC<{
       toast.error('فشل حفظ التغييرات');
     }
   };
-
   if (!localClient) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   return (
     <div className="space-y-3">
       <CodeDisplay code="TAB-300-02" position="top-right" />
@@ -155,7 +151,7 @@ const TabBasicData: React.FC<{
               options={[
                 { value: 'فرد', label: 'فرد' },
                 { value: 'شركة', label: 'شركة' },
-                { value: 'جهة حكومية', label: 'جهة حكومية' }
+                { value: 'جهة ح-governmentية', label: 'جهة ح-governmentية' }
               ]}
             />
             <SelectWithCopy
@@ -210,7 +206,6 @@ const TabBasicData: React.FC<{
     </div>
   );
 };
-
 // مكون تاب 300-03: بيانات الاتصال
 const TabContactData: React.FC<{
   client: Client | null;
@@ -219,7 +214,6 @@ const TabContactData: React.FC<{
 }> = ({ client, onClientUpdate, onClientsUpdate }) => {
   const [localClient, setLocalClient] = useState(client);
   useEffect(() => setLocalClient(client), [client]);
-
   const handleSave = async () => {
     if (!localClient) return;
     try {
@@ -230,9 +224,7 @@ const TabContactData: React.FC<{
       toast.error('فشل حفظ التغييرات');
     }
   };
-
   if (!localClient) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   return (
     <div className="space-y-3">
       <CodeDisplay code="TAB-300-03" position="top-right" />
@@ -290,7 +282,6 @@ const TabContactData: React.FC<{
     </div>
   );
 };
-
 // مكون تاب 300-04: العنوان
 const TabAddress: React.FC<{
   client: Client | null;
@@ -299,7 +290,6 @@ const TabAddress: React.FC<{
 }> = ({ client, onClientUpdate, onClientsUpdate }) => {
   const [localClient, setLocalClient] = useState(client);
   useEffect(() => setLocalClient(client), [client]);
-
   const handleSave = async () => {
     if (!localClient) return;
     try {
@@ -310,9 +300,7 @@ const TabAddress: React.FC<{
       toast.error('فشل حفظ التغييرات');
     }
   };
-
   if (!localClient) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   return (
     <div className="space-y-3">
       <CodeDisplay code="TAB-300-04" position="top-right" />
@@ -390,7 +378,6 @@ const TabAddress: React.FC<{
     </div>
   );
 };
-
 // مكون تاب 300-05: بيانات الهوية
 const TabIdentification: React.FC<{
   client: Client | null;
@@ -399,7 +386,6 @@ const TabIdentification: React.FC<{
 }> = ({ client, onClientUpdate, onClientsUpdate }) => {
   const [localClient, setLocalClient] = useState(client);
   useEffect(() => setLocalClient(client), [client]);
-
   const handleSave = async () => {
     if (!localClient) return;
     try {
@@ -410,9 +396,7 @@ const TabIdentification: React.FC<{
       toast.error('فشل حفظ التغييرات');
     }
   };
-
   if (!localClient) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   return (
     <div className="space-y-3">
       <CodeDisplay code="TAB-300-05" position="top-right" />
@@ -472,11 +456,9 @@ const TabIdentification: React.FC<{
     </div>
   );
 };
-
 // مكون تاب 300-06: المعاملات
 const TabTransactions: React.FC<{ client: Client | null }> = ({ client }) => {
   if (!client) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   const transactions = client.transactions || [];
   return (
     <div className="space-y-3">
@@ -523,11 +505,9 @@ const TabTransactions: React.FC<{ client: Client | null }> = ({ client }) => {
     </div>
   );
 };
-
 // مكون تاب 300-07: الأتعاب والمدفوعات
 const TabFeesPayments: React.FC<{ client: Client | null }> = ({ client }) => {
   if (!client) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   // تجميع كل المدفوعات من كل المعاملات
   const allPayments: (Payment & { transactionCode?: string })[] = (client.transactions || []).reduce((acc, tx) => {
     const paymentsWithTxCode = tx.payments.map(p => ({
@@ -536,7 +516,6 @@ const TabFeesPayments: React.FC<{ client: Client | null }> = ({ client }) => {
     }));
     return [...acc, ...paymentsWithTxCode];
   }, [] as (Payment & { transactionCode?: string })[]);
-
   return (
     <div className="space-y-3">
       <CodeDisplay code="TAB-300-07" position="top-right" />
@@ -606,7 +585,6 @@ const TabFeesPayments: React.FC<{ client: Client | null }> = ({ client }) => {
     </div>
   );
 };
-
 // مكون تاب 300-08: التقييم والملاحظات
 const TabRatingNotes: React.FC<{
   client: Client | null;
@@ -615,7 +593,6 @@ const TabRatingNotes: React.FC<{
 }> = ({ client, onClientUpdate, onClientsUpdate }) => {
   const [localClient, setLocalClient] = useState(client);
   useEffect(() => setLocalClient(client), [client]);
-
   const handleSave = async () => {
     if (!localClient) return;
     try {
@@ -630,9 +607,7 @@ const TabRatingNotes: React.FC<{
       toast.error('فشل حفظ التغييرات');
     }
   };
-
   if (!localClient) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   return (
     <div className="space-y-3">
       <CodeDisplay code="TAB-300-08" position="top-right" />
@@ -705,11 +680,9 @@ const TabRatingNotes: React.FC<{
     </div>
   );
 };
-
 // مكون تاب 300-09: الإحصائيات
 const TabStatistics: React.FC<{ client: Client | null }> = ({ client }) => {
   if (!client) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   const getGradeColor = (grade?: string): string => {
     switch (grade) {
       case 'أ': return '#10b981';
@@ -718,10 +691,8 @@ const TabStatistics: React.FC<{ client: Client | null }> = ({ client }) => {
       default: return '#6b7280';
     }
   };
-
   const { grade, gradeScore } = client;
   const gradeColor = getGradeColor(grade);
-
   return (
     <div className="space-y-3">
       <CodeDisplay code="TAB-300-09" position="top-right" />
@@ -794,7 +765,6 @@ const TabStatistics: React.FC<{ client: Client | null }> = ({ client }) => {
     </div>
   );
 };
-
 // مكون تاب 300-10: التقارير
 const TabReports: React.FC = () => {
   return (
@@ -821,14 +791,11 @@ const TabReports: React.FC = () => {
     </div>
   );
 };
-
 // مكون تاب 300-11: السجل الزمني
 const TabActivityLog: React.FC<{ client: Client | null }> = ({ client }) => {
   if (!client) return <div>يرجى اختيار عميل لعرض تفاصيله.</div>;
-
   // الاعتماد على السجل الحقيقي
   const logs = client.activityLogs || [];
-
   return (
     <div className="space-y-3">
       <CodeDisplay code="TAB-300-11" position="top-right" />
@@ -864,7 +831,6 @@ const TabActivityLog: React.FC<{ client: Client | null }> = ({ client }) => {
     </div>
   );
 };
-
 // مكون تاب 300-12: التصنيفات والإعدادات
 const TabClassificationsSettings: React.FC<{
   gradingCriteria: GradingCriteria | null;
@@ -914,7 +880,6 @@ const TabClassificationsSettings: React.FC<{
     </div>
   );
 };
-
 // ============================================================================
 // المكون الرئيسي
 // ============================================================================
@@ -938,6 +903,9 @@ const ClientManagement_300_v19: React.FC = () => {
   const [addClientStep, setAddClientStep] = useState(1);
   const [newClientData, setNewClientData] = useState<Partial<Client>>({});
   const [clientDrafts, setClientDrafts] = useState<ClientDraft[]>([]);
+
+  // ✅ [1] إضافة حالة لتحديد العميل المثبت
+  const [pinnedClientId, setPinnedClientId] = useState<string | null>(null);
 
   // ============================================================================
   // دوال مساعدة
@@ -995,6 +963,13 @@ const ClientManagement_300_v19: React.FC = () => {
     }
   };
 
+  // ✅ [2] دالة لتحديد/إلغاء تثبيت عميل
+  const togglePinnedClient = (clientId: string) => {
+    setPinnedClientId(prev => prev === clientId ? null : clientId);
+  };
+
+
+  
   // ============================================================================
   // تكوين التابات
   // ============================================================================
@@ -1012,7 +987,6 @@ const ClientManagement_300_v19: React.FC = () => {
     { id: '300-11', number: '300-11', title: 'السجل الزمني', icon: History },
     { id: '300-12', number: '300-12', title: 'التصنيفات والإعدادات', icon: Settings2 }
   ];
-
   // ============================================================================
   // جلب البيانات من الـ Backend
   // ============================================================================
@@ -1040,7 +1014,6 @@ const ClientManagement_300_v19: React.FC = () => {
     };
     loadAllData();
   }, []);
-
   const fetchClients = async () => {
     // setIsLoading(true); // تتم إدارته بواسطة loadAllData
     // setError(null);
@@ -1084,7 +1057,6 @@ const ClientManagement_300_v19: React.FC = () => {
       toast.error('فشل في جلب تصنيفات العملاء');
     }
   };
-
   // ============================================================================
   // دوال الإنشاء والتحديث
   // ============================================================================
@@ -1142,7 +1114,6 @@ const ClientManagement_300_v19: React.FC = () => {
       toast.error(toastTitle, { description: toastDescription });
     }
   };
-
   // ============================================================================
   // إحصائيات
   // ============================================================================
@@ -1179,7 +1150,6 @@ const ClientManagement_300_v19: React.FC = () => {
       totalTransactions: 0, totalFees: 0, totalPaid: 0, totalRemaining: 0,
       totalCompletion: 0
     });
-
     return {
       ...aggregatedStats,
       // حساب المتوسط
@@ -1188,7 +1158,6 @@ const ClientManagement_300_v19: React.FC = () => {
         : 0,
     };
   }, [clients, isLoading]);
-
   // ============================================================================
   // وظائف العرض (من v18.0 مع تحسينات الربط)
   // ============================================================================
@@ -1317,14 +1286,12 @@ const ClientManagement_300_v19: React.FC = () => {
       </div>
     </div>
   );
-
   const renderClientProfileDialog = () => {
     if (!selectedClient) return null;
     const grade = selectedClient.grade; // ✅ بيانات حقيقية
     const score = selectedClient.gradeScore || 0; // ✅ بيانات حقيقية
     const gradeColor = getGradeColor(grade);
     const gradeDesc = getGradeDescription(grade);
-
     return (
       <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
         <DialogContent
@@ -1549,11 +1516,9 @@ const ClientManagement_300_v19: React.FC = () => {
       </Dialog>
     );
   };
-
   const renderAddClientDialog = () => {
     const totalSteps = 6;
     const progressPercentage = (addClientStep / totalSteps) * 100;
-
     return (
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent
@@ -1697,7 +1662,6 @@ const ClientManagement_300_v19: React.FC = () => {
       </Dialog>
     );
   };
-
   const renderStep1_BasicInfo = () => (
     <div className="space-y-4">
       <div
@@ -1820,7 +1784,6 @@ const ClientManagement_300_v19: React.FC = () => {
       )}
     </div>
   );
-
   const renderStep2_ContactInfo = () => (
     <div className="space-y-4">
       <div
@@ -1901,7 +1864,6 @@ const ClientManagement_300_v19: React.FC = () => {
       </div>
     </div>
   );
-
   const renderStep3_Address = () => (
     <div className="space-y-4">
       <div
@@ -2013,7 +1975,6 @@ const ClientManagement_300_v19: React.FC = () => {
       />
     </div>
   );
-
   const renderStep4_Identification = () => (
     <div className="space-y-4">
       <div
@@ -2091,7 +2052,6 @@ const ClientManagement_300_v19: React.FC = () => {
       </div>
     </div>
   );
-
   const renderStep5_Additional = () => (
     <div className="space-y-4">
       <div
@@ -2178,7 +2138,6 @@ const ClientManagement_300_v19: React.FC = () => {
       </div>
     </div>
   );
-
   const renderStep6_Review = () => {
     // ✅ الحسابات تم حذفها
     return (
@@ -2310,7 +2269,6 @@ const ClientManagement_300_v19: React.FC = () => {
       </div>
     );
   };
-
   // ============================================================================
   // التابات الكاملة
   // ============================================================================
@@ -2334,7 +2292,6 @@ const ClientManagement_300_v19: React.FC = () => {
         </div>
       );
     }
-
     switch (activeTab) {
       case '300-01': return render_300_01_ClientsList();
       case '300-02': return <TabBasicData client={selectedClient} classifications={clientClassifications} onClientUpdate={setSelectedClient} onClientsUpdate={setClients} />;
@@ -2351,7 +2308,6 @@ const ClientManagement_300_v19: React.FC = () => {
       default: return null;
     }
   };
-
   function render_300_01_ClientsList() {
     const filteredClients = clients.filter(c => {
       const matchSearch = !searchTerm ||
@@ -2499,13 +2455,18 @@ const ClientManagement_300_v19: React.FC = () => {
                         : (client.completionPercentage || 0) >= 50
                         ? '#f59e0b'
                         : '#ef4444';
+
+                      // ✅ [3] تطبيق فئة CSS للصف المثبت
+                      const rowClassName = `hover:bg-blue-50 cursor-pointer transition-colors ${client.id === pinnedClientId ? 'is-pinned' : ''}`;
+
                       return (
                         <TableRow
                           key={client.id}
-                          className="hover:bg-blue-50 cursor-pointer transition-colors"
+                          className={rowClassName}
                           onClick={() => {
                             setSelectedClient(client);
-                            setShowProfileDialog(true);
+                            togglePinnedClient(client.id);
+                            
                           }}
                         >
                           <TableCell className="text-right">
@@ -2600,6 +2561,7 @@ const ClientManagement_300_v19: React.FC = () => {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
+                            {/* ✅ [4] منع انتشار الحدث للحفاظ على استقلالية الأزرار */}
                             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                               <Button
                                 size="sm"
@@ -2623,6 +2585,15 @@ const ClientManagement_300_v19: React.FC = () => {
                               >
                                 <Edit className="h-3 w-3" />
                               </Button>
+                              {/* ✅ [5] إضافة زر التثبيت */}
+                              <Button
+                                size="sm"
+                                variant={client.id === pinnedClientId ? "secondary" : "ghost"}
+                                onClick={() => togglePinnedClient(client.id)}
+                                title={client.id === pinnedClientId ? "إلغاء التثبيت" : "تثبيت كعميل مميز"}
+                              >
+                                <Pin className="h-3 w-3" />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -2637,13 +2608,24 @@ const ClientManagement_300_v19: React.FC = () => {
       </div>
     );
   }
-
   // ============================================================================
   // Render النهائي
   // ============================================================================
 
+  // ✅ [6] إضافة CSS مضمن لتمييز الصف المثبت
+  const customStyles = `
+    <style>
+      .is-pinned {
+        background-color: #fef9c3 !important; /* لون خلفية مميز */
+        border-left: 4px solid #eab308 !important; /* حد يمين مميز */
+      }
+    </style>
+  `;
+
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
+      {/* ✅ [6] تضمين الأنماط المخصصة */}
+      <div dangerouslySetInnerHTML={{ __html: customStyles }} />
       {renderScreenHeader()}
       <div className="flex" style={{ gap: '4px', paddingTop: '16px' }}>
         <UnifiedTabsSidebar
@@ -2660,5 +2642,4 @@ const ClientManagement_300_v19: React.FC = () => {
     </div>
   );
 };
-
 export default ClientManagement_300_v19;

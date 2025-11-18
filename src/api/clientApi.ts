@@ -31,6 +31,15 @@ export const getAllClients = async (): Promise<Client[]> => {
   }
 };
 
+export const getClientById = async (clientId: string) => {
+  try {
+    const response = await api.get(`/clients/${clientId}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 /**
  * ============================================================================
  * 2. إنشاء عميل جديد

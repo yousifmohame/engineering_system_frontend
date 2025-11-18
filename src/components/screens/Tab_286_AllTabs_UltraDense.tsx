@@ -35,7 +35,8 @@ import { Label } from '../ui/label'; // <-- إضافة
 import {
   CheckCircle, Users, Paperclip, Calendar as CalendarIcon, DollarSign,
   FileText, Eye, Settings, Plus, Edit2, Trash2, Upload, Download,
-  Clock, User, Building, Hash, Flag, Target, Mail, Phone, Loader2
+  Clock, User, Building, Hash, Flag, Target, Mail, Phone, Loader2,
+  FileCheck
 } from 'lucide-react';
 import CodeDisplay from '../CodeDisplay';
 import { ScrollArea } from '../ui/scroll-area'; // <-- إضافة ScrollArea
@@ -98,6 +99,7 @@ interface AssignedStaffDisplay extends Employee {
 
 interface AttachmentsTabProps {
   transactionId: string;
+  requiredDocuments: string[]; // <-- الحقل الجديد: قائمة أسماء المستندات المطلوبة
 }
 
 // ============================================
@@ -672,219 +674,209 @@ const formatBytes = (bytes: number, decimals = 2) => {
 };
 
 export const Tab_286_08_Attachments_UltraDense: React.FC<AttachmentsTabProps> = ({ 
-  transactionId 
+  transactionId,
+  requiredDocuments = [] // قيمة افتراضية
 }) => {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // --- 1. جلب البيانات (Fetch Data) ---
+  // --- 1. جلب البيانات ---
   const { data: attachments, isLoading, isError } = useQuery<Attachment[]>({
     queryKey: ['attachments', transactionId],
     queryFn: () => getAttachments(transactionId),
     enabled: !!transactionId && transactionId !== 'new',
   });
 
-  // --- 2. عمليات الرفع (Upload Mutation) ---
+  // --- 2. العمليات (الرفع والحذف) ---
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadAttachment(file, transactionId),
     onSuccess: () => {
-      // toast.success("تم رفع الملف بنجاح");
       queryClient.invalidateQueries({ queryKey: ['attachments', transactionId] });
     },
-    onError: (error: Error) => {
-      // toast.error(`فشل الرفع: ${error.message}`);
-      alert(`فشل الرفع: ${error.message}`);
-    },
+    onError: (error: Error) => { alert(`فشل الرفع: ${error.message}`); },
   });
 
-  // --- 3. عمليات الحذف (Delete Mutation) ---
   const deleteMutation = useMutation({
     mutationFn: deleteAttachment,
     onSuccess: () => {
-      // toast.success("تم حذف المرفق بنجاح");
       queryClient.invalidateQueries({ queryKey: ['attachments', transactionId] });
       setDeletingId(null);
     },
-    onError: (error: Error) => {
-      // toast.error(`فشل الحذف: ${error.message}`);
-      alert(`فشل الحذف: ${error.message}`);
-    },
+    onError: (error: Error) => { alert(`فشل الحذف: ${error.message}`); },
   });
 
-  // --- 4. معالجات الأحداث (Event Handlers) ---
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
+  // --- 3. المعالجات ---
+  const handleUploadClick = () => { fileInputRef.current?.click(); };
   const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      uploadMutation.mutate(file);
-    }
-    // (إعادة تعيين الحقل للسماح برفع نفس الملف مرة أخرى)
-    if (event.target) {
-      event.target.value = '';
-    }
+    if (file) { uploadMutation.mutate(file); }
+    if (event.target) { event.target.value = ''; }
   };
-
-  const handleDeleteClick = (id: string) => {
-    setDeletingId(id);
-  };
-
-  const confirmDelete = () => {
-    if (deletingId) {
-      deleteMutation.mutate(deletingId);
-    }
-  };
+  const handleDeleteClick = (id: string) => { setDeletingId(id); };
+  const confirmDelete = () => { if (deletingId) { deleteMutation.mutate(deletingId); } };
   
-  // --- 5. حساب الإحصائيات (Dynamic Stats) ---
+  // --- 4. الإحصائيات (تم التحديث ليشمل المطلوبات) ---
   const stats = useMemo(() => {
-    const totalFiles = attachments?.length || 0;
+    const totalUploaded = attachments?.length || 0;
+    const totalRequired = requiredDocuments.length;
+    // (نفترض أن الملف مرفوع إذا كان العدد المرفوع >= المطلوب تقريباً، أو مجرد إحصاء)
+    const completionRate = totalRequired > 0 ? Math.min(100, Math.round((totalUploaded / totalRequired) * 100)) : 0;
+    
     const totalSizeInBytes = attachments?.reduce((sum, a) => sum + a.fileSize, 0) || 0;
     const totalSize = formatBytes(totalSizeInBytes);
-    // (يمكنك إضافة إحصائيات أخرى إذا كانت الحالة 'status' مُدارة)
-    // const approvedCount = attachments?.filter(a => a.status === 'معتمد').length || 0;
 
     return [
-      { label: 'إجمالي الملفات', value: totalFiles, color: '#3b82f6' },
-      { label: 'الحجم الكلي', value: totalSize, color: '#8b5cf6' },
-      { label: 'قيد الرفع', value: uploadMutation.isPending ? 1 : 0, color: '#f59e0b' },
-      { label: 'قيد الحذف', value: deleteMutation.isPending ? 1 : 0, color: '#ef4444' }
+      { label: 'المستندات المطلوبة', value: totalRequired, color: '#f59e0b' },
+      { label: 'تم رفعها', value: totalUploaded, color: '#10b981' },
+      { label: 'نسبة الإنجاز', value: `${completionRate}%`, color: '#3b82f6' },
+      { label: 'الحجم الكلي', value: totalSize, color: '#8b5cf6' }
     ];
-  }, [attachments, uploadMutation.isPending, deleteMutation.isPending]);
+  }, [attachments, requiredDocuments]);
 
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: 'calc(100vh - 180px)' }}>
-      <CodeDisplay code="TAB-286-08-DYN" position="top-right" />
+      <CodeDisplay code="TAB-286-08-REQ" position="top-right" />
       
-      {/* --- (Input مخفي لرفع الملفات) --- */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelected}
-        style={{ display: 'none' }}
-      />
+      <input type="file" ref={fileInputRef} onChange={handleFileSelected} style={{ display: 'none' }} />
       
-      {/* --- (إحصائيات ديناميكية) --- */}
+      {/* --- شريط الإحصائيات --- */}
       <div className="grid grid-cols-4 gap-1 mb-2">
         {stats.map((stat, index) => (
           <Card key={index} style={{ border: `1px solid ${stat.color}40` }}>
             <CardContent className="p-1 text-center">
               <p className="text-[9px] text-gray-500">{stat.label}</p>
-              <p className="text-sm font-bold" style={{ color: stat.color }}>
-                {stat.label === 'قيد الرفع' && stat.value > 0 ? (
-                  <Loader2 className="h-4 w-4 mx-auto animate-spin" />
-                ) : (
-                  stat.value
-                )}
-              </p>
+              <p className="text-sm font-bold" style={{ color: stat.color }}>{stat.value}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Card style={{ height: 'calc(100% - 70px)' }}>
-        <CardContent className="p-2 h-full flex flex-col">
-          <div className="flex items-center justify-between mb-2 flex-shrink-0">
-            <h3 className="text-sm font-bold">المرفقات والمستندات</h3>
-            <Button 
-              size="sm" 
-              style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}
-              onClick={handleUploadClick}
-              disabled={uploadMutation.isPending}
-            >
-              <Upload className="h-3 w-3 ml-1" />
-              {uploadMutation.isPending ? 'جاري الرفع...' : 'رفع ملف'}
-            </Button>
-          </div>
-          
-          <ScrollArea className="flex-grow">
-            {/* --- 6. عرض حالات التحميل والخطأ --- */}
-            {isLoading && (
-              <div className="space-y-1">
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full" />
-              </div>
-            )}
-            {isError && (
-              <div className="flex items-center justify-center h-20 text-destructive">
-                <AlertCircle className="h-5 w-5 ml-2" />
-                <span>فشل تحميل المرفقات</span>
-              </div>
-            )}
-            
-            {/* --- 7. الجدول الديناميكي --- */}
-            <Table className="table-rtl">
-              <TableHeader>
-                <TableRow style={{ height: '28px' }}>
-                  <TableHead className="text-right text-[10px] py-1">اسم الملف</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">النوع</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">الحجم</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">التاريخ</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {attachments?.map((file) => (
-                  <TableRow key={file.id} style={{ height: '32px' }}>
-                    <TableCell className="text-right text-[10px] py-1 font-semibold">
-                      <div className="flex items-center gap-1">
-                        <Paperclip className="h-3 w-3" style={{ color: '#64748b' }} />
-                        {/* (رابط للملف) */}
-                        <a href={file.filePath} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                          {file.fileName}
-                        </a>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right py-1">
-                      <Badge variant="outline" style={{ fontSize: '9px', padding: '2px 6px' }}>
-                        {file.fileType.split('/')[1] || file.fileType}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-[10px] py-1">
-                      {formatBytes(file.fileSize)}
-                    </TableCell>
-                    <TableCell className="text-right text-[10px] py-1">
-                      {new Date(file.createdAt).toLocaleDateString('ar-SA')}
-                    </TableCell>
-                    <TableCell className="text-right py-1">
-                      <div className="flex gap-0.5">
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }} asChild>
-                          <a href={file.filePath} download={file.fileName}><Download className="h-3 w-3" /></a>
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          style={{ height: '22px', width: '22px', padding: 0 }}
-                          onClick={() => handleDeleteClick(file.id)}
-                          disabled={deleteMutation.isPending && deletingId === file.id}
-                        >
-                          {deleteMutation.isPending && deletingId === file.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
-                          )}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+      <div className="flex gap-2 h-[calc(100%-70px)]">
+        
+        {/* --- القسم الأيمن: قائمة المتطلبات (الجديد) --- */}
+        <Card className="w-1/3 flex flex-col">
+          <CardContent className="p-2 flex-1 flex flex-col">
+             <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
+               <FileCheck className="h-4 w-4 text-blue-600" />
+               <h3 className="text-xs font-bold text-gray-700">قائمة المطلوبات</h3>
+             </div>
+             
+             <ScrollArea className="flex-1">
+               {requiredDocuments.length > 0 ? (
+                 <div className="space-y-1">
+                   {requiredDocuments.map((docName, idx) => {
+                     // محاولة بسيطة لمعرفة هل تم رفع هذا الملف (مطابقة بالاسم تقريباً)
+                     // ملاحظة: هذا تدقيق بسيط، الأفضل أن يكون هناك تصنيف للملفات عند الرفع
+                     const isProbablyUploaded = attachments?.some(a => a.fileName.includes(docName));
+                     
+                     return (
+                       <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-md border border-gray-100">
+                         <div className="flex items-center gap-2">
+                           <div className={`w-1.5 h-1.5 rounded-full ${isProbablyUploaded ? 'bg-green-500' : 'bg-orange-400'}`} />
+                           <span className="text-[10px] font-medium text-gray-700">{docName}</span>
+                         </div>
+                         {isProbablyUploaded && <CheckCircle className="h-3 w-3 text-green-500" />}
+                       </div>
+                     );
+                   })}
+                 </div>
+               ) : (
+                 <div className="flex flex-col items-center justify-center h-20 text-gray-400">
+                   <FileText className="h-8 w-8 mb-1 opacity-20" />
+                   <span className="text-[10px]">لا توجد مستندات محددة مسبقاً</span>
+                 </div>
+               )}
+             </ScrollArea>
+          </CardContent>
+        </Card>
 
-      {/* --- 8. مودال تأكيد الحذف --- */}
+        {/* --- القسم الأيسر: مدير الملفات (الموجود سابقاً) --- */}
+        <Card className="w-2/3 flex flex-col">
+          <CardContent className="p-2 h-full flex flex-col">
+            <div className="flex items-center justify-between mb-2 flex-shrink-0">
+              <h3 className="text-sm font-bold">الملفات المرفوعة</h3>
+              <Button 
+                size="sm" 
+                style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}
+                onClick={handleUploadClick}
+                disabled={uploadMutation.isPending}
+              >
+                <Upload className="h-3 w-3 ml-1" />
+                {uploadMutation.isPending ? 'جاري...' : 'رفع ملف'}
+              </Button>
+            </div>
+            
+            <ScrollArea className="flex-grow">
+              {isLoading && <div className="space-y-1 p-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>}
+              
+              {!isLoading && attachments?.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+                  <Upload className="h-8 w-8 mb-2 opacity-20" />
+                  <span className="text-xs">لم يتم رفع أي ملفات بعد</span>
+                </div>
+              )}
+
+              <Table className="table-rtl">
+                <TableHeader>
+                  <TableRow style={{ height: '28px' }}>{/*
+                  */}<TableHead className="text-right text-[10px] py-1">اسم الملف</TableHead>{/*
+                  */}<TableHead className="text-right text-[10px] py-1">الحجم</TableHead>{/*
+                  */}<TableHead className="text-right text-[10px] py-1">التاريخ</TableHead>{/*
+                  */}<TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>{/*
+                  */}</TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attachments?.map((file) => (
+                    <TableRow key={file.id} style={{ height: '32px' }}>
+                      <TableCell className="text-right text-[10px] py-1 font-semibold">
+                        <div className="flex items-center gap-1">
+                          <Paperclip className="h-3 w-3" style={{ color: '#64748b' }} />
+                          <a href={file.filePath} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-[120px] block">
+                            {file.fileName}
+                          </a>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right text-[10px] py-1">
+                        {formatBytes(file.fileSize)}
+                      </TableCell>
+                      <TableCell className="text-right text-[10px] py-1">
+                        {new Date(file.createdAt).toLocaleDateString('ar-SA')}
+                      </TableCell>
+                      <TableCell className="text-right py-1">
+                        <div className="flex gap-0.5">
+                          <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }} asChild>
+                            <a href={file.filePath} download={file.fileName}><Download className="h-3 w-3" /></a>
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            style={{ height: '22px', width: '22px', padding: 0 }}
+                            onClick={() => handleDeleteClick(file.id)}
+                            disabled={deleteMutation.isPending && deletingId === file.id}
+                          >
+                            {deleteMutation.isPending && deletingId === file.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
         <AlertDialogContent className="card-rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
-            <AlertDialogDescription>
-              سيتم حذف هذا المرفق نهائياً. لا يمكن التراجع عن هذا الإجراء.
-            </AlertDialogDescription>
+            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogDescription>هل أنت متأكد من حذف هذا الملف؟</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
@@ -893,7 +885,6 @@ export const Tab_286_08_Attachments_UltraDense: React.FC<AttachmentsTabProps> = 
               onClick={confirmDelete} 
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
               حذف
             </AlertDialogAction>
           </AlertDialogFooter>

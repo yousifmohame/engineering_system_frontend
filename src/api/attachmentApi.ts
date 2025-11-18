@@ -11,7 +11,8 @@ import { Attachment } from '../types/attachmentTypes';
  */
 export const getAttachments = async (transactionId: string): Promise<Attachment[]> => {
   try {
-    const { data } = await api.get(`/attachments/${transactionId}`);
+    // ✅ تصحيح المسار بإضافة '/transaction/'
+    const { data } = await api.get(`/attachments/transaction/${transactionId}`);
     return data;
   } catch (error) {
     console.error('Error fetching attachments:', error);
@@ -35,7 +36,7 @@ export const uploadAttachment = async (
   // formData.append('category', 'مستندات'); 
 
   try {
-    const { data } = await api.post('/attachments', formData, {
+    const { data } = await api.post('/attachments/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -53,6 +54,7 @@ export const uploadAttachment = async (
  */
 export const deleteAttachment = async (attachmentId: string): Promise<void> => {
   try {
+    // ✅ هذا المسار صحيح
     await api.delete(`/attachments/${attachmentId}`);
   } catch (error) {
     console.error('Error deleting file:', error);

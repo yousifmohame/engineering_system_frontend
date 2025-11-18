@@ -272,13 +272,32 @@ const CreateTransaction_Complete_286: React.FC = () => {
         );
       
       case '286-07':
-        return <Tab_286_07_ClientInfo />;
+        return (
+          <Tab_286_07_ClientInfo 
+            readOnly={isDisabled} 
+            clientId={transactionData.clientId} // ✅ تم الربط هنا
+          />
+        );
       
       case '286-08':
-        return <Tab_286_08_Attachments_UltraDense />;
+        // الحصول على قائمة المستندات المطلوبة من "النوع المختار"
+        // إذا لم يكن هناك نوع مختار، نمرر مصفوفة فارغة
+        const requiredDocs = selectedType?.documents || [];
+        
+        return (
+          <Tab_286_08_Attachments_UltraDense 
+            transactionId={transactionId}
+            requiredDocuments={requiredDocs} // <-- ✅ تمرير القائمة هنا
+          />
+        );
       
       case '286-09':
-        return <Tab_286_09_Appointments />;
+        return (
+          <Tab_286_09_Appointments 
+            transactionId={transactionId} // ✅ تمرير ID المعاملة
+            readOnly={isDisabled}
+          />
+        );
       
       case '286-10':
         return <Tab_286_10_Costs_UltraDense />;
