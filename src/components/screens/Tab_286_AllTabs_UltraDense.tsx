@@ -15,7 +15,8 @@
  * - يتيح إضافة/تعديل/حذف المهام عبر مودال.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -39,7 +40,15 @@ import {
 import CodeDisplay from '../CodeDisplay';
 import { ScrollArea } from '../ui/scroll-area'; // <-- إضافة ScrollArea
 import { nanoid } from 'nanoid'; // (أو استخدم crypto.randomUUID)
-
+import { AssignedStaff } from '@/types/employeeTypes';
+import { Attachment } from '../../types/attachmentTypes'; // (جديد)
+import { 
+  getAttachments, 
+  uploadAttachment, 
+  deleteAttachment 
+} from '../../api/attachmentApi'; // (جديد)
+import { Skeleton } from '../ui/skeleton'; // (جديد)
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 // ============================================
 // واجهات (Interfaces) جديدة للمهام
 // ============================================
@@ -58,6 +67,8 @@ interface Task {
 interface Employee {
   id: string;
   name: string;
+  email: string; // (أضفنا الحقول المطلوبة للعرض)
+  phone: string;
 }
 
 // واجهة لخصائص (Props) التاب
@@ -70,6 +81,24 @@ interface TasksTabProps {
 // واجهة لنموذج المهمة (Add/Edit)
 type TaskFormData = Omit<Task, 'id' | 'status' | 'assignedToId'>;
 
+interface StaffTabProps {
+  assignedStaff: AssignedStaff[];
+  employees: Employee[];
+  tasks: Task[]; // <-- ✅ الإضافة الجديدة هنا
+  onChange: (staff: AssignedStaff[]) => void;
+}
+
+// واجهة بيانات الموظف للعرض في الجدول (✅ معدلة)
+interface AssignedStaffDisplay extends Employee {
+  assignmentId: string;
+  role: string;
+  taskCount: number; // <-- ✅ الإضافة الجديدة هنا
+  totalDuration: number; // <-- ✅ الإضافة الجديدة هنا
+}
+
+interface AttachmentsTabProps {
+  transactionId: string;
+}
 
 // ============================================
 // TAB 286-05: المهمات - (نسخة ديناميكية جديدة v2.1)
@@ -391,30 +420,160 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
 };
 
 // ============================================
+// --- ✅ مودال جديد لإضافة موظف ---
+// ============================================
+const StaffAddDialog: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (employeeId: string, role: string) => void;
+  employees: Employee[]; // القائمة الكاملة
+  existingEmployeeIds: string[]; // قائمة ID الموظفين المسندين حالياً
+}> = ({ isOpen, onClose, onSave, employees, existingEmployeeIds }) => {
+  
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+  const [assignedRole, setAssignedRole] = useState<string>('');
+
+  // فلترة الموظفين لعرض فقط الذين لم يتم إسنادهم بعد
+  const availableEmployees = useMemo(() => {
+    return employees.filter(emp => !existingEmployeeIds.includes(emp.id));
+  }, [employees, existingEmployeeIds]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEmployeeId) {
+      alert('الرجاء اختيار موظف');
+      return;
+    }
+    if (!assignedRole) {
+      alert('الرجاء إدخال دور الموظف');
+      return;
+    }
+    onSave(selectedEmployeeId, assignedRole);
+  };
+  
+  // إعادة تعيين النموذج عند الفتح
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedEmployeeId('');
+      setAssignedRole('');
+    }
+  }, [isOpen]);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="card-rtl">
+        <DialogHeader>
+          <DialogTitle>إضافة موظف إلى المعاملة</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          <div>
+            <Label htmlFor="staff-select">اختيار الموظف</Label>
+            <Select
+              value={selectedEmployeeId}
+              onValueChange={setSelectedEmployeeId}
+            >
+              <SelectTrigger id="staff-select">
+                <SelectValue placeholder="اختر موظف..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableEmployees.length > 0 ? (
+                  availableEmployees.map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.position || 'بدون مسمى'})
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-sm text-gray-500">
+                    جميع الموظفين مسندون
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="staff-role">الدور في المعاملة</Label>
+            <Input
+              id="staff-role"
+              value={assignedRole}
+              onChange={(e) => setAssignedRole(e.target.value)}
+              placeholder="مثال: مهندس معماري، مدير المشروع..."
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>إلغاء</Button>
+            <Button type="submit">إضافة وإسناد</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ============================================
 // TAB 286-06: إسناد الموظفين - مكثف جداً
 // ============================================
-export const Tab_286_06_StaffAssignment_UltraDense: React.FC = () => {
-  // ( ... الكود الخاص بهذا التاب يبقى كما هو ... )
-  const teamMembers = [
-    { id: '1', name: 'المهندس أحمد العلي', role: 'مدير المشروع', email: 'ahmed@office.sa', phone: '0501234567', tasks: 5, hours: 120 },
-    { id: '2', name: 'المهندسة فاطمة محمد', role: 'مهندس معماري', email: 'fatima@office.sa', phone: '0507654321', tasks: 3, hours: 90 },
-    { id: '3', name: 'المهندس خالد السعيد', role: 'مهندس إنشائي', email: 'khaled@office.sa', phone: '0509876543', tasks: 2, hours: 60 },
-    { id: '4', name: 'المهندسة نورة الحسن', role: 'مهندس MEP', email: 'noura@office.sa', phone: '0503456789', tasks: 4, hours: 100 },
-    { id: '5', name: 'المساح علي أحمد', role: 'مساح', email: 'ali@office.sa', phone: '0508765432', tasks: 2, hours: 40 },
-    { id: '6', name: 'المحامي عبدالله محمد', role: 'محامي', email: 'abdullah@office.sa', phone: '0502345678', tasks: 1, hours: 20 }
-  ];
+export const Tab_286_06_StaffAssignment_UltraDense: React.FC<StaffTabProps> = ({
+  assignedStaff,
+  employees,
+  tasks, // <-- ✅ تم استقبال المهام
+  onChange
+}) => {
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
+  // 1. حساب بيانات العرض (✅ معدل)
+  const displayStaff = useMemo(() => {
+    return assignedStaff.map(as => {
+      const employee = employees.find(e => e.id === as.employeeId);
+      
+      // --- ✅ حساب المهام والمدة ---
+      const tasksForThisEmployee = tasks.filter(t => t.assignedToId === as.employeeId);
+      const taskCount = tasksForThisEmployee.length;
+      const totalDuration = tasksForThisEmployee.reduce((sum, t) => sum + t.duration, 0);
+      // --------------------------
+
+      return {
+        id: as.employeeId,
+        assignmentId: as.assignmentId,
+        role: as.role,
+        name: employee?.name || 'موظف غير موجود',
+        email: employee?.email || 'N/A',
+        phone: employee?.phone || 'N/A',
+        taskCount: taskCount, // <-- ✅ إضافة
+        totalDuration: totalDuration, // <-- ✅ إضافة
+      };
+    });
+  }, [assignedStaff, employees, tasks]); // <-- ✅ إضافة "tasks" إلى مصفوفة الاعتماد
+
+  // 2. دوال المعالجة (Handlers)
+  const handleSaveStaff = (employeeId: string, role: string) => {
+    const newAssignment: AssignedStaff = {
+      assignmentId: nanoid(10),
+      employeeId: employeeId,
+      role: role,
+    };
+    onChange([...assignedStaff, newAssignment]);
+    setIsAddDialogOpen(false);
+  };
+
+  const handleDeleteStaff = (assignmentId: string) => {
+    onChange(assignedStaff.filter(s => s.assignmentId !== assignmentId));
+  };
+  
+  // 3. حساب الإحصائيات (✅ معدل)
   const stats = [
-    { label: 'عدد الفريق', value: teamMembers.length, color: '#3b82f6' },
-    { label: 'إجمالي المهام', value: teamMembers.reduce((sum, m) => sum + m.tasks, 0), color: '#10b981' },
-    { label: 'إجمالي الساعات', value: teamMembers.reduce((sum, m) => sum + m.hours, 0), color: '#f59e0b' },
-    { label: 'متوسط المهام', value: (teamMembers.reduce((sum, m) => sum + m.tasks, 0) / teamMembers.length).toFixed(1), color: '#8b5cf6' }
+    { label: 'عدد الفريق', value: displayStaff.length, color: '#3b82f6' },
+    // (تم حساب إجمالي المهام من البيانات الفعلية)
+    { label: 'إجمالي المهام', value: displayStaff.reduce((sum, m) => sum + m.taskCount, 0), color: '#10b981' },
+    // (تم حساب إجمالي المدة (بالأيام) من البيانات الفعلية)
+    { label: 'إجمالي المدة', value: `${displayStaff.reduce((sum, m) => sum + m.totalDuration, 0)} يوم`, color: '#f59e0b' },
+    { label: 'موظفون متاحون', value: employees.length - displayStaff.length, color: '#8b5cf6' }
   ];
 
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: 'calc(100vh - 180px)' }}>
-      <CodeDisplay code="TAB-286-06-DENSE" position="top-right" />
+      <CodeDisplay code="TAB-286-06-DYN" position="top-right" />
       
+      {/* --- 4. الإحصائيات (معدلة) --- */}
       <div className="grid grid-cols-4 gap-1 mb-2">
         {stats.map((stat, index) => (
           <Card key={index} style={{ border: `1px solid ${stat.color}40` }}>
@@ -430,12 +589,13 @@ export const Tab_286_06_StaffAssignment_UltraDense: React.FC = () => {
         <CardContent className="p-2 h-full flex flex-col">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <h3 className="text-sm font-bold">فريق العمل</h3>
-            <Button size="sm" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}>
+            <Button size="sm" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }} onClick={() => setIsAddDialogOpen(true)}>
               <Plus className="h-3 w-3 ml-1" />
               إضافة موظف
             </Button>
           </div>
           
+          {/* --- 5. الجدول (✅ معدل) --- */}
           <ScrollArea className="flex-grow">
             <Table className="table-rtl">
               <TableHeader>
@@ -444,14 +604,14 @@ export const Tab_286_06_StaffAssignment_UltraDense: React.FC = () => {
                   <TableHead className="text-right text-[10px] py-1">الدور</TableHead>
                   <TableHead className="text-right text-[10px] py-1">البريد</TableHead>
                   <TableHead className="text-right text-[10px] py-1">الجوال</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">المهام</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">الساعات</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">المهام</TableHead> {/* <-- ✅ إضافة */}
+                  <TableHead className="text-right text-[10px] py-1">المدة (أيام)</TableHead> {/* <-- ✅ إضافة */}
                   <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {teamMembers.map((member) => (
-                  <TableRow key={member.id} style={{ height: '32px' }}>
+                {displayStaff.map((member) => (
+                  <TableRow key={member.assignmentId} style={{ height: '32px' }}>
                     <TableCell className="text-right text-[10px] py-1 font-semibold">{member.name}</TableCell>
                     <TableCell className="text-right text-[10px] py-1">{member.role}</TableCell>
                     <TableCell className="text-right text-[10px] py-1">
@@ -466,125 +626,15 @@ export const Tab_286_06_StaffAssignment_UltraDense: React.FC = () => {
                         {member.phone}
                       </div>
                     </TableCell>
+                    {/* --- ✅ أعمدة جديدة --- */}
                     <TableCell className="text-right py-1">
-                      <Badge style={{ fontSize: '9px', padding: '2px 6px' }}>{member.tasks}</Badge>
+                      <Badge style={{ fontSize: '9px', padding: '2px 6px' }}>{member.taskCount}</Badge>
                     </TableCell>
-                    <TableCell className="text-right text-[10px] py-1">{member.hours}ساعة</TableCell>
-                    <TableCell className="text-right py-1">
-                      <div className="flex gap-0.5">
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                          <Edit2 className="h-3 w-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
-
-
-// ============================================
-// TAB 286-08: المرفقات - مكثف جداً
-// ============================================
-export const Tab_286_08_Attachments_UltraDense: React.FC = () => {
-  // ( ... الكود الخاص بهذا التاب يبقى كما هو ... )
-  const attachments = [
-    { id: '1', name: 'صورة الصك.pdf', type: 'PDF', size: '2.3 MB', date: '2025-10-26', category: 'مستندات', status: 'مراجع' },
-    { id: '2', name: 'خريطة الموقع.jpg', type: 'صورة', size: '1.8 MB', date: '2025-10-26', category: 'خرائط', status: 'معتمد' },
-    { id: '3', name: 'الهوية الpdf', type: 'PDF', size: '850 KB', date: '2025-10-25', category: 'هويات', status: 'معتمد' },
-    { id: '4', name: 'المخططات.dwg', type: 'CAD', size: '5.2 MB', date: '2025-10-24', category: 'مخططات', status: 'قيد المراجعة' },
-    { id: '5', name: 'التقرير الجيوتقني.pdf', type: 'PDF', size: '3.1 MB', date: '2025-10-23', category: 'تقارير', status: 'معتمد' },
-    { id: '6', name: 'موافقة البلدية.pdf', type: 'PDF', size: '1.2 MB', date: '2025-10-22', category: 'موافقات', status: 'معتمد' }
-  ];
-
-  const stats = [
-    { label: 'إجمالي الملفات', value: attachments.length, color: '#3b82f6' },
-    { label: 'معتمدة', value: attachments.filter(a => a.status === 'معتمد').length, color: '#10b981' },
-    { label: 'قيد المراجعة', value: attachments.filter(a => a.status === 'قيد المراجعة').length, color: '#f59e0b' },
-    { label: 'الحجم الكلي', value: '14.6 MB', color: '#8b5cf6' }
-  ];
-
-  return (
-    <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: 'calc(100vh - 180px)' }}>
-      <CodeDisplay code="TAB-286-08-DENSE" position="top-right" />
-      
-      <div className="grid grid-cols-4 gap-1 mb-2">
-        {stats.map((stat, index) => (
-          <Card key={index} style={{ border: `1px solid ${stat.color}40` }}>
-            <CardContent className="p-1 text-center">
-              <p className="text-[9px] text-gray-500">{stat.label}</p>
-              <p className="text-sm font-bold" style={{ color: stat.color }}>{stat.value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card style={{ height: 'calc(100% - 70px)' }}>
-        <CardContent className="p-2 h-full flex flex-col">
-          <div className="flex items-center justify-between mb-2 flex-shrink-0">
-            <h3 className="text-sm font-bold">المرفقات والمستندات</h3>
-            <Button size="sm" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}>
-              <Upload className="h-3 w-3 ml-1" />
-              رفع ملف
-            </Button>
-          </div>
-          
-          <ScrollArea className="flex-grow">
-            <Table className="table-rtl">
-              <TableHeader>
-                <TableRow style={{ height: '28px' }}>
-                  <TableHead className="text-right text-[10px] py-1">اسم الملف</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">النوع</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">التصنيف</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">الحجم</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">التاريخ</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">الحالة</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {attachments.map((file) => (
-                  <TableRow key={file.id} style={{ height: '32px' }}>
-                    <TableCell className="text-right text-[10px] py-1 font-semibold">
-                      <div className="flex items-center gap-1">
-                        <Paperclip className="h-3 w-3" style={{ color: '#64748b' }} />
-                        {file.name}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right py-1">
-                      <Badge variant="outline" style={{ fontSize: '9px', padding: '2px 6px' }}>{file.type}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-[10px] py-1">{file.category}</TableCell>
-                    <TableCell className="text-right text-[10px] py-1">{file.size}</TableCell>
-                    <TableCell className="text-right text-[10px] py-1">{file.date}</TableCell>
-                    <TableCell className="text-right py-1">
-                      <Badge style={{
-                        background: file.status === 'معتمد' ? '#10b981' : file.status === 'قيد المراجعة' ? '#f59e0b' : '#6b7280',
-                        color: '#ffffff',
-                        fontSize: '9px',
-                        padding: '2px 6px'
-                      }}>
-                        {file.status}
-                      </Badge>
-                    </TableCell>
+                    <TableCell className="text-right text-[10px] py-1">{member.totalDuration} يوم</TableCell>
+                    {/* -------------------- */}
                     <TableCell className="text-right py-1">
                       <div className="flex gap-0.5">
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
-                          <Download className="h-3 w-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }}>
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }} onClick={() => handleDeleteStaff(member.assignmentId)}>
                           <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
                         </Button>
                       </div>
@@ -596,6 +646,259 @@ export const Tab_286_08_Attachments_UltraDense: React.FC = () => {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      {/* --- 6. مودال الإضافة --- */}
+      <StaffAddDialog
+        isOpen={isAddDialogOpen}
+        onClose={() => setIsAddDialogOpen(false)}
+        onSave={handleSaveStaff}
+        employees={employees}
+        existingEmployeeIds={displayStaff.map(s => s.id)}
+      />
+    </div>
+  );
+};
+
+// ============================================
+// TAB 286-08: المرفقات - مكثف جداً
+// ============================================
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
+
+export const Tab_286_08_Attachments_UltraDense: React.FC<AttachmentsTabProps> = ({ 
+  transactionId 
+}) => {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // --- 1. جلب البيانات (Fetch Data) ---
+  const { data: attachments, isLoading, isError } = useQuery<Attachment[]>({
+    queryKey: ['attachments', transactionId],
+    queryFn: () => getAttachments(transactionId),
+    enabled: !!transactionId && transactionId !== 'new',
+  });
+
+  // --- 2. عمليات الرفع (Upload Mutation) ---
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadAttachment(file, transactionId),
+    onSuccess: () => {
+      // toast.success("تم رفع الملف بنجاح");
+      queryClient.invalidateQueries({ queryKey: ['attachments', transactionId] });
+    },
+    onError: (error: Error) => {
+      // toast.error(`فشل الرفع: ${error.message}`);
+      alert(`فشل الرفع: ${error.message}`);
+    },
+  });
+
+  // --- 3. عمليات الحذف (Delete Mutation) ---
+  const deleteMutation = useMutation({
+    mutationFn: deleteAttachment,
+    onSuccess: () => {
+      // toast.success("تم حذف المرفق بنجاح");
+      queryClient.invalidateQueries({ queryKey: ['attachments', transactionId] });
+      setDeletingId(null);
+    },
+    onError: (error: Error) => {
+      // toast.error(`فشل الحذف: ${error.message}`);
+      alert(`فشل الحذف: ${error.message}`);
+    },
+  });
+
+  // --- 4. معالجات الأحداث (Event Handlers) ---
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      uploadMutation.mutate(file);
+    }
+    // (إعادة تعيين الحقل للسماح برفع نفس الملف مرة أخرى)
+    if (event.target) {
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteClick = (id: string) => {
+    setDeletingId(id);
+  };
+
+  const confirmDelete = () => {
+    if (deletingId) {
+      deleteMutation.mutate(deletingId);
+    }
+  };
+  
+  // --- 5. حساب الإحصائيات (Dynamic Stats) ---
+  const stats = useMemo(() => {
+    const totalFiles = attachments?.length || 0;
+    const totalSizeInBytes = attachments?.reduce((sum, a) => sum + a.fileSize, 0) || 0;
+    const totalSize = formatBytes(totalSizeInBytes);
+    // (يمكنك إضافة إحصائيات أخرى إذا كانت الحالة 'status' مُدارة)
+    // const approvedCount = attachments?.filter(a => a.status === 'معتمد').length || 0;
+
+    return [
+      { label: 'إجمالي الملفات', value: totalFiles, color: '#3b82f6' },
+      { label: 'الحجم الكلي', value: totalSize, color: '#8b5cf6' },
+      { label: 'قيد الرفع', value: uploadMutation.isPending ? 1 : 0, color: '#f59e0b' },
+      { label: 'قيد الحذف', value: deleteMutation.isPending ? 1 : 0, color: '#ef4444' }
+    ];
+  }, [attachments, uploadMutation.isPending, deleteMutation.isPending]);
+
+  return (
+    <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: 'calc(100vh - 180px)' }}>
+      <CodeDisplay code="TAB-286-08-DYN" position="top-right" />
+      
+      {/* --- (Input مخفي لرفع الملفات) --- */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelected}
+        style={{ display: 'none' }}
+      />
+      
+      {/* --- (إحصائيات ديناميكية) --- */}
+      <div className="grid grid-cols-4 gap-1 mb-2">
+        {stats.map((stat, index) => (
+          <Card key={index} style={{ border: `1px solid ${stat.color}40` }}>
+            <CardContent className="p-1 text-center">
+              <p className="text-[9px] text-gray-500">{stat.label}</p>
+              <p className="text-sm font-bold" style={{ color: stat.color }}>
+                {stat.label === 'قيد الرفع' && stat.value > 0 ? (
+                  <Loader2 className="h-4 w-4 mx-auto animate-spin" />
+                ) : (
+                  stat.value
+                )}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card style={{ height: 'calc(100% - 70px)' }}>
+        <CardContent className="p-2 h-full flex flex-col">
+          <div className="flex items-center justify-between mb-2 flex-shrink-0">
+            <h3 className="text-sm font-bold">المرفقات والمستندات</h3>
+            <Button 
+              size="sm" 
+              style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}
+              onClick={handleUploadClick}
+              disabled={uploadMutation.isPending}
+            >
+              <Upload className="h-3 w-3 ml-1" />
+              {uploadMutation.isPending ? 'جاري الرفع...' : 'رفع ملف'}
+            </Button>
+          </div>
+          
+          <ScrollArea className="flex-grow">
+            {/* --- 6. عرض حالات التحميل والخطأ --- */}
+            {isLoading && (
+              <div className="space-y-1">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            )}
+            {isError && (
+              <div className="flex items-center justify-center h-20 text-destructive">
+                <AlertCircle className="h-5 w-5 ml-2" />
+                <span>فشل تحميل المرفقات</span>
+              </div>
+            )}
+            
+            {/* --- 7. الجدول الديناميكي --- */}
+            <Table className="table-rtl">
+              <TableHeader>
+                <TableRow style={{ height: '28px' }}>
+                  <TableHead className="text-right text-[10px] py-1">اسم الملف</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">النوع</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">الحجم</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">التاريخ</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {attachments?.map((file) => (
+                  <TableRow key={file.id} style={{ height: '32px' }}>
+                    <TableCell className="text-right text-[10px] py-1 font-semibold">
+                      <div className="flex items-center gap-1">
+                        <Paperclip className="h-3 w-3" style={{ color: '#64748b' }} />
+                        {/* (رابط للملف) */}
+                        <a href={file.filePath} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          {file.fileName}
+                        </a>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right py-1">
+                      <Badge variant="outline" style={{ fontSize: '9px', padding: '2px 6px' }}>
+                        {file.fileType.split('/')[1] || file.fileType}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-[10px] py-1">
+                      {formatBytes(file.fileSize)}
+                    </TableCell>
+                    <TableCell className="text-right text-[10px] py-1">
+                      {new Date(file.createdAt).toLocaleDateString('ar-SA')}
+                    </TableCell>
+                    <TableCell className="text-right py-1">
+                      <div className="flex gap-0.5">
+                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }} asChild>
+                          <a href={file.filePath} download={file.fileName}><Download className="h-3 w-3" /></a>
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          style={{ height: '22px', width: '22px', padding: 0 }}
+                          onClick={() => handleDeleteClick(file.id)}
+                          disabled={deleteMutation.isPending && deletingId === file.id}
+                        >
+                          {deleteMutation.isPending && deletingId === file.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
+                          )}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
+      {/* --- 8. مودال تأكيد الحذف --- */}
+      <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
+        <AlertDialogContent className="card-rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم حذف هذا المرفق نهائياً. لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={confirmDelete} 
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

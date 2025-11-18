@@ -45,7 +45,7 @@ import {
 
 interface Props {
   transactionId: string | 'new';
-  onTypeSelected: () => void; // Function to navigate to the next tab
+  onTypeSelected: (type: TransactionType) => void; // Function to navigate to the next tab
 }
 
 const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({ 
@@ -82,27 +82,26 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
 
   // --- 4. Update operation ---
   const updateMutation = useMutation({
-    // --- ✅ [Modified] ---
-    // Changed function to "updateTransaction"
-    // Now it calls (PUT /api/transactions/:id) which is the correct path
-    mutationFn: (typeId: string) => updateTransaction(
+    // (أ) قم بتغيير الدالة لتقبل الكائن 'type' كاملاً
+    mutationFn: (type: TransactionType) => updateTransaction(
       transactionId, 
-      { transactionTypeId: typeId } as Partial<TransactionUpdateData>
+      // (ب) أرسل الـ ID إلى الـ Backend
+      { transactionTypeId: type.id } as Partial<TransactionUpdateData>
     ),
-    // --------------------
 
-    onSuccess: (updatedData) => {
+    // (ج) دالة onSuccess تستقبل (data, variables)
+    // 'type' هنا هي نفس الكائن الذي مررناه إلى .mutate()
+    onSuccess: (updatedData, type) => {
       // toast.success("تم تحديد نوع المعاملة بنجاح");
-      // Update transaction data in cache
       queryClient.setQueryData(['transaction', transactionId], updatedData);
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       
-      // Navigate to next tab
-      onTypeSelected();
+      // (د) مرّر الكائن 'type' كاملاً إلى المكون الأب!
+      onTypeSelected(type);
     },
     onError: (error: Error) => {
       // toast.error(`فشل تحديد النوع: ${error.message}`);
-      setSelectedTypeId(null); // Cancel selection on failure
+      setSelectedTypeId(null); 
     }
   });
 
@@ -129,9 +128,9 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
     }
   };
 
-  const handleSelect = (typeId: string) => {
-    setSelectedTypeId(typeId);
-    updateMutation.mutate(typeId);
+  const handleSelect = (type: TransactionType) => { // <-- استقبل الكائن كاملاً
+    setSelectedTypeId(type.id);
+    updateMutation.mutate(type); // <-- مرر الكائن كاملاً
   };
 
   // --- 6. UI Render ---
@@ -347,7 +346,7 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                         {isExpanded ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}
                       </Button>
                       <Button
-                        onClick={() => handleSelect(type.id)}
+                        onClick={() => handleSelect(type)}
                         disabled={updateMutation.isPending}
                         style={{
                           flex: 1,

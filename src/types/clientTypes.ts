@@ -122,3 +122,4 @@ export type Client = Omit<PrismaClient, 'name' | 'contact' | 'address' | 'identi
   attachments: PrismaAttachment[];
   activityLogs: ActivityLog[];
 };
+

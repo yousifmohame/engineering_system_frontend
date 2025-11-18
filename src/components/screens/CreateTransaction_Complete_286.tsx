@@ -1,6 +1,11 @@
 /**
- * Screen 286 - Create New Transaction - v10.0 (Dynamic Tasks)
+ * Screen 286 - Create New Transaction - v10.1 (Final Fix)
  * ===========================================
+ * * Update v10.1:
+ * ✅ Fixed <form> tag placement. It now only wraps Tab 1.
+ * ✅ This prevents buttons in other tabs (like Tab 3) from
+ * triggering the Tab 1 submission.
+ *
  * * Update v10.0:
  * ✅ Re-architected to be a stateful container.
  * ✅ Fetches employees using useQuery.
@@ -10,24 +15,23 @@
  * ✅ Correctly wires 'onSave' for tabs 3 and 4 to update state and navigate.
  */
 
-import React, { useState } from 'react';
+// --- ✅ [FIX] Added useMemo ---
+import React, { useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'; // (Added useQuery)
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'; 
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 // import { toast } from 'sonner';
 
 // --- (1. Import API functions and types) ---
 import { createTransaction } from '../../api/transactionApi';
-// (Need to import employee API)
 import { getEmployees } from '../../api/employeeApi'; 
-// (Import all necessary types - assuming structure from previous context)
 import { 
   Transaction, 
   NewTransactionData, 
   TransactionType,  
   Employee 
-} from '../../types/transactionTypes'; // (Adjust path as needed)
+} from '../../types/transactionTypes'; 
 
 import { Task } from '../../types/taskTypes';
 
@@ -66,7 +70,8 @@ import Tab_FinalComponents_Detailed_Complete from './Tab_FinalComponents_Detaile
 import Tab_Components_Generic_Complete from './Tab_Components_Generic_Complete';
 import Tab_Boundaries_Neighbors_Complete from './Tab_Boundaries_Neighbors_Complete';
 import Tab_LandArea_Complete from './Tab_LandArea_Complete';
-import { Skeleton } from '../ui/skeleton'; // (Import Skeleton for loading)
+import { Skeleton } from '../ui/skeleton'; 
+import { AssignedStaff } from '@/types/employeeTypes';
 
 // --- (4. Define schema and types) ---
 const basicInfoSchema = z.object({
@@ -111,10 +116,9 @@ const CreateTransaction_Complete_286: React.FC = () => {
   const queryClient = useQueryClient();
 
   // --- (5. New Master State for Transaction Data) ---
-  // This holds data from all tabs
   const [transactionData, setTransactionData] = useState<Partial<Transaction>>({});
-  // This holds the selected template object
   const [selectedType, setSelectedType] = useState<TransactionType | null>(null);
+  const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([]);
 
   // --- (6. Form for Tab 1) ---
   const form = useForm<BasicInfoFormData>({
@@ -131,7 +135,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
   // --- (7. Fetch Employees for Task Assignment) ---
   const { data: employees, isLoading: isLoadingEmployees } = useQuery<Employee[]>({
     queryKey: ['employees'],
-    queryFn: getEmployees, // (This function must be created in 'employeeApi.ts')
+    queryFn: getEmployees, 
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
@@ -140,7 +144,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
     mutationFn: (data: BasicInfoFormData) => createTransaction(data),
     onSuccess: (createdTransaction: Transaction) => {
       setTransactionId(createdTransaction.id);
-      setTransactionData(createdTransaction); // (Initialize master state)
+      setTransactionData(createdTransaction); 
       // toast.success('Transaction (draft) created successfully!');
       setActiveTab('286-02'); // (Navigate to tab 2)
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -158,28 +162,41 @@ const CreateTransaction_Complete_286: React.FC = () => {
     createTransactionMutation.mutate(data);
   };
 
+  // --- ✅ [FIX] Cleaned up 'else' (assuming Tab_286_02 is fixed) ---
   const handleTypeSelected = (type: TransactionType) => {
     setSelectedType(type);
-    setTransactionData(prev => ({...prev, type: type.id})); // Save type ID
+    setTransactionData(prev => ({...prev, type: type.id})); 
     setActiveTab('286-03');
   };
 
   const handleBriefPurposeSave = (purposes: any) => {
     console.log("CreateTransaction: Brief purposes saved.", purposes);
-    setTransactionData(prev => ({...prev, requestPurposes: purposes})); // (Assuming 'requestPurposes' is the field)
-    setActiveTab('286-04'); // (Navigate to next tab)
+    setTransactionData(prev => ({...prev, requestPurposes: purposes})); 
+    setActiveTab('286-04'); 
   };
   
   const handleDetailedPurposeSave = (purposes: any) => {
     console.log("CreateTransaction: Detailed purposes saved.", purposes);
-    // (Here you would merge detailed purposes with brief purposes)
-    setTransactionData(prev => ({...prev, detailedPurposes: purposes})); // (Use a separate field or merge)
-    setActiveTab('286-05'); // (Navigate to next tab)
+    setTransactionData(prev => ({...prev, detailedPurposes: purposes})); 
+    setActiveTab('286-05'); 
   };
   
-  const handleTasksChange = (tasks: Task[]) => {
+  // --- ✅ [FIX] Stabilized with useCallback ---
+  const handleTasksChange = useCallback((tasks: Task[]) => {
     console.log("CreateTransaction: Tasks updated.", tasks);
     setTransactionData(prev => ({...prev, tasks: tasks}));
+  }, []); // Empty dependency array stabilizes the function
+
+  // --- ✅ [FIX] Stabilized with useMemo ---
+  const templateTasks = useMemo(() => {
+    return selectedType?.tasks || [];
+  }, [selectedType]); // Recalculates only when selectedType changes
+
+  const handleStaffChange = (staff: AssignedStaff[]) => {
+    console.log("CreateTransaction: Staff updated.", staff);
+    setAssignedStaff(staff);
+    // (اختياري: احفظها في الحالة الرئيسية أيضاً)
+    setTransactionData(prev => ({...prev, staff: staff as any})); 
   };
 
   // --- (10. Updated renderTabContent) ---
@@ -187,19 +204,22 @@ const CreateTransaction_Complete_286: React.FC = () => {
     const isDisabled = transactionId === 'new';
 
     switch (activeTab) {
+      // --- ✅ [FIX] <form> tag is now INSIDE this case ---
       case '286-01':
         return (
-          <Tab_286_01_BasicInfo_UltraDense
-            form={form} 
-            isSaving={createTransactionMutation.isPending}
-          />
+          <form onSubmit={form.handleSubmit(onSubmitBasicInfo)}>
+            <Tab_286_01_BasicInfo_UltraDense
+              form={form} 
+              isSaving={createTransactionMutation.isPending}
+            />
+          </form>
         );
       
       case '286-02':
         return (
           <Tab_286_02_TransactionDetails_Complete
             transactionId={transactionId}
-            onTypeSelected={handleTypeSelected} // (Updated prop)
+            onTypeSelected={handleTypeSelected} 
           />
         );
       
@@ -208,7 +228,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
           <Tab_RequestPurpose_Brief_Complete 
             transactionId={transactionId} 
             readOnly={isDisabled} 
-            onSave={handleBriefPurposeSave} // (Updated prop)
+            onSave={handleBriefPurposeSave} 
           />
         );
       
@@ -217,12 +237,11 @@ const CreateTransaction_Complete_286: React.FC = () => {
           <Tab_RequestPurpose_Detailed_Complete 
             transactionId={transactionId} 
             readOnly={isDisabled}
-            onSave={handleDetailedPurposeSave} // (Updated prop)
+            onSave={handleDetailedPurposeSave} 
           />
         );
       
       case '286-05':
-        // --- This is the main fix ---
         if (isLoadingEmployees) {
           return (
             <div className="space-y-2 pt-4">
@@ -232,7 +251,8 @@ const CreateTransaction_Complete_286: React.FC = () => {
             </div>
           );
         }
-        const templateTasks = selectedType?.tasks || []; // Get tasks from selected type
+        
+        // --- ✅ [FIX] Using stabilized props from useMemo/useCallback ---
         return (
           <Tab_286_05_Tasks_UltraDense
             templateTasks={templateTasks}
@@ -242,32 +262,38 @@ const CreateTransaction_Complete_286: React.FC = () => {
         );
       
       case '286-06':
-        return <Tab_286_06_StaffAssignment_UltraDense /* transactionId={transactionId} */ />;
+        return (
+          <Tab_286_06_StaffAssignment_UltraDense
+            assignedStaff={assignedStaff} // (تمرير الحالة)
+            employees={employees || []} // (تمرير القائمة الكاملة)
+            tasks={transactionData.tasks || []}
+            onChange={handleStaffChange} // (تمرير دالة الحفظ)
+          />
+        );
       
       case '286-07':
-        return <Tab_286_07_ClientInfo /* transactionId={transactionId} */ />;
+        return <Tab_286_07_ClientInfo />;
       
       case '286-08':
-        return <Tab_286_08_Attachments_UltraDense /* transactionId={transactionId} */ />;
+        return <Tab_286_08_Attachments_UltraDense />;
       
       case '286-09':
-        return <Tab_286_09_Appointments /* transactionId={transactionId} */ />;
+        return <Tab_286_09_Appointments />;
       
       case '286-10':
-        return <Tab_286_10_Costs_UltraDense /* transactionId={transactionId} */ />;
+        return <Tab_286_10_Costs_UltraDense />;
       
       case '286-11':
-        return <Tab_286_11_Approvals /* transactionId={transactionId} */ />;
+        return <Tab_286_11_Approvals />;
       
       case '286-12':
-        return <Tab_286_12_Notes /* transactionId={transactionId} */ />;
+        return <Tab_286_12_Notes />;
       
       case '286-13':
-        // (This tab should receive the 'transactionData' object)
-        return <Tab_286_13_Preview /* transactionId={transactionId} data={transactionData} */ />;
+        return <Tab_286_13_Preview />;
       
       case '286-14':
-        return <Tab_286_14_Settings /* transactionId={transactionId} */ />;
+        return <Tab_286_14_Settings />;
       
       case '286-15':
         return <Tab_FloorsNaming_Complete transactionId={transactionId} readOnly={isDisabled} />;
@@ -453,10 +479,9 @@ const CreateTransaction_Complete_286: React.FC = () => {
             .filter(id => id !== '286-01' && transactionId === 'new')}
         />
         
+        {/* --- ✅ [FIX] <form> tag removed from here --- */}
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 220px)', paddingLeft: '16px', paddingRight: '16px' }}>
-          <form onSubmit={form.handleSubmit(onSubmitBasicInfo)}>
-            {renderTabContent()}
-          </form>
+          {renderTabContent()}
         </div>
       </div>
     </div>
