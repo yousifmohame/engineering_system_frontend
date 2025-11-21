@@ -50,7 +50,7 @@ api.interceptors.response.use(
     const originalRequest = error.config;
 
     // إذا كان الخطأ 401 (Unauthorized) ولم يكن هذا الطلب هو طلب إعادة المحاولة
-    if (error.response.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry) {
       
       if (isRefreshing) {
         // إذا كان هناك عملية تحديث جارية، أضف الطلب إلى قائمة الانتظار

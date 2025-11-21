@@ -104,49 +104,91 @@ export const createClient = async (clientData: any): Promise<Client> => {
  * PUT /api/clients/:id
  * ============================================================================
  */
+const sanitizeValue = (value: any) => {
+  if (value && typeof value === 'object') {
+    // إذا كان الكائن يحتوي على خصائص تشير إلى أنه حدث (Event) أو عقدة DOM
+    if (value instanceof HTMLElement || value.nativeEvent || value._reactName) {
+      return undefined; // تجاهل هذا الحقل
+    }
+  }
+  return value;
+};
+
 export const updateClient = async (clientId: string, clientData: any): Promise<Client> => {
   
-  // 1. تحويل البيانات للـ Payload بنفس منطق الإنشاء
-  const payload: Partial<ClientPayload> = {
-    mobile: clientData.contact.mobile,
-    email: clientData.contact.email,
-    idNumber: clientData.identification.idNumber,
+  // بناء Payload نظيف
+  const payload: Partial<ClientPayload> = {};
 
-    name: clientData.name,
-    address: clientData.address,
+  // 1. الحقول المباشرة (Top Level)
+  if (clientData.type) payload.type = sanitizeValue(clientData.type);
+  if (clientData.category) payload.category = sanitizeValue(clientData.category);
+  if (clientData.nationality) payload.nationality = sanitizeValue(clientData.nationality);
+  if (clientData.occupation) payload.occupation = sanitizeValue(clientData.occupation);
+  if (clientData.company) payload.company = sanitizeValue(clientData.company);
+  if (clientData.taxNumber) payload.taxNumber = sanitizeValue(clientData.taxNumber);
+  
+  // القيم الرقمية والمنطقية نقبلها كما هي (مع التحقق من undefined)
+  if (clientData.rating !== undefined) payload.rating = clientData.rating;
+  if (clientData.secretRating !== undefined) payload.secretRating = clientData.secretRating;
+  if (clientData.notes !== undefined) payload.notes = sanitizeValue(clientData.notes);
+  if (clientData.isActive !== undefined) payload.isActive = clientData.isActive;
+
+  // 2. الكائنات المتداخلة - نأخذ نسخة نظيفة منها
+  if (clientData.name) {
+    payload.name = {
+      firstName: sanitizeValue(clientData.name.firstName),
+      fatherName: sanitizeValue(clientData.name.fatherName),
+      grandFatherName: sanitizeValue(clientData.name.grandFatherName),
+      familyName: sanitizeValue(clientData.name.familyName),
+    };
+  }
+
+  if (clientData.address) {
+    payload.address = { ...clientData.address }; // نسخ بسيط
+  }
+
+  // 3. التعامل مع contact
+  if (clientData.contact) {
+    // التأكد من أن القيم ليست كائنات
+    const mobile = sanitizeValue(clientData.contact.mobile);
+    const email = sanitizeValue(clientData.contact.email);
     
-    contact: {
-      phone: clientData.contact.phone,
-      fax: clientData.contact.fax,
-      whatsapp: clientData.contact.whatsapp,
-      telegram: clientData.contact.telegram,
-    },
-    identification: {
-      idType: clientData.identification.idType,
-      issueDate: clientData.identification.issueDate,
-      expiryDate: clientData.identification.expiryDate,
-      issuePlace: clientData.identification.issuePlace,
-    },
-    
-    type: clientData.type,
-    category: clientData.category,
-    nationality: clientData.nationality,
-    occupation: clientData.occupation,
-    company: clientData.company,
-    taxNumber: clientData.taxNumber,
-    rating: clientData.rating,
-    secretRating: clientData.secretRating,
-    notes: clientData.notes,
-    isActive: clientData.isActive,
-  };
+    if (mobile) payload.mobile = mobile;
+    if (email) payload.email = email;
+
+    payload.contact = {
+      mobile: mobile,
+      email: email,
+      phone: sanitizeValue(clientData.contact.phone),
+      fax: sanitizeValue(clientData.contact.fax),
+      whatsapp: sanitizeValue(clientData.contact.whatsapp),
+      telegram: sanitizeValue(clientData.contact.telegram),
+    };
+  }
+
+  // 4. التعامل مع identification
+  if (clientData.identification) {
+    const idNumber = sanitizeValue(clientData.identification.idNumber);
+    if (idNumber) payload.idNumber = idNumber;
+
+    payload.identification = {
+      idType: sanitizeValue(clientData.identification.idType),
+      idNumber: idNumber,
+      issueDate: sanitizeValue(clientData.identification.issueDate),
+      expiryDate: sanitizeValue(clientData.identification.expiryDate),
+      issuePlace: sanitizeValue(clientData.identification.issuePlace),
+    };
+  }
 
   try {
-    // 2. إرسال الطلب إلى المسار الصحيح
     const { data } = await api.put(`/clients/${clientId}`, payload);
     return data;
   } catch (error: any) {
     console.error('Error updating client:', error);
-    throw new Error(error.response?.data?.message || 'فشل في تحديث العميل');
+    // استخراج رسالة الخطأ من الباك إند بشكل صحيح
+    const message = error.response?.data?.message || 'فشل في تحديث العميل';
+    const details = error.response?.data?.error || '';
+    throw new Error(`${message} ${details}`);
   }
 };
 

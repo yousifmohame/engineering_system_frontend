@@ -1,30 +1,15 @@
-/**
- * Screen 286 - Create New Transaction - v10.1 (Final Fix)
- * ===========================================
- * * Update v10.1:
- * ✅ Fixed <form> tag placement. It now only wraps Tab 1.
- * ✅ This prevents buttons in other tabs (like Tab 3) from
- * triggering the Tab 1 submission.
- *
- * * Update v10.0:
- * ✅ Re-architected to be a stateful container.
- * ✅ Fetches employees using useQuery.
- * ✅ Stores the selected 'TransactionType' from tab 2.
- * ✅ Stores tasks from tab 5 in its own state.
- * ✅ Correctly wires 'templateTasks', 'employees', and 'onChange' to Tab_286_05.
- * ✅ Correctly wires 'onSave' for tabs 3 and 4 to update state and navigate.
- */
-
-// --- ✅ [FIX] Added useMemo ---
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'; 
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-// import { toast } from 'sonner';
+import { toast } from 'sonner'; // ✅ إضافة التنبيهات
 
-// --- (1. Import API functions and types) ---
-import { createTransaction } from '../../api/transactionApi';
+import { 
+  createTransaction, 
+  updateTransaction, // ✅ استيراد دالة التحديث
+  getTransactionById // ✅ استيراد دالة الجلب للتأكد من البيانات
+} from '../../api/transactionApi';
 import { getEmployees } from '../../api/employeeApi'; 
 import { 
   Transaction, 
@@ -32,10 +17,10 @@ import {
   TransactionType,  
   Employee 
 } from '../../types/transactionTypes'; 
-
 import { Task } from '../../types/taskTypes';
+import { AssignedStaff } from '@/types/employeeTypes';
 
-// --- (2. UI Imports) ---
+// ... (باقي الاستيرادات كما هي)
 import {
   FileText, Plus, CheckCircle, Users, Calendar,
   Paperclip, Target, AlertCircle, Settings,
@@ -45,8 +30,9 @@ import {
 import CodeDisplay from '../CodeDisplay';
 import UnifiedTabsSidebar, { TabConfig } from '../UnifiedTabsSidebar';
 
-// --- (3. Import all sub-tabs) ---
+// ... (استيراد التابات كما هي)
 import Tab_286_01_BasicInfo_UltraDense from './Tab_286_01_BasicInfo_UltraDense';
+// ... (باقي التابات)
 import Tab_286_02_TransactionDetails_Complete from './Tab_286_02_TransactionDetails_Complete';
 import {
   Tab_286_05_Tasks_UltraDense,
@@ -71,9 +57,9 @@ import Tab_Components_Generic_Complete from './Tab_Components_Generic_Complete';
 import Tab_Boundaries_Neighbors_Complete from './Tab_Boundaries_Neighbors_Complete';
 import Tab_LandArea_Complete from './Tab_LandArea_Complete';
 import { Skeleton } from '../ui/skeleton'; 
-import { AssignedStaff } from '@/types/employeeTypes';
 
-// --- (4. Define schema and types) ---
+// ... (Schema وتعريف التابات كما هي)
+
 const basicInfoSchema = z.object({
   title: z.string().min(1, "العنوان مطلوب"),
   clientId: z.string().min(1, "يجب اختيار العميل"),
@@ -84,9 +70,9 @@ const basicInfoSchema = z.object({
 
 type BasicInfoFormData = NewTransactionData;
 
-// (Tabs config remains the same)
 const TABS_CONFIG: TabConfig[] = [
   { id: '286-01', number: '286-01', title: 'معلومات أساسية', icon: FileText },
+  // ... (باقي التابات كما هي)
   { id: '286-02', number: '286-02', title: 'تفاصيل المعاملة', icon: Target },
   { id: '286-03', number: '286-03', title: 'الغرض المختصر', icon: CheckCircle },
   { id: '286-04', number: '286-04', title: 'الغرض التفصيلي', icon: List },
@@ -115,12 +101,11 @@ const CreateTransaction_Complete_286: React.FC = () => {
   const [transactionId, setTransactionId] = useState<'new' | string>('new');
   const queryClient = useQueryClient();
 
-  // --- (5. New Master State for Transaction Data) ---
+  // Master State
   const [transactionData, setTransactionData] = useState<Partial<Transaction>>({});
   const [selectedType, setSelectedType] = useState<TransactionType | null>(null);
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([]);
 
-  // --- (6. Form for Tab 1) ---
   const form = useForm<BasicInfoFormData>({
     resolver: zodResolver(basicInfoSchema),
     defaultValues: {
@@ -132,373 +117,199 @@ const CreateTransaction_Complete_286: React.FC = () => {
     },
   });
 
-  // --- (7. Fetch Employees for Task Assignment) ---
+  // --- جلب الموظفين ---
   const { data: employees, isLoading: isLoadingEmployees } = useQuery<Employee[]>({
     queryKey: ['employees'],
     queryFn: getEmployees, 
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
 
-  // --- (8. Create Transaction Mutation) ---
+  // --- جلب بيانات المعاملة الكاملة (عند التعديل) ---
+  const { data: existingTransaction } = useQuery({
+    queryKey: ['transaction', transactionId],
+    queryFn: () => getTransactionById(transactionId),
+    enabled: transactionId !== 'new',
+  });
+
+  // تحديث الحالة عند جلب معاملة موجودة
+  useEffect(() => {
+    if (existingTransaction) {
+      setTransactionData(existingTransaction);
+      if (existingTransaction.transactionType) {
+        setSelectedType(existingTransaction.transactionType);
+      }
+      // يمكنك تحديث حالة الموظفين والمهام هنا إذا لزم الأمر
+    }
+  }, [existingTransaction]);
+
+
+  // --- Mutations ---
+
+  // 1. إنشاء معاملة جديدة
   const createTransactionMutation = useMutation({
     mutationFn: (data: BasicInfoFormData) => createTransaction(data),
     onSuccess: (createdTransaction: Transaction) => {
       setTransactionId(createdTransaction.id);
       setTransactionData(createdTransaction); 
-      // toast.success('Transaction (draft) created successfully!');
-      setActiveTab('286-02'); // (Navigate to tab 2)
+      toast.success('تم إنشاء مسودة المعاملة بنجاح');
+      // setActiveTab('286-02'); // (اختياري: الانتقال للتاب التالي)
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] }); // تحديث القائمة الجانبية
     },
     onError: (error: Error) => {
-      // toast.error(`Failed to create transaction: ${error.message}`);
-      console.error("Mutation Error:", error);
+      toast.error(`فشل الإنشاء: ${error.message}`);
     },
   });
 
-  // --- (9. Handlers for Data Flow between Tabs) ---
+  // 2. تحديث معاملة موجودة
+  const updateTransactionMutation = useMutation({
+    mutationFn: (data: BasicInfoFormData) => updateTransaction(transactionId, data),
+    onSuccess: (updatedTransaction: Transaction) => {
+      setTransactionData(prev => ({ ...prev, ...updatedTransaction }));
+      toast.success('تم حفظ التعديلات بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`فشل التعديل: ${error.message}`);
+    },
+  });
+
+  // --- Handlers ---
   
+  // ✅ دالة المعالجة الرئيسية للنموذج (الآن تفرق بين الإنشاء والتعديل)
   const onSubmitBasicInfo = (data: BasicInfoFormData) => {
-    console.log('Basic form data:', data);
-    createTransactionMutation.mutate(data);
+    if (transactionId === 'new') {
+      createTransactionMutation.mutate(data);
+    } else {
+      updateTransactionMutation.mutate(data);
+    }
   };
 
-  // --- ✅ [FIX] Cleaned up 'else' (assuming Tab_286_02 is fixed) ---
+  // ✅ دالة اختيار معاملة للتعديل (تمرر للتاب 1)
+  const handleTransactionSelect = (tx: Transaction) => {
+    setTransactionId(tx.id);
+    setTransactionData(tx);
+    
+    // تحديث الفورم بالبيانات المسترجعة
+    form.reset({
+      title: tx.title,
+      clientId: tx.clientId,
+      type: tx.transactionTypeId || "",
+      priority: tx.priority || "medium",
+      description: tx.description || "",
+    });
+
+    // إذا كان للمعاملة نوع، نحدث الحالة لتعمل التابات الأخرى
+    // (ملاحظة: tx هنا قد لا يحتوي على تفاصيل النوع الكاملة، لذا نعتمد على useQuery أعلاه لجلب التفاصيل)
+    
+    toast.info(`تم تحميل المعاملة: ${tx.transactionCode}`);
+  };
+
   const handleTypeSelected = (type: TransactionType) => {
     setSelectedType(type);
     setTransactionData(prev => ({...prev, type: type.id})); 
     setActiveTab('286-03');
   };
 
+  // ... (باقي الـ Handlers كما هي)
   const handleBriefPurposeSave = (purposes: any) => {
-    console.log("CreateTransaction: Brief purposes saved.", purposes);
     setTransactionData(prev => ({...prev, requestPurposes: purposes})); 
     setActiveTab('286-04'); 
   };
-  
   const handleDetailedPurposeSave = (purposes: any) => {
-    console.log("CreateTransaction: Detailed purposes saved.", purposes);
     setTransactionData(prev => ({...prev, detailedPurposes: purposes})); 
     setActiveTab('286-05'); 
   };
-  
-  // --- ✅ [FIX] Stabilized with useCallback ---
   const handleTasksChange = useCallback((tasks: Task[]) => {
-    console.log("CreateTransaction: Tasks updated.", tasks);
     setTransactionData(prev => ({...prev, tasks: tasks}));
-  }, []); // Empty dependency array stabilizes the function
-
-  // --- ✅ [FIX] Stabilized with useMemo ---
-  const templateTasks = useMemo(() => {
-    return selectedType?.tasks || [];
-  }, [selectedType]); // Recalculates only when selectedType changes
-
+  }, []);
+  const templateTasks = useMemo(() => selectedType?.tasks || [], [selectedType]);
   const handleStaffChange = (staff: AssignedStaff[]) => {
-    console.log("CreateTransaction: Staff updated.", staff);
     setAssignedStaff(staff);
-    // (اختياري: احفظها في الحالة الرئيسية أيضاً)
     setTransactionData(prev => ({...prev, staff: staff as any})); 
   };
 
-  // --- (10. Updated renderTabContent) ---
+
+  // --- Render Content ---
   const renderTabContent = () => {
     const isDisabled = transactionId === 'new';
 
     switch (activeTab) {
-      // --- ✅ [FIX] <form> tag is now INSIDE this case ---
       case '286-01':
         return (
           <form onSubmit={form.handleSubmit(onSubmitBasicInfo)}>
             <Tab_286_01_BasicInfo_UltraDense
               form={form} 
-              isSaving={createTransactionMutation.isPending}
+              isSaving={createTransactionMutation.isPending || updateTransactionMutation.isPending}
+              onSelectTransaction={handleTransactionSelect} // ✅ تمرير دالة الاختيار
             />
           </form>
         );
       
-      case '286-02':
-        return (
-          <Tab_286_02_TransactionDetails_Complete
-            transactionId={transactionId}
-            onTypeSelected={handleTypeSelected} 
-          />
-        );
-      
-      case '286-03':
-        return (
-          <Tab_RequestPurpose_Brief_Complete 
-            transactionId={transactionId} 
-            readOnly={isDisabled} 
-            onSave={handleBriefPurposeSave} 
-          />
-        );
-      
-      case '286-04':
-        return (
-          <Tab_RequestPurpose_Detailed_Complete 
-            transactionId={transactionId} 
-            readOnly={isDisabled}
-            onSave={handleDetailedPurposeSave} 
-          />
-        );
+      // ... (باقي الحالات كما هي تماماً)
+      case '286-02': return <Tab_286_02_TransactionDetails_Complete transactionId={transactionId} onTypeSelected={handleTypeSelected} />;
+      case '286-03': return <Tab_RequestPurpose_Brief_Complete transactionId={transactionId} readOnly={isDisabled} onSave={handleBriefPurposeSave} />;
+      case '286-04': return <Tab_RequestPurpose_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} onSave={handleDetailedPurposeSave} />;
       
       case '286-05':
-        if (isLoadingEmployees) {
-          return (
-            <div className="space-y-2 pt-4">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          );
-        }
-        
-        // --- ✅ [FIX] Using stabilized props from useMemo/useCallback ---
-        return (
-          <Tab_286_05_Tasks_UltraDense
-            templateTasks={templateTasks}
-            employees={employees || []}
-            onChange={handleTasksChange}
-          />
-        );
+        if (isLoadingEmployees) return <div className="space-y-2 pt-4"><Skeleton className="h-10" /><Skeleton className="h-10" /></div>;
+        return <Tab_286_05_Tasks_UltraDense transactionId={transactionId} templateTasks={templateTasks} employees={employees || []} onChange={handleTasksChange} />;
       
       case '286-06':
-        return (
-          <Tab_286_06_StaffAssignment_UltraDense
-            assignedStaff={assignedStaff} // (تمرير الحالة)
-            employees={employees || []} // (تمرير القائمة الكاملة)
-            tasks={transactionData.tasks || []}
-            onChange={handleStaffChange} // (تمرير دالة الحفظ)
-          />
-        );
+        return <Tab_286_06_StaffAssignment_UltraDense assignedStaff={assignedStaff} employees={employees || []} tasks={transactionData.tasks || []} onChange={handleStaffChange} />;
       
-      case '286-07':
-        return (
-          <Tab_286_07_ClientInfo 
-            readOnly={isDisabled} 
-            clientId={transactionData.clientId} // ✅ تم الربط هنا
-          />
-        );
+      case '286-07': return <Tab_286_07_ClientInfo readOnly={isDisabled} clientId={transactionData.clientId} />;
       
       case '286-08':
-        // الحصول على قائمة المستندات المطلوبة من "النوع المختار"
-        // إذا لم يكن هناك نوع مختار، نمرر مصفوفة فارغة
         const requiredDocs = selectedType?.documents || [];
-        
-        return (
-          <Tab_286_08_Attachments_UltraDense 
-            transactionId={transactionId}
-            requiredDocuments={requiredDocs} // <-- ✅ تمرير القائمة هنا
-          />
-        );
+        return <Tab_286_08_Attachments_UltraDense transactionId={transactionId} requiredDocuments={requiredDocs} />;
       
-      case '286-09':
-        return (
-          <Tab_286_09_Appointments 
-            transactionId={transactionId} // ✅ تمرير ID المعاملة
-            readOnly={isDisabled}
-          />
-        );
+      case '286-09': return <Tab_286_09_Appointments transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-10': return <Tab_286_10_Costs_UltraDense transactionId={transactionId} />;
+      case '286-11': return <Tab_286_11_Approvals transactionId={transactionId} />;
+      case '286-12': return <Tab_286_12_Notes transactionId={transactionId} />;
+      case '286-13': return <Tab_286_13_Preview transactionId={transactionId} />;
+      case '286-14': return <Tab_286_14_Settings />;
       
-      case '286-10':
-        return <Tab_286_10_Costs_UltraDense />;
-      
-      case '286-11':
-        return <Tab_286_11_Approvals />;
-      
-      case '286-12':
-        return <Tab_286_12_Notes />;
-      
-      case '286-13':
-        return <Tab_286_13_Preview />;
-      
-      case '286-14':
-        return <Tab_286_14_Settings />;
-      
-      case '286-15':
-        return <Tab_FloorsNaming_Complete transactionId={transactionId} readOnly={isDisabled} />;
-      
-      case '286-16':
-        return <Tab_Setbacks_AllFloors_Complete transactionId={transactionId} readOnly={isDisabled} />;
-      
-      case '286-17':
-        return <Tab_FinalComponents_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
-      
-      case '286-18':
-        return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="old-license" />;
-      
-      case '286-19':
-        return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="proposed" />;
-      
-      case '286-20':
-        return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="existing" />;
-      
-      case '286-21':
-        return <Tab_Boundaries_Neighbors_Complete transactionId={transactionId} readOnly={isDisabled} />;
-      
-      case '286-22':
-        return <Tab_LandArea_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      // (باقي التابات كما هي)
+      case '286-15': return <Tab_FloorsNaming_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-16': return <Tab_Setbacks_AllFloors_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-17': return <Tab_FinalComponents_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-18': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="old-license" />;
+      case '286-19': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="proposed" />;
+      case '286-20': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="existing" />;
+      case '286-21': return <Tab_Boundaries_Neighbors_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-22': return <Tab_LandArea_Complete transactionId={transactionId} readOnly={isDisabled} />;
 
-      default:
-        return (
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <Activity className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <p className="text-lg text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>Tab content in development</p>
-              <p className="text-sm text-gray-500 mt-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                Tab: {activeTab}
-              </p>
-            </div>
-          </div>
-        );
+      default: return <div className="flex justify-center h-96 items-center text-gray-400">Tab {activeTab} under construction</div>;
     }
   };
 
   return (
     <div className="w-full h-full" dir="rtl">
       <CodeDisplay code="SCR-286" position="top-right" />
-      
-      {/* --- (11. Screen Header) --- */}
-      {/* (No changes to the header section) */}
-      <div
-        style={{
-          position: 'sticky',
-          top: '0',
-          zIndex: 10,
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-          borderBottom: '3px solid transparent',
-          borderImage: 'linear-gradient(90deg, #2563eb 0%, #7c3aed 50%, #2563eb 100%) 1',
-          padding: '0',
-          marginBottom: '0',
-          marginTop: '0',
-          boxShadow: '0 4px 16px rgba(37, 99, 235, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06)'
-        }}
-      >
-        <div 
-          className="flex items-center justify-between"
-          style={{
-            padding: '14px 20px',
-            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.03) 0%, rgba(124, 58, 237, 0.02) 100%)'
-          }}
-        >
-          <div className="flex items-center gap-4">
-            <div 
-              style={{
-                padding: '10px',
-                background: 'linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%)',
-                borderRadius: '12px',
-                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.15)',
-                border: '2px solid rgba(37, 99, 235, 0.2)'
-              }}
-            >
-              <Plus 
-                className="h-6 w-6" 
-                style={{ 
-                  color: '#2563eb',
-                  filter: 'drop-shadow(0 1px 2px rgba(37, 99, 235, 0.3))' 
-                }} 
-              />
+      {/* (Header - نفس الكود السابق) */}
+      <div style={{ position: 'sticky', top: '0', zIndex: 10, background: '#fff', borderBottom: '3px solid #2563eb', padding: '14px 20px' }}>
+         <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+               <div style={{ padding: '10px', background: '#dbeafe', borderRadius: '12px' }}><Plus className="h-6 w-6 text-blue-600" /></div>
+               <div className="flex flex-col gap-1">
+                 <h1 style={{ fontWeight: 700, fontSize: '20px', color: '#1e40af' }}>إنشاء معاملة جديدة</h1>
+                 <span className="text-xs text-gray-500">286</span>
+               </div>
             </div>
-            
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-3">
-                <h1 
-                  style={{ 
-                    fontFamily: 'Tajawal, sans-serif', 
-                    fontWeight: 700, 
-                    fontSize: '20px', 
-                    margin: 0,
-                    background: 'linear-gradient(135deg, #1e40af 0%, #7c3aed 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    letterSpacing: '-0.02em'
-                  }}
-                >
-                  إنشاء معاملة جديدة
-                </h1>
-                
-                <div
-                  style={{
-                    padding: '4px 12px',
-                    background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)'
-                  }}
-                >
-                  <span 
-                    className="font-mono" 
-                    style={{ 
-                      fontSize: '13px', 
-                      fontWeight: 700,
-                      color: '#ffffff',
-                      letterSpacing: '0.05em'
-                    }}
-                  >
-                    286
-                  </span>
-                </div>
-              </div>
-              
-              <p 
-                style={{ 
-                  fontFamily: 'Tajawal, sans-serif', 
-                  fontSize: '13px', 
-                  color: '#64748b',
-                  margin: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <span style={{ 
-                  width: '4px', 
-                  height: '4px', 
-                  borderRadius: '50%', 
-                  background: '#94a3b8',
-                  display: 'inline-block'
-                }}></span>
-                إنشاء وإدارة المعاملات الجديدة مع المهمات والإسناد
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div 
-              style={{
-                padding: '6px 14px',
-                background: 'rgba(37, 99, 235, 0.08)',
-                borderRadius: '8px',
-                border: '1px solid rgba(37, 99, 235, 0.15)'
-              }}
-            >
-              <span 
-                style={{ 
-                  fontFamily: 'Tajawal, sans-serif', 
-                  fontSize: '12px', 
-                  color: '#475569',
-                  fontWeight: 600
-                }}
-              >
-                22 تبويباً
-              </span>
-            </div>
-          </div>
-        </div>
+         </div>
       </div>
 
-      {/* --- (12. Content Area) --- */}
       <div className="flex" style={{ gap: '4px', paddingTop: '16px' }}>
         <UnifiedTabsSidebar
           tabs={TABS_CONFIG}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          disabledTabs={TABS_CONFIG
-            .map(t => t.id)
-            .filter(id => id !== '286-01' && transactionId === 'new')}
+          disabledTabs={TABS_CONFIG.map(t => t.id).filter(id => id !== '286-01' && transactionId === 'new')}
         />
         
-        {/* --- ✅ [FIX] <form> tag removed from here --- */}
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 220px)', paddingLeft: '16px', paddingRight: '16px' }}>
           {renderTabContent()}
         </div>

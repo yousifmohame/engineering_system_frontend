@@ -147,18 +147,26 @@ const TabBasicData: React.FC<{
               label="نوع العميل *"
               id="clientType"
               value={localClient.type}
-              onChange={(value) => setLocalClient({ ...localClient, type: value as any })}
+              onChange={(e: any) => {
+                // التحقق مما إذا كان المتغير هو "حدث" أم "قيمة"
+                const val = e?.target ? e.target.value : e;
+                setLocalClient({ ...localClient, type: val });
+              }}
               options={[
                 { value: 'فرد', label: 'فرد' },
                 { value: 'شركة', label: 'شركة' },
-                { value: 'جهة ح-governmentية', label: 'جهة ح-governmentية' }
+                { value: 'جهة ح-governmentية', label: 'جهة ح-governmentية' } // تأكد من إزالة الأحرف الزائدة إن وجدت
               ]}
             />
             <SelectWithCopy
               label="التصنيف *"
               id="clientCategory"
               value={localClient.category}
-              onChange={(value) => setLocalClient({ ...localClient, category: value })}
+              onChange={(e: any) => {
+                // نفس التصحيح هنا لاستخراج القيمة
+                const val = e?.target ? e.target.value : e;
+                setLocalClient({ ...localClient, category: val });
+              }}
               options={classifications.filter(c => c.isActive).map(c => ({
                 value: c.name,
                 label: c.name

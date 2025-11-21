@@ -97,8 +97,6 @@ const Tab_RequestPurpose_Detailed_Complete: React.FC<TabProps> = ({
       onSave(activeData);
     }
     
-    // (استبدل alert بنافذة Sonner أو toast notification إذا أمكن)
-    alert('تم حفظ الأغراض التفصيلية بنجاح!');
   };
 
   // 6. دالة لتحديث بيانات نموذج فرعي (تُمرر إلى العارض)

@@ -24,7 +24,7 @@ import { Skeleton } from '../ui/skeleton';
 import {
   Users, User, Paperclip, Calendar, DollarSign, CheckCircle,
   FileText, Eye, Settings, Plus, Save, Upload, Download,
-  Clock, Mail, Phone, Building, MapPin, Edit2, Trash2, X , AlertCircle, Loader2
+  Clock, Mail, Phone, Building, MapPin, Edit2, Trash2, X , AlertCircle, Loader2, AlertTriangle
 } from 'lucide-react';
 import { InputWithCopy, SelectWithCopy, TextAreaWithCopy } from '../InputWithCopy';
 import { EnhancedSwitch } from '../EnhancedSwitch';
@@ -45,6 +45,9 @@ import {
   deleteAppointment 
 } from '../../api/appointmentApi'; // (جديد للتاب 09)
 import { Appointment, CreateAppointmentData } from '../../types/appointmentTypes'; // (جديد للتاب 09)
+import { getTransactionById, updateTransaction } from '../../api/transactionApi';
+import { TransactionApprovals, TransactionNotes } from '../../types/transactionTypes';
+
 // ============================================
 // 286-07: معلومات العميل (تم التعديل للعمل بدون إصلاح الباك إند)
 // ============================================
@@ -460,49 +463,68 @@ export const Tab_286_09_Appointments: React.FC<TabAppointmentsProps> = ({
 };
 
 // ============================================
-// 286-10: التكاليف
-// ============================================
-export const Tab_286_10_Costs: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
-  return (
-    <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
-      <CodeDisplay code="TAB-286-10" position="top-right" />
-      
-      <Card className="card-rtl" style={{ background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)', border: '2px solid #10b981' }}>
-        <CardHeader className="pb-3">
-          <CardTitle style={{ fontSize: '16px', fontWeight: 700, color: '#065f46' }}>
-            <DollarSign className="h-5 w-5 inline ml-2" />
-            التكاليف المتوقعة
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <InputWithCopy label="التكلفة التقديرية (ريال)" id="estimatedCost" type="number" value="0" onChange={() => {}} disabled={readOnly} copyable clearable={false} />
-            <InputWithCopy label="التكلفة المتفق عليها (ريال)" id="agreedCost" type="number" value="0" onChange={() => {}} disabled={readOnly} copyable clearable={false} />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <InputWithCopy label="رسوم الجهات (ريال)" id="authorityFees" type="number" value="0" onChange={() => {}} disabled={readOnly} copyable clearable={false} />
-            <InputWithCopy label="أتعاب المكتب (ريال)" id="officeFees" type="number" value="0" onChange={() => {}} disabled={readOnly} copyable clearable={false} />
-            <InputWithCopy label="مصاريف إضافية (ريال)" id="additionalCosts" type="number" value="0" onChange={() => {}} disabled={readOnly} copyable clearable={false} />
-          </div>
-          <div className="p-3" style={{ background: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px', border: '1px solid #10b981' }}>
-            <div className="flex items-center justify-between">
-              <span style={{ fontSize: '14px', fontWeight: 600 }}>الإجمالي:</span>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: '#065f46' }}>0 ريال</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
-
-// ============================================
 // 286-11: الموافقات
 // ============================================
-export const Tab_286_11_Approvals: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
+interface TabApprovalsProps {
+  transactionId: string;
+  readOnly?: boolean;
+}
+
+export const Tab_286_11_Approvals: React.FC<TabApprovalsProps> = ({ transactionId, readOnly = false }) => {
+  const queryClient = useQueryClient();
+  
+  // الحالة المحلية
+  const [approvals, setApprovals] = useState<TransactionApprovals>({
+    manager: false,
+    technical: false,
+    financial: false,
+    client: false,
+  });
+
+  // 1. جلب البيانات
+  const { data: transaction, isLoading } = useQuery({
+    queryKey: ['transaction', transactionId],
+    queryFn: () => getTransactionById(transactionId),
+    enabled: !!transactionId && transactionId !== 'new',
+  });
+
+  // تحديث الحالة المحلية عند وصول البيانات
+  useEffect(() => {
+    if (transaction?.approvals) {
+      // دمج القيم القادمة مع القيم الافتراضية لضمان وجود كل المفاتيح
+      setApprovals(prev => ({ ...prev, ...transaction.approvals }));
+    }
+  }, [transaction]);
+
+  // 2. دالة التحديث (Mutation)
+  const updateMutation = useMutation({
+    mutationFn: (newApprovals: TransactionApprovals) => 
+      updateTransaction(transactionId, { approvals: newApprovals }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transaction', transactionId] });
+      toast.success('تم تحديث حالة الموافقات');
+    },
+    onError: () => {
+      toast.error('فشل تحديث الموافقات');
+      // إعادة التعيين في حالة الخطأ (اختياري)
+      if (transaction?.approvals) setApprovals(transaction.approvals);
+    }
+  });
+
+  // معالج التغيير
+  const handleToggle = (key: keyof TransactionApprovals, value: boolean) => {
+    if (readOnly) return;
+    
+    const newApprovals = { ...approvals, [key]: value };
+    setApprovals(newApprovals); // تحديث متفائل (Optimistic Update)
+    updateMutation.mutate(newApprovals);
+  };
+
+  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+
   return (
     <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
-      <CodeDisplay code="TAB-286-11" position="top-right" />
+      <CodeDisplay code="TAB-286-11-API" position="top-right" />
       
       <Card className="card-rtl" style={{ background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)', border: '2px solid #ec4899' }}>
         <CardHeader className="pb-3">
@@ -513,106 +535,335 @@ export const Tab_286_11_Approvals: React.FC<{ readOnly?: boolean }> = ({ readOnl
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-2">
-            <EnhancedSwitch id="managerApproval" checked={false} onCheckedChange={() => {}} label="موافقة المدير" description="يتطلب موافقة المدير قبل البدء" size="md" variant="warning" disabled={readOnly} />
-            <EnhancedSwitch id="technicalApproval" checked={false} onCheckedChange={() => {}} label="موافقة فنية" description="مراجعة فنية من قبل المهندس المختص" size="md" variant="default" disabled={readOnly} />
-            <EnhancedSwitch id="financialApproval" checked={false} onCheckedChange={() => {}} label="موافقة مالية" description="موافقة القسم المالي على التكاليف" size="md" variant="success" disabled={readOnly} />
-            <EnhancedSwitch id="clientApproval" checked={false} onCheckedChange={() => {}} label="موافقة العميل" description="موافقة العميل على الشروط والأحكام" size="md" variant="danger" disabled={readOnly} />
+            <EnhancedSwitch 
+              id="managerApproval" 
+              checked={approvals.manager} 
+              onCheckedChange={(v) => handleToggle('manager', v)} 
+              label="موافقة المدير" 
+              description="يتطلب موافقة المدير قبل البدء" 
+              size="md" 
+              variant="warning" 
+              disabled={readOnly || updateMutation.isPending} 
+            />
+            <EnhancedSwitch 
+              id="technicalApproval" 
+              checked={approvals.technical} 
+              onCheckedChange={(v) => handleToggle('technical', v)} 
+              label="موافقة فنية" 
+              description="مراجعة فنية من قبل المهندس المختص" 
+              size="md" 
+              variant="default" 
+              disabled={readOnly || updateMutation.isPending} 
+            />
+            <EnhancedSwitch 
+              id="financialApproval" 
+              checked={approvals.financial} 
+              onCheckedChange={(v) => handleToggle('financial', v)} 
+              label="موافقة مالية" 
+              description="موافقة القسم المالي على التكاليف" 
+              size="md" 
+              variant="success" 
+              disabled={readOnly || updateMutation.isPending} 
+            />
+            <EnhancedSwitch 
+              id="clientApproval" 
+              checked={approvals.client} 
+              onCheckedChange={(v) => handleToggle('client', v)} 
+              label="موافقة العميل" 
+              description="موافقة العميل على الشروط والأحكام" 
+              size="md" 
+              variant="danger" 
+              disabled={readOnly || updateMutation.isPending} 
+            />
           </div>
         </CardContent>
       </Card>
     </div>
   );
 };
-
 // ============================================
 // 286-12: الملاحظات
 // ============================================
-export const Tab_286_12_Notes: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
+interface TabNotesProps {
+  transactionId: string;
+  readOnly?: boolean;
+}
+
+export const Tab_286_12_Notes: React.FC<TabNotesProps> = ({ transactionId, readOnly = false }) => {
+  const queryClient = useQueryClient();
+  
+  const [notes, setNotes] = useState<TransactionNotes>({
+    general: '',
+    internal: '',
+    client: '',
+  });
+
+  // 1. جلب البيانات
+  const { data: transaction, isLoading } = useQuery({
+    queryKey: ['transaction', transactionId],
+    queryFn: () => getTransactionById(transactionId),
+    enabled: !!transactionId && transactionId !== 'new',
+  });
+
+  useEffect(() => {
+    if (transaction?.notes) {
+       // التأكد من أن البيانات هي كائن وليست مصفوفة (بسبب التعديل في الـ Schema)
+       // إذا كانت مصفوفة (بيانات قديمة)، نأخذ العنصر الأول للملاحظات العامة
+       if (Array.isArray(transaction.notes)) {
+         setNotes(prev => ({ ...prev, general: transaction.notes[0] || '' }));
+       } else {
+         setNotes(prev => ({ ...prev, ...transaction.notes }));
+       }
+    }
+  }, [transaction]);
+
+  // 2. الحفظ
+  const updateMutation = useMutation({
+    mutationFn: (newNotes: TransactionNotes) => 
+      updateTransaction(transactionId, { notes: newNotes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transaction', transactionId] });
+      toast.success('تم حفظ الملاحظات');
+    },
+    onError: () => toast.error('فشل حفظ الملاحظات')
+  });
+
+  const handleSave = () => {
+    updateMutation.mutate(notes);
+  };
+
+  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+
   return (
     <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
-      <CodeDisplay code="TAB-286-12" position="top-right" />
+      <CodeDisplay code="TAB-286-12-API" position="top-right" />
       
       <Card className="card-rtl" style={{ background: 'linear-gradient(135deg, #fef08a 0%, #fde047 100%)', border: '2px solid #eab308' }}>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 flex flex-row justify-between items-center">
           <CardTitle style={{ fontSize: '16px', fontWeight: 700, color: '#854d0e' }}>
             <FileText className="h-5 w-5 inline ml-2" />
             الملاحظات
           </CardTitle>
+          {!readOnly && (
+            <Button 
+              onClick={handleSave} 
+              disabled={updateMutation.isPending}
+              className="h-8 text-xs bg-yellow-600 hover:bg-yellow-700 text-white"
+            >
+              {updateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 ml-1" />}
+              حفظ التغييرات
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-3">
-          <TextAreaWithCopy label="ملاحظات عامة" id="generalNotes" value="" onChange={() => {}} rows={4} disabled={readOnly} copyable clearable />
-          <TextAreaWithCopy label="ملاحظات داخلية (للفريق فقط)" id="internalNotes" value="" onChange={() => {}} rows={3} disabled={readOnly} copyable clearable />
-          <TextAreaWithCopy label="ملاحظات للعميل" id="clientNotes" value="" onChange={() => {}} rows={3} disabled={readOnly} copyable clearable />
+          <TextAreaWithCopy 
+            label="ملاحظات عامة" 
+            id="generalNotes" 
+            value={notes.general} 
+            onChange={(e) => setNotes({...notes, general: e.target.value})} 
+            rows={4} 
+            disabled={readOnly} 
+            copyable 
+          />
+          <TextAreaWithCopy 
+            label="ملاحظات داخلية (للفريق فقط)" 
+            id="internalNotes" 
+            value={notes.internal} 
+            onChange={(e) => setNotes({...notes, internal: e.target.value})} 
+            rows={3} 
+            disabled={readOnly} 
+            copyable 
+          />
+          <TextAreaWithCopy 
+            label="ملاحظات للعميل" 
+            id="clientNotes" 
+            value={notes.client} 
+            onChange={(e) => setNotes({...notes, client: e.target.value})} 
+            rows={3} 
+            disabled={readOnly} 
+            copyable 
+          />
         </CardContent>
       </Card>
     </div>
   );
 };
-
 // ============================================
 // 286-13: معاينة
 // ============================================
-export const Tab_286_13_Preview: React.FC = () => {
+interface TabPreviewProps {
+  transactionId: string;
+  onSave?: () => void;
+}
+
+export const Tab_286_13_Preview: React.FC<TabPreviewProps> = ({ transactionId, onSave }) => {
+  const queryClient = useQueryClient();
+
+  // 1. جلب بيانات المعاملة الكاملة
+  const { data: transaction, isLoading } = useQuery({
+    queryKey: ['transaction', transactionId],
+    queryFn: () => getTransactionById(transactionId),
+    enabled: !!transactionId && transactionId !== 'new',
+  });
+
+  // 2. دالة حفظ المشروع وتحديث الحالة
+  const saveProjectMutation = useMutation({
+    mutationFn: (newStatus: string) => 
+      updateTransaction(transactionId, { status: newStatus }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['transaction', transactionId] });
+      // عرض رسالة حسب الحالة الجديدة
+      const statusAr = data.status === 'Under Review' ? 'قيد المراجعة' : 'قيد التنفيذ';
+      toast.success(`تم حفظ المشروع وتحويله إلى حالة: ${statusAr}`);
+      if (onSave) onSave();
+    },
+    onError: () => {
+      toast.error('فشل في حفظ المشروع');
+    }
+  });
+
+  const handleSaveProject = () => {
+    if (!transaction) return;
+
+    // فحص ما إذا كانت هناك أي موافقات مطلوبة (تكون قيمتها true)
+    const approvals = transaction.approvals || {};
+    const isApprovalRequired = Object.values(approvals).some(val => val === true);
+
+    // تحديد الحالة الجديدة
+    // إذا كان يحتاج موافقات -> قيد المراجعة (Under Review)
+    // إذا لم يحتج -> قيد التنفيذ (In Progress)
+    const nextStatus = isApprovalRequired ? 'Under Review' : 'In Progress';
+
+    saveProjectMutation.mutate(nextStatus);
+  };
+
+  if (isLoading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin h-8 w-8 text-blue-500" /></div>;
+  if (!transaction) return <div className="text-center p-4 text-gray-500">البيانات غير متوفرة</div>;
+
+  // تحضير البيانات للعرض
+  const clientName = transaction.client?.name?.firstName 
+    ? `${transaction.client.name.firstName} ${transaction.client.name.familyName}` 
+    : 'غير محدد';
+  
+  const taskCount = transaction.tasks?.length || 0;
+  const totalFees = transaction.totalFees || 0;
+  const typeName = transaction.transactionType?.name || 'غير محدد';
+
+  // حالة الموافقات للعرض
+  const approvalsList = transaction.approvals ? Object.entries(transaction.approvals).filter(([k, v]) => v) : [];
+
   return (
     <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
-      <CodeDisplay code="TAB-286-13" position="top-right" />
+      <CodeDisplay code="TAB-286-13-LIVE" position="top-right" />
       
-      <Card className="card-rtl" style={{ background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', border: '2px solid #0284c7' }}>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <div style={{ padding: '10px', background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', borderRadius: '12px' }}>
-              <Eye className="h-6 w-6" style={{ color: '#ffffff' }} />
-            </div>
-            <div>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0c4a6e', margin: 0 }}>معاينة المعاملة</h2>
-              <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>مراجعة جميع البيانات قبل الحفظ</p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="p-3" style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 8px 0' }}>المعلومات الأساسية</p>
-              <div className="grid grid-cols-2 gap-2" style={{ fontSize: '13px' }}>
-                <div><span style={{ fontWeight: 600 }}>نوع المعاملة:</span> <span style={{ color: '#64748b' }}>-</span></div>
-                <div><span style={{ fontWeight: 600 }}>الأولوية:</span> <span style={{ color: '#64748b' }}>-</span></div>
+      <Card className="card-rtl border-t-4 border-t-blue-500 shadow-md">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-100 rounded-full text-blue-600">
+                <Eye className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">معاينة المعاملة النهائية</h2>
+                <p className="text-sm text-gray-500">مراجعة البيانات قبل الاعتماد النهائي</p>
               </div>
             </div>
-
-            <div className="p-3" style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 8px 0' }}>العميل</p>
-              <div className="grid grid-cols-2 gap-2" style={{ fontSize: '13px' }}>
-                <div><span style={{ fontWeight: 600 }}>الاسم:</span> <span style={{ color: '#64748b' }}>-</span></div>
-                <div><span style={{ fontWeight: 600 }}>الجوال:</span> <span style={{ color: '#64748b' }}>-</span></div>
-              </div>
-            </div>
-
-            <div className="p-3" style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 8px 0' }}>الفريق</p>
-              <div style={{ fontSize: '13px' }}>
-                <span style={{ fontWeight: 600 }}>عدد الأعضاء:</span> <span style={{ color: '#64748b' }}>0</span>
-              </div>
-            </div>
-
-            <div className="p-3" style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 8px 0' }}>المهمات</p>
-              <div style={{ fontSize: '13px' }}>
-                <span style={{ fontWeight: 600 }}>عدد المهمات:</span> <span style={{ color: '#64748b' }}>0</span>
-              </div>
-            </div>
-
-            <div className="p-3" style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 8px 0' }}>التكاليف</p>
-              <div style={{ fontSize: '13px' }}>
-                <span style={{ fontWeight: 600 }}>الإجمالي:</span> <span style={{ color: '#10b981', fontWeight: 700 }}>0 ريال</span>
+            <div className="flex gap-2">
+              <div className="px-3 py-1 bg-gray-100 rounded text-xs font-bold text-gray-600">
+                الحالة الحالية: {transaction.status}
               </div>
             </div>
           </div>
+
+          {/* شبكة المعلومات */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            
+            {/* المعلومات الأساسية */}
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+              <h3 className="text-sm font-bold text-blue-700 mb-3 flex items-center gap-2">
+                <FileText className="h-4 w-4" /> البيانات الأساسية
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-gray-500">العنوان:</span> <span className="font-semibold">{transaction.title}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">الكود:</span> <span className="font-mono bg-white px-1 rounded border">{transaction.transactionCode}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">النوع:</span> <span>{typeName}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">الأولوية:</span> <span>{transaction.priority}</span></div>
+              </div>
+            </div>
+
+            {/* العميل والفريق */}
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+              <h3 className="text-sm font-bold text-green-700 mb-3 flex items-center gap-2">
+                <User className="h-4 w-4" /> العميل والفريق
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-gray-500">العميل:</span> <span className="font-semibold">{clientName}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">الجوال:</span> <span className="font-mono">{transaction.client?.mobile || '-'}</span></div>
+                <div className="my-2 border-t border-gray-200"></div>
+                <div className="flex justify-between"><span className="text-gray-500">المهام المسندة:</span> <span className="font-bold">{taskCount}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* ملخص التكاليف والموافقات */}
+          <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 mb-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-sm font-bold text-yellow-800 mb-1 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" /> الملخص المالي
+                </h3>
+                <p className="text-2xl font-bold text-yellow-900 mt-2">{totalFees.toLocaleString()} <span className="text-xs font-normal">ر.س</span></p>
+              </div>
+              
+              <div className="bg-white p-3 rounded border border-yellow-200 min-w-[200px]">
+                <h3 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1">
+                  {approvalsList.length > 0 ? <AlertTriangle className="h-3 w-3 text-orange-500"/> : <CheckCircle className="h-3 w-3 text-green-500"/>}
+                  حالة الموافقات
+                </h3>
+                {approvalsList.length > 0 ? (
+                  <div className="space-y-1">
+                    {approvalsList.map(([key]) => (
+                      <div key={key} className="text-xs flex items-center gap-1 text-orange-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                        مطلوب موافقة: {key}
+                      </div>
+                    ))}
+                    <div className="mt-2 text-[10px] text-gray-400 border-t pt-1">سيتحول إلى "قيد المراجعة"</div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-green-600 flex items-center gap-1">
+                    <CheckCircle className="h-3 w-3" /> لا توجد موافقات معلقة
+                    <div className="text-[10px] text-gray-400 block w-full mt-1">سيتحول إلى "قيد التنفيذ" مباشرة</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* زر الحفظ */}
+          <Button 
+            onClick={handleSaveProject} 
+            disabled={saveProjectMutation.isPending}
+            className="w-full h-12 text-lg font-bold bg-gradient-to-l from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg transition-all transform hover:scale-[1.01]"
+          >
+            {saveProjectMutation.isPending ? (
+              <>
+                <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                جاري الحفظ...
+              </>
+            ) : (
+              <>
+                <Save className="ml-2 h-5 w-5" />
+                حفظ واعتماد المشروع
+              </>
+            )}
+          </Button>
+
         </CardContent>
       </Card>
     </div>
   );
 };
-
 // ============================================
 // 286-14: الإعدادات
 // ============================================
@@ -652,7 +903,6 @@ export const Tab_286_14_Settings: React.FC<{ readOnly?: boolean }> = ({ readOnly
 export default {
   Tab_286_07_ClientInfo,
   Tab_286_09_Appointments,
-  Tab_286_10_Costs,
   Tab_286_11_Approvals,
   Tab_286_12_Notes,
   Tab_286_13_Preview,

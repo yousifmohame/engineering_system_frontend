@@ -8,9 +8,9 @@ import {
   // (استيراد الأنواع الفرعية)
   TransactionTask,
   TransactionFee,
-  TransactionStage
+  TransactionStage,
+  CostCategory,
 } from '../types/transactionTypes';
-
 /**
  * ============================================================================
  * 1. إنشاء معاملة جديدة (مسودة) (لشاشة 286)
@@ -120,6 +120,38 @@ export const updateTransaction = async (
   }
 };
 
+/**
+ * ============================================================================
+ * 7. جلب جميع المعاملات (لشاشة 285 أو القوائم)
+ * GET /api/transactions
+ * ============================================================================
+ */
+export const getAllTransactions = async (): Promise<Transaction[]> => {
+  try {
+    const { data } = await api.get('/transactions');
+    return data;
+  } catch (error: any) {
+    console.error('Error fetching transactions:', error);
+    throw new Error(error.response?.data?.message || 'فشل في جلب قائمة المعاملات');
+  }
+};
+
+/**
+ * ============================================================================
+ * 8. حذف معاملة
+ * DELETE /api/transactions/:id
+ * ============================================================================
+ */
+export const deleteTransaction = async (id: string): Promise<{ message: string }> => {
+  try {
+    const { data } = await api.delete(`/transactions/${id}`);
+    return data;
+  } catch (error: any) {
+    console.error('Error deleting transaction:', error);
+    throw new Error(error.response?.data?.message || 'فشل في حذف المعاملة');
+  }
+};
+
 export const getTransactionById = async (id: string): Promise<Transaction> => {
   try {
     const response = await api.get<Transaction>(`/transactions/${id}`);
@@ -128,6 +160,26 @@ export const getTransactionById = async (id: string): Promise<Transaction> => {
     console.error('Error fetching transaction by ID:', error);
     throw error;
   }
+};
+
+export const updateTransactionCosts = async (id: string, costDetails: CostCategory[]) => {
+  const { data } = await api.put(`/transactions/${id}`, { costDetails });
+  return data;
+};
+
+export const getTransactionTemplateFees = async (typeId: string): Promise<CostCategory[]> => {
+  try {
+    const { data } = await api.get(`/transactions/template-fees/${typeId}`);
+    return data;
+  } catch (error: any) {
+    console.error('Error fetching template fees:', error);
+    throw new Error(error.response?.data?.message || 'فشل في جلب رسوم القالب');
+  }
+};
+
+export const updateTransactionTasks = async (id: string, tasks: any[]) => {
+  const { data } = await api.put(`/transactions/${id}/tasks`, { tasks });
+  return data;
 };
 
 /**

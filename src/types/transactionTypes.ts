@@ -22,6 +22,21 @@ export interface TransactionStage {
   tasks: number;
 }
 
+export interface CostItem {
+  id: string;
+  name: string;
+  amount: number;
+  paid: number;
+  remaining: number;
+  status: 'pending' | 'partial' | 'paid';
+}
+
+export interface CostCategory {
+  id: string;
+  category: string; // Category Name
+  items: CostItem[];
+}
+
 // ==========================================================
 
 /**
@@ -49,6 +64,22 @@ export interface TransactionType {
   stages?: TransactionStage[] | null;     // (Json)
   warnings?: string[] | null;             // (String[])
   notes?: string[] | null;                // (String[])
+  defaultCosts?: CostCategory[] | null;
+}
+
+
+export interface TransactionApprovals {
+  manager: boolean;
+  technical: boolean;
+  financial: boolean;
+  client: boolean;
+}
+
+// واجهة للملاحظات
+export interface TransactionNotes {
+  general: string;
+  internal: string;
+  client: string;
 }
 
 /**
@@ -84,13 +115,15 @@ export interface Transaction {
   remainingAmount?: number | null;
   fees?: TransactionFee[] | null; // (Json)
 
+  costDetails?: CostCategory[] | null;
   // بيانات موروثة
   tasks?: any[]; // (Task[]) - استخدم any مؤقتاً
   documents?: string[] | null; // (Json - لكنه مصفوفة نصوص)
   authorities?: string[] | null;
   stages?: TransactionStage[] | null; // (Json)
   warnings?: string[] | null;
-  notes?: string[] | null;
+  notes?: TransactionNotes | null;
+  approvals?: TransactionApprovals | null;
   
   // علاقات
   clientId: string;
