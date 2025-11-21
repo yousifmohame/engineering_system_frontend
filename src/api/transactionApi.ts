@@ -182,6 +182,56 @@ export const updateTransactionTasks = async (id: string, tasks: any[]) => {
   return data;
 };
 
+export const updateTransactionStaff = async (id: string, staff: { employeeId: string; role: string }[]) => {
+  const response = await api.put(`/transactions/${id}/staff`, { staff });
+  return response.data;
+};
+
+export const updateTransactionFloors = async (id: string, floors: any[]) => {
+  // نستخدم نفس endpoint التحديث العام، حيث أن الـ Controller يقبل تحديث أي حقل في الـ Schema
+  const response = await api.put(`/transactions/${id}`, { floors });
+  return response.data;
+};
+
+export const updateTransactionSetbacks = async (id: string, setbacks: any[]) => {
+  const response = await api.put(`/transactions/${id}`, { setbacks });
+  return response.data;
+};
+
+export const updateTransactionComponents = async (id: string, components: any[]) => {
+  const response = await api.put(`/transactions/${id}`, { components });
+  return response.data;
+};
+
+export const updateTransactionGenericComponents = async (
+  id: string, 
+  type: 'old-license' | 'proposed' | 'existing', 
+  data: any[]
+) => {
+  // تحديد اسم الحقل في قاعدة البيانات بناءً على النوع
+  const fieldMap = {
+    'old-license': 'componentsOldLicense',
+    'proposed': 'componentsProposed',
+    'existing': 'componentsExisting'
+  };
+  
+  const fieldName = fieldMap[type];
+  
+  // إرسال التحديث ديناميكياً
+  const response = await api.put(`/transactions/${id}`, { [fieldName]: data });
+  return response.data;
+};
+
+export const updateTransactionBoundaries = async (id: string, boundaries: any[]) => {
+  const response = await api.put(`/transactions/${id}`, { boundaries });
+  return response.data;
+};
+
+export const updateTransactionLandArea = async (id: string, landArea: any) => {
+  const response = await api.put(`/transactions/${id}`, { landArea });
+  return response.data;
+};
+
 /**
  * ============================================================================
  * 6. (جديد) حذف نوع معاملة (لشاشة 701)

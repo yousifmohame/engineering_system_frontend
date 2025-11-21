@@ -13,18 +13,21 @@
  * - 286-14: الإعدادات
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // (إضافة)
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { ScrollArea } from '../ui/scroll-area';
+import { Separator } from '../ui/separator';
 import { Skeleton } from '../ui/skeleton';
 import {
   Users, User, Paperclip, Calendar, DollarSign, CheckCircle,
   FileText, Eye, Settings, Plus, Save, Upload, Download,
-  Clock, Mail, Phone, Building, MapPin, Edit2, Trash2, X , AlertCircle, Loader2, AlertTriangle
+  Clock, Mail, Phone, Building, MapPin, Edit2, Trash2, X , AlertCircle, Loader2, AlertTriangle,
+  Building2, FileCheck, Compass, Briefcase, Layers, 
+  Printer
 } from 'lucide-react';
 import { InputWithCopy, SelectWithCopy, TextAreaWithCopy } from '../InputWithCopy';
 import { EnhancedSwitch } from '../EnhancedSwitch';
@@ -47,6 +50,8 @@ import {
 import { Appointment, CreateAppointmentData } from '../../types/appointmentTypes'; // (جديد للتاب 09)
 import { getTransactionById, updateTransaction } from '../../api/transactionApi';
 import { TransactionApprovals, TransactionNotes } from '../../types/transactionTypes';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
+import { Progress } from '../ui/progress';
 
 // ============================================
 // 286-07: معلومات العميل (تم التعديل للعمل بدون إصلاح الباك إند)
@@ -696,8 +701,10 @@ interface TabPreviewProps {
   onSave?: () => void;
 }
 
-export const Tab_286_13_Preview: React.FC<TabPreviewProps> = ({ transactionId, onSave }) => {
+export const Tab_286_13_Preview_Complex: React.FC<TabPreviewProps> = ({ transactionId, onSave }) => {
   const queryClient = useQueryClient();
+  // الـ ref يستخدم للوصول لعنصر الـ DOM لغرض الطباعة
+  const printRef = useRef<HTMLDivElement>(null);
 
   // 1. جلب بيانات المعاملة الكاملة
   const { data: transaction, isLoading } = useQuery({
@@ -706,205 +713,359 @@ export const Tab_286_13_Preview: React.FC<TabPreviewProps> = ({ transactionId, o
     enabled: !!transactionId && transactionId !== 'new',
   });
 
-  // 2. دالة حفظ المشروع وتحديث الحالة
+  // 2. دالة الحفظ والاعتماد
   const saveProjectMutation = useMutation({
     mutationFn: (newStatus: string) => 
       updateTransaction(transactionId, { status: newStatus }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['transaction', transactionId] });
-      // عرض رسالة حسب الحالة الجديدة
       const statusAr = data.status === 'Under Review' ? 'قيد المراجعة' : 'قيد التنفيذ';
-      toast.success(`تم حفظ المشروع وتحويله إلى حالة: ${statusAr}`);
+      toast.success(`تم اعتماد المعاملة بنجاح: ${statusAr}`);
       if (onSave) onSave();
     },
-    onError: () => {
-      toast.error('فشل في حفظ المشروع');
-    }
+    onError: () => toast.error('فشل في حفظ المشروع')
   });
 
   const handleSaveProject = () => {
     if (!transaction) return;
-
-    // فحص ما إذا كانت هناك أي موافقات مطلوبة (تكون قيمتها true)
     const approvals = transaction.approvals || {};
     const isApprovalRequired = Object.values(approvals).some(val => val === true);
-
-    // تحديد الحالة الجديدة
-    // إذا كان يحتاج موافقات -> قيد المراجعة (Under Review)
-    // إذا لم يحتج -> قيد التنفيذ (In Progress)
     const nextStatus = isApprovalRequired ? 'Under Review' : 'In Progress';
-
     saveProjectMutation.mutate(nextStatus);
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   if (isLoading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin h-8 w-8 text-blue-500" /></div>;
   if (!transaction) return <div className="text-center p-4 text-gray-500">البيانات غير متوفرة</div>;
 
-  // تحضير البيانات للعرض
+  // --- تحضير البيانات ---
   const clientName = transaction.client?.name?.firstName 
     ? `${transaction.client.name.firstName} ${transaction.client.name.familyName}` 
     : 'غير محدد';
+
+  // البيانات الفنية
+  const landArea = transaction.landArea || {};
+  const boundaries = Array.isArray(transaction.boundaries) ? transaction.boundaries : [];
+  const floors = Array.isArray(transaction.floors) ? transaction.floors : [];
+  const setbacks = Array.isArray(transaction.setbacks) ? transaction.setbacks : [];
+  const components = Array.isArray(transaction.components) ? transaction.components : [];
   
-  const taskCount = transaction.tasks?.length || 0;
-  const totalFees = transaction.totalFees || 0;
-  const typeName = transaction.transactionType?.name || 'غير محدد';
+  // البيانات الإدارية والمالية
+  const tasks = transaction.tasks || [];
+  const staff = transaction.transactionEmployees || [];
+  const attachments = transaction.attachments || [];
+  const appointments = transaction.appointments || [];
 
-  // حالة الموافقات للعرض
-  const approvalsList = transaction.approvals ? Object.entries(transaction.approvals).filter(([k, v]) => v) : [];
+  // حسابات
+  const completedTasks = tasks.filter((t: any) => t.status === 'Completed' || t.status === 'completed').length;
+  const taskProgress = tasks.length > 0 ? (completedTasks / tasks.length) * 100 : 0;
+  
+  const totalCost = transaction.totalFees || 0;
+  const paidAmount = transaction.paidAmount || 0;
+  const remainingAmount = transaction.remainingAmount || 0;
 
   return (
     <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
-      <CodeDisplay code="TAB-286-13-LIVE" position="top-right" />
+      <CodeDisplay code="TAB-PREVIEW-COMPLEX-FIXED" position="top-right" />
       
-      <Card className="card-rtl border-t-4 border-t-blue-500 shadow-md">
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-100 rounded-full text-blue-600">
-                <Eye className="h-6 w-6" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-gray-800">معاينة المعاملة النهائية</h2>
-                <p className="text-sm text-gray-500">مراجعة البيانات قبل الاعتماد النهائي</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <div className="px-3 py-1 bg-gray-100 rounded text-xs font-bold text-gray-600">
-                الحالة الحالية: {transaction.status}
-              </div>
-            </div>
-          </div>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #printable-content, #printable-content * { visibility: visible; }
+          #printable-content { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; background: white; }
+          .no-print { display: none !important; }
+          .card-rtl { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
+        }
+      `}</style>
 
-          {/* شبكة المعلومات */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            
-            {/* المعلومات الأساسية */}
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-              <h3 className="text-sm font-bold text-blue-700 mb-3 flex items-center gap-2">
-                <FileText className="h-4 w-4" /> البيانات الأساسية
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">العنوان:</span> <span className="font-semibold">{transaction.title}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">الكود:</span> <span className="font-mono bg-white px-1 rounded border">{transaction.transactionCode}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">النوع:</span> <span>{typeName}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">الأولوية:</span> <span>{transaction.priority}</span></div>
-              </div>
-            </div>
-
-            {/* العميل والفريق */}
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-              <h3 className="text-sm font-bold text-green-700 mb-3 flex items-center gap-2">
-                <User className="h-4 w-4" /> العميل والفريق
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">العميل:</span> <span className="font-semibold">{clientName}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">الجوال:</span> <span className="font-mono">{transaction.client?.mobile || '-'}</span></div>
-                <div className="my-2 border-t border-gray-200"></div>
-                <div className="flex justify-between"><span className="text-gray-500">المهام المسندة:</span> <span className="font-bold">{taskCount}</span></div>
-              </div>
-            </div>
-          </div>
-
-          {/* ملخص التكاليف والموافقات */}
-          <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 mb-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-sm font-bold text-yellow-800 mb-1 flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" /> الملخص المالي
-                </h3>
-                <p className="text-2xl font-bold text-yellow-900 mt-2">{totalFees.toLocaleString()} <span className="text-xs font-normal">ر.س</span></p>
-              </div>
-              
-              <div className="bg-white p-3 rounded border border-yellow-200 min-w-[200px]">
-                <h3 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1">
-                  {approvalsList.length > 0 ? <AlertTriangle className="h-3 w-3 text-orange-500"/> : <CheckCircle className="h-3 w-3 text-green-500"/>}
-                  حالة الموافقات
-                </h3>
-                {approvalsList.length > 0 ? (
-                  <div className="space-y-1">
-                    {approvalsList.map(([key]) => (
-                      <div key={key} className="text-xs flex items-center gap-1 text-orange-700">
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                        مطلوب موافقة: {key}
-                      </div>
-                    ))}
-                    <div className="mt-2 text-[10px] text-gray-400 border-t pt-1">سيتحول إلى "قيد المراجعة"</div>
-                  </div>
-                ) : (
-                  <div className="text-xs text-green-600 flex items-center gap-1">
-                    <CheckCircle className="h-3 w-3" /> لا توجد موافقات معلقة
-                    <div className="text-[10px] text-gray-400 block w-full mt-1">سيتحول إلى "قيد التنفيذ" مباشرة</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* زر الحفظ */}
-          <Button 
-            onClick={handleSaveProject} 
-            disabled={saveProjectMutation.isPending}
-            className="w-full h-12 text-lg font-bold bg-gradient-to-l from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg transition-all transform hover:scale-[1.01]"
-          >
-            {saveProjectMutation.isPending ? (
-              <>
-                <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-                جاري الحفظ...
-              </>
-            ) : (
-              <>
-                <Save className="ml-2 h-5 w-5" />
-                حفظ واعتماد المشروع
-              </>
-            )}
+      {/* شريط الأدوات العلوي */}
+      <div className="flex justify-between items-center bg-white p-3 rounded-lg border shadow-sm no-print">
+        <div className="flex items-center gap-2">
+           <FileCheck className="h-5 w-5 text-blue-600" />
+           <h2 className="font-bold text-gray-800">معاينة المعاملة الشاملة</h2>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handlePrint}>
+            <Printer className="h-4 w-4 ml-2" /> طباعة التقرير
           </Button>
+          <Button 
+             onClick={handleSaveProject} 
+             disabled={saveProjectMutation.isPending}
+             className="bg-blue-600 hover:bg-blue-700 text-white"
+             size="sm"
+          >
+            {saveProjectMutation.isPending ? <Loader2 className="h-4 w-4 ml-2 animate-spin" /> : <CheckCircle className="h-4 w-4 ml-2" />}
+            اعتماد نهائي
+          </Button>
+        </div>
+      </div>
 
-        </CardContent>
-      </Card>
+      {/* ✅ الإصلاح: إزالة ref و id من ScrollArea */}
+      <ScrollArea className="h-[calc(100vh-140px)]">
+        {/* ✅ نقل ref و id إلى الـ div الداخلي ليعمل الـ ref والطباعة بشكل صحيح */}
+        <div className="space-y-6 p-1" id="printable-content" ref={printRef}>
+          
+          {/* 1. رأس المعاملة */}
+          <Card className="card-rtl bg-slate-50 border-slate-200">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                   <h1 className="text-2xl font-bold text-slate-900 mb-2">{transaction.title}</h1>
+                   <div className="flex gap-3 text-sm text-slate-600">
+                      <span className="flex items-center gap-1"><FileText className="h-4 w-4" /> {transaction.transactionCode}</span>
+                      <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> {new Date(transaction.createdAt).toLocaleDateString('ar-SA')}</span>
+                      <Badge variant={transaction.status === 'Draft' ? 'secondary' : 'default'}>{transaction.status}</Badge>
+                   </div>
+                </div>
+                <div className="text-left">
+                   <div className="text-sm text-slate-500">نوع المعاملة</div>
+                   <div className="font-bold text-slate-800">{transaction.transactionType?.name || 'غير محدد'}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* 2. معلومات العميل */}
+            <Card className="card-rtl border-l-4 border-l-blue-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <User className="h-4 w-4 text-blue-500" /> معلومات العميل
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <div className="flex justify-between"><span className="text-gray-500">الاسم:</span> <span className="font-semibold">{clientName}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">الهوية:</span> <span>{transaction.client?.idNumber || '-'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">الجوال:</span> <span dir="ltr">{transaction.client?.mobile || '-'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">النوع:</span> <span>{transaction.client?.type === 'company' ? 'شركة' : 'فرد'}</span></div>
+              </CardContent>
+            </Card>
+
+            {/* 3. الموقع والصك */}
+            <Card className="card-rtl border-l-4 border-l-amber-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-amber-500" /> الموقع والصك
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <div className="flex justify-between"><span className="text-gray-500">رقم الصك:</span> <span className="font-mono">{transaction.deedNumber || '-'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">الموقع:</span> <span>{transaction.location || '-'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">مساحة الصك:</span> <span className="font-bold">{landArea.deedArea || 0} م²</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">مساحة الطبيعة:</span> <span>{landArea.naturalArea || 0} م²</span></div>
+              </CardContent>
+            </Card>
+
+            {/* 4. الملخص المالي */}
+            <Card className="card-rtl border-l-4 border-l-green-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-green-500" /> الملخص المالي
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <div className="flex justify-between"><span className="text-gray-500">الإجمالي:</span> <span className="font-bold text-lg">{totalCost.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">المدفوع:</span> <span className="text-green-600">{paidAmount.toLocaleString()}</span></div>
+                <Separator className="my-1" />
+                <div className="flex justify-between"><span className="text-gray-500">المتبقي:</span> <span className="text-red-600 font-bold">{remainingAmount.toLocaleString()}</span></div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* تفاصيل البيانات الفنية والهندسية */}
+          <Accordion type="multiple" defaultValue={['engineering', 'components']} className="w-full">
+            
+            {/* قسم البيانات الهندسية (حدود، ارتدادات) */}
+            <AccordionItem value="engineering">
+              <AccordionTrigger className="bg-gray-50 px-4 rounded-md hover:no-underline">
+                <div className="flex items-center gap-2 font-bold text-gray-800">
+                  <Compass className="h-5 w-5 text-indigo-600" />
+                   البيانات الهندسية (الحدود والارتدادات)
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* الحدود */}
+                  <div className="border rounded-lg p-3">
+                    <h3 className="font-bold text-sm mb-3 text-gray-700 border-b pb-2">الحدود والأطوال</h3>
+                    <div className="space-y-2">
+                      {boundaries.length > 0 ? boundaries.map((b: any) => (
+                        <div key={b.direction} className="flex justify-between text-sm items-center bg-gray-50 p-2 rounded">
+                          <span className="font-semibold w-16">{b.directionAr}</span>
+                          <span className="text-gray-600 flex-1 mx-2 truncate">{b.name || '-'}</span>
+                          {b.width > 0 && <Badge variant="outline">{b.width}م</Badge>}
+                        </div>
+                      )) : <div className="text-gray-400 text-sm text-center">لا توجد بيانات</div>}
+                    </div>
+                  </div>
+
+                  {/* الارتدادات (ملخص) */}
+                  <div className="border rounded-lg p-3">
+                    <h3 className="font-bold text-sm mb-3 text-gray-700 border-b pb-2">ملخص الارتدادات (للدور الأرضي)</h3>
+                    {setbacks.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        {setbacks.find((f: any) => f.floorName.includes('الأرضي') || f.sequence === 1)?.setbacks.map((s: any) => (
+                          <div key={s.direction} className="bg-gray-50 p-2 rounded text-center">
+                             <div className="text-xs text-gray-500">{s.directionAr}</div>
+                             <div className="font-bold text-sm flex justify-center gap-2">
+                                <span className="text-gray-400 text-xs">ق:{s.current}</span>
+                                <span className="text-blue-600">ن:{s.regulatory}</span>
+                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <div className="text-gray-400 text-sm text-center">لا توجد بيانات</div>}
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* قسم المكونات والأدوار */}
+            <AccordionItem value="components">
+              <AccordionTrigger className="bg-gray-50 px-4 rounded-md hover:no-underline">
+                <div className="flex items-center gap-2 font-bold text-gray-800">
+                  <Building2 className="h-5 w-5 text-blue-600" />
+                   تفاصيل الأدوار والمكونات
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="p-4">
+                <div className="overflow-x-auto border rounded-lg">
+                  <Table className="table-rtl">
+                    <TableHeader className="bg-gray-100">
+                      <TableRow>
+                        <TableHead className="text-right">الدور</TableHead>
+                        <TableHead className="text-right">المساحة (م²)</TableHead>
+                        <TableHead className="text-right">الاستخدامات</TableHead>
+                        <TableHead className="text-right">الوحدات</TableHead>
+                        <TableHead className="text-right">المنسوب</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {components.length > 0 ? components.map((comp: any) => (
+                        <TableRow key={comp.id}>
+                          <TableCell className="font-semibold">{comp.floorName}</TableCell>
+                          <TableCell>{comp.totalArea || comp.area || 0}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {comp.usages?.map((u: any, idx: number) => (
+                                <Badge key={idx} variant="secondary" className="text-[10px]">
+                                  {u.usageType} ({u.area}م²)
+                                </Badge>
+                              ))}
+                              {!comp.usages && comp.usage && <Badge variant="secondary">{comp.usage}</Badge>}
+                            </div>
+                          </TableCell>
+                          <TableCell>{comp.unitsCount}</TableCell>
+                          <TableCell>{comp.level}</TableCell>
+                        </TableRow>
+                      )) : (
+                        <TableRow><TableCell colSpan={5} className="text-center py-4 text-gray-500">لا توجد مكونات مضافة</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* قسم فريق العمل والمهام */}
+            <AccordionItem value="staff">
+              <AccordionTrigger className="bg-gray-50 px-4 rounded-md hover:no-underline">
+                <div className="flex items-center gap-2 font-bold text-gray-800">
+                  <Users className="h-5 w-5 text-green-600" />
+                   فريق العمل والمهام
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="p-4">
+                 <div className="mb-4">
+                    <div className="flex justify-between text-sm mb-1">
+                       <span>إنجاز المهام</span>
+                       <span>{Math.round(taskProgress)}%</span>
+                    </div>
+                    <Progress value={taskProgress} className="h-2" />
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="border rounded-lg p-3">
+                       <h4 className="font-bold text-sm mb-2 flex items-center gap-1"><Briefcase className="h-4 w-4"/> الفريق المسند</h4>
+                       <div className="space-y-2">
+                          {staff.length > 0 ? staff.map((s: any) => (
+                             <div key={s.id} className="flex justify-between text-sm border-b last:border-0 pb-1">
+                                <span>{s.employee?.name || 'مستخدم'}</span>
+                                <Badge variant="outline" className="text-[10px]">{s.role}</Badge>
+                             </div>
+                          )) : <div className="text-gray-400 text-sm">لم يتم إسناد موظفين</div>}
+                       </div>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                       <h4 className="font-bold text-sm mb-2 flex items-center gap-1"><Calendar className="h-4 w-4"/> المواعيد القادمة</h4>
+                       <div className="space-y-2">
+                          {appointments.length > 0 ? appointments.slice(0, 3).map((apt: any) => (
+                             <div key={apt.id} className="flex justify-between text-sm bg-blue-50 p-2 rounded">
+                                <span>{apt.type === 'field_visit' ? 'كشف ميداني' : 'اجتماع'}</span>
+                                <span className="text-xs text-blue-600" dir="ltr">{new Date(apt.date).toLocaleDateString()}</span>
+                             </div>
+                          )) : <div className="text-gray-400 text-sm">لا توجد مواعيد</div>}
+                       </div>
+                    </div>
+                 </div>
+              </AccordionContent>
+            </AccordionItem>
+            
+            {/* قسم المرفقات */}
+            <AccordionItem value="files">
+              <AccordionTrigger className="bg-gray-50 px-4 rounded-md hover:no-underline">
+                <div className="flex items-center gap-2 font-bold text-gray-800">
+                  <Layers className="h-5 w-5 text-purple-600" />
+                   المرفقات والمستندات ({attachments.length})
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="p-4">
+                {attachments.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                     {attachments.map((file: any) => (
+                        <div key={file.id} className="border rounded p-2 flex items-center gap-2 text-sm bg-white">
+                           <FileText className="h-4 w-4 text-gray-500" />
+                           <span className="truncate flex-1">{file.fileName}</span>
+                        </div>
+                     ))}
+                  </div>
+                ) : <div className="text-center text-gray-400">لا توجد مرفقات</div>}
+              </AccordionContent>
+            </AccordionItem>
+
+          </Accordion>
+
+          {/* التوقيع والاعتماد (للتقرير المطبوع) */}
+          <div className="mt-12 border-t pt-8 hidden print:block">
+            <div className="grid grid-cols-3 gap-8 text-center">
+               <div>
+                  <p className="font-bold mb-10">المدير العام</p>
+                  <div className="border-t w-32 mx-auto border-black"></div>
+               </div>
+               <div>
+                  <p className="font-bold mb-10">المدير المالي</p>
+                  <div className="border-t w-32 mx-auto border-black"></div>
+               </div>
+               <div>
+                  <p className="font-bold mb-10">المدير الفني</p>
+                  <div className="border-t w-32 mx-auto border-black"></div>
+               </div>
+            </div>
+          </div>
+        </div>
+      </ScrollArea>
     </div>
   );
 };
-// ============================================
-// 286-14: الإعدادات
-// ============================================
-export const Tab_286_14_Settings: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
-  return (
-    <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
-      <CodeDisplay code="TAB-286-14" position="top-right" />
-      
-      <Card className="card-rtl" style={{ background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)', border: '2px solid #6b7280' }}>
-        <CardHeader className="pb-3">
-          <CardTitle style={{ fontSize: '16px', fontWeight: 700, color: '#374151' }}>
-            <Settings className="h-5 w-5 inline ml-2" />
-            إعدادات المعاملة
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-2">
-            <EnhancedSwitch id="autoNumbering" checked={true} onCheckedChange={() => {}} label="ترقيم تلقائي" description="توليد رقم المعاملة تلقائياً" size="md" variant="default" disabled={readOnly} />
-            <EnhancedSwitch id="autoTaskAssignment" checked={true} onCheckedChange={() => {}} label="تعيين المهام تلقائياً" description="تعيين المهام للموظفين حسب الإعدادات المسبقة" size="md" variant="success" disabled={readOnly} />
-            <EnhancedSwitch id="sendNotifications" checked={true} onCheckedChange={() => {}} label="إرسال إشعارات" description="إرسال إشعارات للفريق والعميل" size="md" variant="default" disabled={readOnly} />
-            <EnhancedSwitch id="requireApproval" checked={false} onCheckedChange={() => {}} label="يتطلب موافقة" description="المعاملة تحتاج موافقة قبل البدء" size="md" variant="warning" disabled={readOnly} />
-            <EnhancedSwitch id="isConfidential" checked={false} onCheckedChange={() => {}} label="معاملة سرية" description="تقييد الوصول للمعاملة" size="md" variant="danger" disabled={readOnly} />
-            <EnhancedSwitch id="trackChanges" checked={true} onCheckedChange={() => {}} label="تتبع التغييرات" description="تسجيل جميع التعديلات على المعاملة" size="md" variant="default" disabled={readOnly} />
-          </div>
 
-          <div className="p-3 mt-4" style={{ background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', border: '1px solid #3b82f6' }}>
-            <p style={{ fontSize: '12px', color: '#1e40af', margin: 0 }}>
-              ℹ️ هذه الإعدادات يمكن تعديلها لاحقاً من إعدادات المعاملة
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
 
 export default {
   Tab_286_07_ClientInfo,
   Tab_286_09_Appointments,
   Tab_286_11_Approvals,
   Tab_286_12_Notes,
-  Tab_286_13_Preview,
-  Tab_286_14_Settings
+  Tab_286_13_Preview_Complex,
 };

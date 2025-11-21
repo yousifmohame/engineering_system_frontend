@@ -1,5 +1,5 @@
 /**
- * TAB 286-02 - Transaction Type Selection (v3.0 - Backend Connected)
+ * TAB 286-02 - Transaction Type Selection (v3.0 - Backend Connected) with Selection Persistence
  * =========================================================
  *
  * Features:
@@ -7,9 +7,11 @@
  * - [Enabled] Use useMutation to update transaction when type is selected.
  * - [Enabled] Keep detailed UI (cards, details, search, filtering).
  * - [Enabled] Show Loading, Error, and Initial states.
+ * - [Fixed] Fetch current transaction to highlight previously selected type.
+ * - [Enabled] Visual Highlighting (Blue background, Border, Shadow).
+ * - [Enabled] Search and Filter.
  */
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -24,17 +26,15 @@ import {
 import CodeDisplay from '../CodeDisplay';
 import { InputWithCopy, SelectWithCopy } from '../InputWithCopy';
 import { Skeleton } from '../ui/skeleton';
-
 // --- 1. Import API functions and types ---
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // import { toast } from 'sonner';
-
 // --- ✅ [Modified] ---
 // Imported "updateTransaction" instead of "updateTransactionType"
 // because we want to update the transaction (286), not the type template (701).
-import { getFullTransactionTypes, updateTransaction } from '../../api/transactionApi';
+// ✅ [Added] getTransactionById to fetch saved data
+import { getFullTransactionTypes, updateTransaction, getTransactionById } from '../../api/transactionApi';
 // --------------------
-
 import { 
   TransactionType, 
   TransactionUpdateData, 
@@ -42,12 +42,10 @@ import {
   TransactionFee, 
   TransactionStage 
 } from '../../types/transactionTypes';
-
 interface Props {
   transactionId: string | 'new';
   onTypeSelected: (type: TransactionType) => void; // Function to navigate to the next tab
 }
-
 const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({ 
   transactionId,
   onTypeSelected 
@@ -58,7 +56,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
   const [filterComplexity, setFilterComplexity] = useState('all');
   const [showDetailsId, setShowDetailsId] = useState<string | null>(null);
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
-
   // --- 2. Verify ID (before fetching data) ---
   if (transactionId === 'new') {
     return (
@@ -73,13 +70,27 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
       </Card>
     );
   }
-
   // --- 3. Fetch data (Read) - (Replace mock data) ---
-  const { data: transactionTypes, isLoading, isError } = useQuery<TransactionType[]>({
+  // أ) Fetch the list of types (templates)
+  const { data: transactionTypes, isLoading: isLoadingTypes, isError } = useQuery<TransactionType[]>({
     queryKey: ['fullTransactionTypes'], // (Fetch full data)
     queryFn: getFullTransactionTypes,
   });
-
+  // ب) ✅✅✅ Fetch current transaction data to know the previously selected type
+  const { data: transaction, isLoading: isLoadingTransaction } = useQuery({
+    queryKey: ['transaction', transactionId],
+    queryFn: () => getTransactionById(transactionId),
+    enabled: !!transactionId && transactionId !== 'new',
+  });
+  // ج) ✅✅✅ Synchronize local state with saved data
+  useEffect(() => {
+    if (transaction?.transactionTypeId) {
+      setSelectedTypeId(transaction.transactionTypeId);
+      // Optionally pass the type to parent on load (if needed)
+      // const type = transactionTypes?.find(t => t.id === transaction.transactionTypeId);
+      // if (type) onTypeSelected(type);
+    }
+  }, [transaction, transactionTypes]);
   // --- 4. Update operation ---
   const updateMutation = useMutation({
     // (أ) قم بتغيير الدالة لتقبل الكائن 'type' كاملاً
@@ -88,23 +99,25 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
       // (ب) أرسل الـ ID إلى الـ Backend
       { transactionTypeId: type.id } as Partial<TransactionUpdateData>
     ),
-
     // (ج) دالة onSuccess تستقبل (data, variables)
     // 'type' هنا هي نفس الكائن الذي مررناه إلى .mutate()
     onSuccess: (updatedData, type) => {
       // toast.success("تم تحديد نوع المعاملة بنجاح");
       queryClient.setQueryData(['transaction', transactionId], updatedData);
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      
       // (د) مرّر الكائن 'type' كاملاً إلى المكون الأب!
       onTypeSelected(type);
     },
     onError: (error: Error) => {
       // toast.error(`فشل تحديد النوع: ${error.message}`);
-      setSelectedTypeId(null); 
+      // في حالة الفشل، نعيد التحديد للسابق (اختياري)
+      if (transaction?.transactionTypeId) {
+          setSelectedTypeId(transaction.transactionTypeId);
+      } else {
+          setSelectedTypeId(null);
+      }
     }
   });
-
   // --- 5. Filtering logic (uses data from useQuery) ---
   const filteredTypes = useMemo(() => {
     if (!transactionTypes) return [];
@@ -113,11 +126,9 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           (type.description || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = filterCategory === 'all' || type.category === filterCategory;
       const matchesComplexity = filterComplexity === 'all' || type.complexity === filterComplexity;
-      
       return matchesSearch && matchesCategory && matchesComplexity;
     });
   }, [transactionTypes, searchTerm, filterCategory, filterComplexity]);
-
   // (Helper functions as they are)
   const getComplexityColor = (complexity: string | null | undefined) => {
     switch (complexity) {
@@ -127,16 +138,13 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
       default: return { bg: '#f3f4f6', text: '#374151', label: 'غير محدد' };
     }
   };
-
   const handleSelect = (type: TransactionType) => { // <-- استقبل الكائن كاملاً
-    setSelectedTypeId(type.id);
-    updateMutation.mutate(type); // <-- مرر الكائن كاملاً
+    setSelectedTypeId(type.id); // تحديث فوري للواجهة
+    updateMutation.mutate(type); // إرسال للسيرفر
   };
-
   // --- 6. UI Render ---
-
   // (Loading state)
-  if (isLoading) {
+  if (isLoadingTypes || isLoadingTransaction) {
     return (
       <div className="space-y-4">
         <Card><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
@@ -147,7 +155,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
       </div>
     );
   }
-
   // (Error state)
   if (isError) {
     return (
@@ -159,12 +166,10 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
       </Card>
     );
   }
-
   // (Normal state)
   return (
     <div className="space-y-4" style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
       <CodeDisplay code="TAB-286-02" position="top-right" />
-      
       {/* Header with search and filter */}
       <Card className="card-rtl" style={{ 
         background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
@@ -186,11 +191,13 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                   تفاصيل أنواع المعاملات
                 </h2>
                 <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-                  اختر نوع المعاملة المناسب مع معاينة التفاصيل الكاملة
+                  {selectedTypeId 
+                    ? 'تم اختيار النوع، يمكنك تغييره بالضغط على بطاقة أخرى' 
+                    : 'اختر نوع المعاملة المناسب مع معاينة التفاصيل الكاملة'
+                  }
                 </p>
               </div>
             </div>
-            
             <Badge style={{
               background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
               color: '#ffffff',
@@ -200,7 +207,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
               {filteredTypes.length} نوع متاح
             </Badge>
           </div>
-
           {/* Search and filter */}
           <div className="grid grid-cols-3 gap-3">
             <InputWithCopy
@@ -212,7 +218,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
               copyable={false}
               clearable
             />
-            
             <SelectWithCopy
               label="التصنيف"
               id="category"
@@ -231,7 +236,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
               copyable={false}
               clearable={false}
             />
-            
             <SelectWithCopy
               label="مستوى التعقيد"
               id="complexity"
@@ -249,28 +253,33 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
           </div>
         </CardContent>
       </Card>
-
       <ScrollArea style={{ height: 'calc(100vh - 280px)' }}>
         <div className="space-y-4 pl-4">
-          
           {/* Interactive cards */}
           <div className="grid grid-cols-2 gap-4">
             {filteredTypes.map((type) => {
               const complexityColor = getComplexityColor(type.complexity);
               const isSelected = selectedTypeId === type.id;
               const isExpanded = showDetailsId === type.id;
-              
               return (
                 <Card 
                   key={type.id} 
                   className="card-rtl"
+                  onClick={() => handleSelect(type)}
                   style={{ 
+                    // ✅ Visual highlighting
                     background: isSelected 
-                      ? 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)' 
+                      ? 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)' 
                       : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-                    border: isSelected ? '2px solid #3b82f6' : '2px solid #e5e7eb',
+                    border: isSelected 
+                      ? '2px solid #2563eb' 
+                      : '2px solid #e5e7eb',
+                    boxShadow: isSelected 
+                      ? '0 4px 12px rgba(37, 99, 235, 0.15)' 
+                      : 'none',
+                    transform: isSelected ? 'scale(1.01)' : 'scale(1)',
                     cursor: 'pointer',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s ease-in-out'
                   }}
                 >
                   <CardHeader className="pb-3">
@@ -291,8 +300,13 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           <Badge variant="outline" style={{ fontSize: '10px', padding: '2px 8px' }}>
                             {type.categoryAr}
                           </Badge>
+                          {isSelected && (
+                             <Badge className="bg-blue-600 text-white text-[10px] animate-pulse">
+                               تم الاختيار
+                             </Badge>
+                          )}
                         </div>
-                        <CardTitle style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: 0 }}>
+                        <CardTitle style={{ fontSize: '16px', fontWeight: 700, color: isSelected ? '#1e40af' : '#1f2937', margin: 0 }}>
                           {type.name}
                         </CardTitle>
                         <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0', lineHeight: '1.5' }}>
@@ -313,7 +327,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           {type.duration || 0} يوم
                         </p>
                       </div>
-                      
                       <div className="p-2" style={{ background: 'rgba(16, 185, 129, 0.1)', borderRadius: '6px' }}>
                         <div className="flex items-center gap-1 mb-1">
                           <DollarSign className="h-3 w-3" style={{ color: '#10b981' }} />
@@ -323,7 +336,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                           {type.estimatedCost?.toLocaleString() || 0} ر.س
                         </p>
                       </div>
-                      
                       <div className="p-2" style={{ background: 'rgba(245, 158, 11, 0.1)', borderRadius: '6px' }}>
                         <div className="flex items-center gap-1 mb-1">
                           <CheckCircle className="h-3 w-3" style={{ color: '#f59e0b' }} />
@@ -334,11 +346,13 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                         </p>
                       </div>
                     </div>
-
                     {/* Buttons */}
                     <div className="flex gap-2">
                       <Button
-                        onClick={() => setShowDetailsId(isExpanded ? null : type.id)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setShowDetailsId(isExpanded ? null : type.id);
+                        }}
                         variant="outline"
                         style={{ flex: 1, fontSize: '12px' }}
                       >
@@ -346,28 +360,21 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                         {isExpanded ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}
                       </Button>
                       <Button
-                        onClick={() => handleSelect(type)}
                         disabled={updateMutation.isPending}
                         style={{
                           flex: 1,
                           fontSize: '12px',
-                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          background: isSelected ? '#1e40af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                           color: '#ffffff'
                         }}
                       >
-                        {isSelected && updateMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 ml-1 animate-spin" />
-                        ) : (
-                          <CheckCircle className="h-3 w-3 ml-1" />
-                        )}
-                        {isSelected && updateMutation.isPending ? 'جاري الاختيار...' : 'اختيار'}
+                        {isSelected && updateMutation.isPending ? <Loader2 className="h-3 w-3 ml-1 animate-spin"/> : <CheckCircle className="h-3 w-3 ml-1" />}
+                        {isSelected ? 'تم الاختيار' : 'اختيار'}
                       </Button>
                     </div>
-
                     {/* Expanded details */}
                     {isExpanded && (
-                      <div className="space-y-3 pt-3" style={{ borderTop: '1px solid #e5e7eb' }}>
-                        
+                      <div className="space-y-3 pt-3 cursor-default" onClick={(e) => e.stopPropagation()} style={{ borderTop: '1px solid #e5e7eb' }}>
                         {/* Tasks */}
                         {type.tasks && type.tasks.length > 0 && (
                           <div>
@@ -410,7 +417,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                             </div>
                           </div>
                         )}
-                        
                         {/* Documents */}
                         {type.documents && type.documents.length > 0 && (
                           <div>
@@ -433,7 +439,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                             </div>
                           </div>
                         )}
-
                         {/* Authorities */}
                         {type.authorities && type.authorities.length > 0 && (
                           <div>
@@ -450,7 +455,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                             </div>
                           </div>
                         )}
-
                         {/* Fees */}
                         {type.fees && type.fees.length > 0 && (
                           <div>
@@ -478,7 +482,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                             </Table>
                           </div>
                         )}
-
                         {/* Stages */}
                         {type.stages && type.stages.length > 0 && (
                           <div>
@@ -516,7 +519,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                             </div>
                           </div>
                         )}
-
                         {/* Warnings */}
                         {type.warnings && type.warnings.length > 0 && (
                           <div className="p-3" style={{ 
@@ -539,7 +541,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
                             </div>
                           </div>
                         )}
-
                         {/* Notes */}
                         {type.notes && type.notes.length > 0 && (
                           <div className="p-3" style={{ 
@@ -569,7 +570,6 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
               );
             })}
           </div>
-
           {/* No results */}
           {filteredTypes.length === 0 && (
             <Card className="card-rtl">
@@ -584,11 +584,9 @@ const Tab_286_02_TransactionDetails_Complete: React.FC<Props> = ({
               </CardContent>
             </Card>
           )}
-
         </div>
       </ScrollArea>
     </div>
   );
 };
-
 export default Tab_286_02_TransactionDetails_Complete;

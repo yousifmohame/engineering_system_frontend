@@ -1,515 +1,248 @@
 import React, { useState, useEffect } from 'react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { 
-  Activity, 
   Clock, 
-  Wifi,
   User,
   Users,
-  Monitor,
   Building2,
-  Shield,
-  CheckCircle,
-  Globe,
-  Brain,
-  History,
-  Calendar,
   MapPin,
-  Smartphone,
-  Chrome,
-  ExternalLink,
   X,
-  ChevronRight,
-  Home,
-  ArrowRight,
-  ArrowLeft,
-  Search,
-  Filter,
-  Bell,
-  FileText,
-  AlertCircle,
-  Settings,
-  LogIn
+  LogOut,
+  Loader2,
+  Activity
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useQuery } from '@tanstack/react-query';
+import { getEmployees } from '../api/employeeApi';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 
 interface SystemHeaderProps {
   officeName?: string;
   logoUrl?: string;
-  currentUser?: string;
-  userJobTitle?: string;
-  userFirstName?: string;
-  userLastName?: string;
-  userIP?: string;
-  systemVersion?: string;
-  lastLoginTime?: string;
   onNavigateToHome?: () => void;
-  navigationHistory?: any[];
-  futureHistory?: any[];
-  currentPath?: any[];
-  activeScreen?: string;
-  unreadNotificationsCount?: number;
-  onNavigateBack?: () => void;
-  onNavigateForward?: () => void;
-  onShowAdvancedSearch?: () => void;
-  onShowNotifications?: () => void;
-  onShowSystemInfo?: () => void;
-  onShowTransactionInfo?: () => void;
-  onShowTaskInfo?: () => void;
-  onShowUrgentInfo?: () => void;
+}
+
+// Types
+interface Employee {
+  id: string;
+  name: string;
+  position: string;
+  status: 'active' | 'inactive';
+  department?: string;
+}
+
+interface OnlineUser {
+  id: string;
+  name: string;
+  jobTitle: string;
+  status: string;
+  avatar: string;
+  lastActivity: string;
+  sessionDuration: string;
+  location: string;
 }
 
 export default function SystemHeader({
   officeName = "مكتب الهندسة المتكامل",
-  logoUrl = "/logo.png",
-  currentUser = "المهندس أحمد العلي",
-  userJobTitle = "المهندس",
-  userFirstName = "أحمد",
-  userLastName = "العلي",
-  userIP = "192.168.1.100",
-  systemVersion = "v5.0",
-  lastLoginTime = "14:30 - 23/09/2025",
   onNavigateToHome,
-  navigationHistory = [],
-  futureHistory = [],
-  currentPath = [],
-  activeScreen = '',
-  unreadNotificationsCount = 13,
-  onNavigateBack,
-  onNavigateForward,
-  onShowAdvancedSearch,
-  onShowNotifications,
-  onShowSystemInfo,
-  onShowTransactionInfo,
-  onShowTaskInfo,
-  onShowUrgentInfo
 }: SystemHeaderProps) {
+  const { user, logout } = useAuth();
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
-  const [sessionStartTime] = useState(new Date()); // وقت بداية الجلسة
-  const [sessionDuration, setSessionDuration] = useState({ hours: 0, minutes: 0, seconds: 0 }); // عداد الجلسة
-  const [systemUptime, setSystemUptime] = useState(99.9);
-  const [serverStatus, setServerStatus] = useState({
-    cpu: 12,
-    ram: 28,
-    disk: 5,
-    network: 'متصل'
-  });
-  const [showLoginHistoryModal, setShowLoginHistoryModal] = useState(false);
+  const [sessionStartTime] = useState(new Date());
+  const [sessionDuration, setSessionDuration] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [showOnlineUsersModal, setShowOnlineUsersModal] = useState(false);
 
-  // بيانات المستخدمين المتصلين حالياً
-  const onlineUsers = [
-    {
-      id: 1,
-      name: 'أحمد العلي',
-      jobTitle: 'المهندس',
+  // Fetch employees
+  const { data: employees = [], isLoading: isLoadingEmployees } = useQuery<Employee[]>({
+    queryKey: ['activeEmployees'],
+    queryFn: getEmployees,
+    refetchInterval: 30000,
+    staleTime: 10000,
+    cacheTime: 60000,
+    retry: 2,
+  });
+
+  // Process online users
+  const onlineUsers: OnlineUser[] = employees
+    .filter(emp => emp.status === 'active')
+    .map(emp => ({
+      id: emp.id,
+      name: emp.name,
+      jobTitle: emp.position,
       status: 'نشط',
-      avatar: 'A',
+      avatar: emp.name.charAt(0).toUpperCase(),
       lastActivity: 'الآن',
-      sessionDuration: '3س 45د',
-      location: 'الرياض'
-    },
-    {
-      id: 2,
-      name: 'محمد السعيد',
-      jobTitle: 'مدير المشاريع',
-      status: 'نشط',
-      avatar: 'M',
-      lastActivity: 'منذ 2 د',
-      sessionDuration: '1س 20د',
-      location: 'جدة'
-    },
-    {
-      id: 3,
-      name: 'فاطمة الأحمد',
-      jobTitle: 'محاسب',
-      status: 'نشط',
-      avatar: 'F',
-      lastActivity: 'منذ 5 د',
-      sessionDuration: '45د',
-      location: 'الدمام'
-    },
-    {
-      id: 4,
-      name: 'خالد المطيري',
-      jobTitle: 'مهندس تصميم',
-      status: 'مشغول',
-      avatar: 'K',
-      lastActivity: 'منذ 1 د',
-      sessionDuration: '2س 10د',
-      location: 'الرياض'
-    },
-    {
-      id: 5,
-      name: 'نورة العتيبي',
-      jobTitle: 'سكرتارية',
-      status: 'نشط',
-      avatar: 'N',
-      lastActivity: 'منذ 3 د',
-      sessionDuration: '4س 30د',
-      location: 'الرياض'
-    }
-  ];
+      sessionDuration: 'متصل',
+      location: emp.department || 'الفرع الرئيسي'
+    }));
 
-  // بيانات سجل تسجيل الدخول - آخر 5 مرات
-  const loginHistory = [
-    {
-      id: 1,
-      datetime: '2025-09-23 14:30:25',
-      duration: '3س 45د',
-      ipAddress: '192.168.1.100',
-      location: 'الرياض، السعودية',
-      browser: 'Chrome 118.0',
-      device: 'Windows 11 Pro',
-      status: 'نشط حالياً',
-      statusColor: 'green',
-      loginMethod: 'كلمة مرور',
-      sessionId: 'SES-20250923-001'
-    },
-    {
-      id: 2,
-      datetime: '2025-09-22 09:15:12',
-      duration: '8س 20د',
-      ipAddress: '192.168.1.100',
-      location: 'الرياض، السعودية',
-      browser: 'Chrome 118.0',
-      device: 'Windows 11 Pro',
-      status: 'تم تسجيل الخروج',
-      statusColor: 'gray',
-      loginMethod: 'كلمة مرور',
-      sessionId: 'SES-20250922-001'
-    },
-    {
-      id: 3,
-      datetime: '2025-09-21 13:42:08',
-      duration: '4س 15د',
-      ipAddress: '192.168.1.102',
-      location: 'الرياض، السعودية',
-      browser: 'Firefox 118.0',
-      device: 'Android 14',
-      status: 'تم تسجيل الخروج',
-      statusColor: 'gray',
-      loginMethod: 'كلمة مرور',
-      sessionId: 'SES-20250921-001'
-    },
-    {
-      id: 4,
-      datetime: '2025-09-20 10:30:45',
-      duration: '7س 30د',
-      ipAddress: '192.168.1.100',
-      location: 'الرياض، السعودية',
-      browser: 'Chrome 117.0',
-      device: 'Windows 11 Pro',
-      status: 'تم تسجيل الخروج',
-      statusColor: 'gray',
-      loginMethod: 'مصادقة ثنائية',
-      sessionId: 'SES-20250920-001'
-    },
-    {
-      id: 5,
-      datetime: '2025-09-19 08:45:18',
-      duration: '9س 10د',
-      ipAddress: '192.168.1.100',
-      location: 'الرياض، السعودية',
-      browser: 'Chrome 117.0',
-      device: 'Windows 11 Pro',
-      status: 'تم تسجيل الخروج',
-      statusColor: 'gray',
-      loginMethod: 'كلمة مرور',
-      sessionId: 'SES-20250919-001'
-    }
-  ];
-
-  // وظيفة لفتح شاشة ملف الموظف - تاب تاريخ تسجيل الدخول
-  const handleViewFullHistory = () => {
-    setShowLoginHistoryModal(false);
-    // هنا يمكن إضافة منطق التنقل إلى شاشة ملف الموظف
-    alert('سيتم التنقل إلى شاشة ملف الموظف - تبويب تاريخ تسجيل الدخول');
+  // Format numbers to Arabic
+  const toArabicNumbers = (num: number | string): string => {
+    const arabicNums = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return num.toString().replace(/\d/g, (digit) => arabicNums[parseInt(digit)]);
   };
 
-  // وظيفة لتحويل التاريخ إلى تنسيق عربي
-  const formatArabicDateTime = (dateString) => {
-    const date = new Date(dateString);
-    const toArabicNumbers = (num) => {
-      const arabicNums = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-      return num.toString().replace(/\d/g, (digit) => arabicNums[parseInt(digit)]);
-    };
-
-    const day = toArabicNumbers(date.getDate().toString().padStart(2, '0'));
-    const month = toArabicNumbers((date.getMonth() + 1).toString().padStart(2, '0'));
-    const year = toArabicNumbers(date.getFullYear());
-    const hours = toArabicNumbers(date.getHours().toString().padStart(2, '0'));
-    const minutes = toArabicNumbers(date.getMinutes().toString().padStart(2, '0'));
-
-    return `${day}/${month}/${year} - ${hours}:${minutes}`;
+  // Get Hijri date using Intl API (more accurate)
+  const getHijriDate = (date: Date): string => {
+    try {
+      return new Intl.DateTimeFormat('ar-SA', {
+        calendar: 'islamic',
+        day: 'numeric',
+        month: 'numeric',
+        year: 'numeric'
+      }).format(date);
+    } catch {
+      // Fallback
+      const hijriEpoch = new Date('622-07-16');
+      const diffDays = Math.floor((date.getTime() - hijriEpoch.getTime()) / (1000 * 60 * 60 * 24));
+      const hijriYear = Math.floor(diffDays / 354.367) + 1;
+      const remainingDays = diffDays % 354.367;
+      const hijriMonth = Math.floor(remainingDays / 29.5) + 1;
+      const hijriDay = Math.floor(remainingDays % 29.5) + 1;
+      return `${toArabicNumbers(hijriYear)}/${toArabicNumbers(hijriMonth.toString().padStart(2, '0'))}/${toArabicNumbers(hijriDay.toString().padStart(2, '0'))}هـ`;
+    }
   };
 
-  // تحديث الوقت وعداد الجلسة كل ثانية
+  // Update time and session duration
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentDateTime(new Date());
       
-      // حساب مدة الجلسة
       const now = new Date();
       const diff = now.getTime() - sessionStartTime.getTime();
-      const seconds = Math.floor(diff / 1000);
-      const minutes = Math.floor(seconds / 60);
-      const hours = Math.floor(minutes / 60);
+      const totalSeconds = Math.floor(diff / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
       
       setSessionDuration({
-        hours: hours,
-        minutes: minutes % 60,
-        seconds: seconds % 60
+        hours,
+        minutes,
+        seconds
       });
     }, 1000);
 
     return () => clearInterval(timer);
   }, [sessionStartTime]);
 
-  // تحديث إحصائيات الخادم كل 30 ثانية
-  useEffect(() => {
-    const statsTimer = setInterval(() => {
-      setServerStatus(prev => ({
-        cpu: Math.floor(Math.random() * 20) + 5, // 5-25%
-        ram: Math.floor(Math.random() * 15) + 20, // 20-35%  
-        disk: Math.floor(Math.random() * 10) + 2, // 2-12%
-        network: 'متصل'
-      }));
-      setSystemUptime(prev => Math.min(99.9, prev + 0.01));
-    }, 30000);
-
-    return () => clearInterval(statsTimer);
-  }, []);
-
-  const formatDateTime = (date: Date) => {
-    return new Intl.DateTimeFormat('ar-SA', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    }).format(date);
-  };
-
-  const getStatusColor = (value: number, thresholds: { warning: number; danger: number }) => {
-    if (value >= thresholds.danger) return 'text-red-500';
-    if (value >= thresholds.warning) return 'text-yellow-500';
-    return 'text-green-500';
-  };
-
-  // دالة لتحويل الأرقام إلى العربية
-  const toArabicNumbers = (num: number | string) => {
-    const arabicNums = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    return num.toString().replace(/\d/g, (digit) => arabicNums[parseInt(digit)]);
-  };
-
   return (
     <header 
-      className="bg-gradient-to-l from-gray-50 via-blue-50 to-indigo-50 border-b-2 border-blue-200 shadow-md"
+      className="bg-gradient-to-l from-gray-50 sticky top-0 z-50 via-blue-50 to-indigo-50 border-b border-blue-200 shadow-sm"
       style={{ 
-        height: '40px', 
-        minHeight: '40px', 
-        maxHeight: '40px', 
-        overflow: 'hidden',
+        minHeight: '60px',
+        padding: '2px 20px',
         display: 'flex',
-        flexDirection: 'column',
-        padding: '2px 12px',
-        gap: '0'
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontFamily: 'Tajawal, sans-serif',
       }}
       dir="rtl"
     >
-      {/* السطر الوحيد: المعلومات الأساسية - 36px */}
-      <div className="flex items-center justify-between" style={{ 
-        height: '36px', 
-        minHeight: '36px', 
-        maxHeight: '36px',
-        flex: '0 0 36px',
-        gap: '12px'
-      }}>
-          {/* القسم الأيمن - اللوجو واسم المكتب والنظام */}
-          <div className="flex items-center flex-shrink-0" style={{ gap: '8px', minWidth: 0, maxWidth: '28%' }}>
-            <div style={{
-              width: '30px',
-              height: '30px',
-              background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
-              flexShrink: 0,
-              cursor: 'pointer'
-            }}
-            onClick={onNavigateToHome}
-            title="الصفحة الرئيسية"
+      {/* Left: Logo & Office Info */}
+      <div className="flex items-center gap-3 flex-shrink-0" style={{ minWidth: '25%' }}>
+        <button
+          onClick={onNavigateToHome}
+          className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 shadow-md hover:shadow-lg transition-all duration-200"
+          aria-label="الصفحة الرئيسية"
+        >
+          <Building2 className="w-5 h-5 text-white" />
+        </button>
+        
+        <div className="flex flex-col">
+          <span 
+            className="font-bold text-gray-800 text-sm leading-tight"
+            title={officeName}
+          >
+            {officeName}
+          </span>
+          <span 
+            className="text-gray-600 text-xs leading-tight"
+          >
+            نظام إدارة شامل v5.0
+          </span>
+        </div>
+      </div>
+
+      {/* Center: Date & Time */}
+      <div className="flex items-center gap-3 bg-white/80 backdrop-blur-sm rounded-lg px-4 py-2 shadow-sm border border-blue-100 flex-shrink-0">
+        <Clock className="w-4 h-4 text-blue-700" />
+        <div className="text-center">
+          <span className="text-blue-800 font-medium text-xs leading-tight">
+            {getHijriDate(currentDateTime)}
+          </span>
+          <br />
+          <span className="text-gray-700 text-xs leading-tight">
+            {format(currentDateTime, 'dd/MM/yyyy', { locale: ar })}
+          </span>
+        </div>
+      </div>
+
+      {/* Right: User, Session, Online Users */}
+      <div className="flex items-center gap-3 flex-shrink-0" style={{ minWidth: '35%' }}>
+        
+        {/* User Info */}
+        <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm rounded-lg px-3 py-2 shadow-sm border border-blue-100">
+          <User className="w-4 h-4 text-blue-700" />
+          <div className="text-right">
+            <span className="font-semibold text-blue-800 text-xs leading-tight" title={user?.name}>
+              {user?.name || 'زائر'}
+            </span>
+            <br />
+            <Badge 
+              variant="outline" 
+              className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0.5"
             >
-              <Building2 style={{ width: '16px', height: '16px', color: '#ffffff' }} />
-            </div>
-            <div className="flex flex-col justify-center min-w-0" style={{ gap: '0' }}>
-              <span className="truncate" style={{ 
-                fontFamily: 'Tajawal, sans-serif', 
-                fontWeight: 700, 
-                color: '#1f2937', 
-                fontSize: '10.5px',
-                lineHeight: '13px'
-              }} title={officeName}>
-                {officeName}
-              </span>
-              <span className="text-gray-600 truncate" style={{ 
-                fontFamily: 'Tajawal, sans-serif', 
-                fontSize: '8.5px',
-                lineHeight: '11px'
-              }}>
-                نظام إدارة شامل {systemVersion}
-              </span>
-            </div>
+              {user?.position || 'مستخدم'}
+            </Badge>
           </div>
+        </div>
 
-          {/* القسم الأوسط - التاريخ الهجري والميلادي */}
-          <div className="flex items-center bg-white/80 rounded-lg shadow-sm border border-blue-200 flex-shrink-0" style={{ 
-            padding: '3px 10px',
-            gap: '6px',
-            height: '30px'
-          }}>
-            <Clock style={{ width: '13px', height: '13px', color: '#2563eb', flexShrink: 0 }} />
-            <div className="flex flex-col items-center justify-center" style={{ fontFamily: 'Tajawal, sans-serif', gap: '0' }}>
-              <div className="text-blue-700 whitespace-nowrap" style={{ fontWeight: 600, fontSize: '8.5px', lineHeight: '10px' }}>
-                {(() => {
-                  // تحويل التاريخ الميلادي إلى هجري (تقريبي)
-                  const toHijri = (gregorianDate) => {
-                    const hijriEpoch = new Date('622-07-16');
-                    const diffTime = gregorianDate.getTime() - hijriEpoch.getTime();
-                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                    const hijriYears = Math.floor(diffDays / 354.367);
-                    const remainingDays = diffDays % 354.367;
-                    const hijriMonth = Math.floor(remainingDays / 29.5) + 1;
-                    const hijriDay = Math.floor(remainingDays % 29.5) + 1;
-                    
-                    return {
-                      day: Math.max(1, Math.min(30, hijriDay)),
-                      month: Math.max(1, Math.min(12, hijriMonth)),
-                      year: 1 + hijriYears
-                    };
-                  };
-
-                  const now = new Date();
-                  const hijri = toHijri(now);
-                  return `${toArabicNumbers(hijri.year)}/${toArabicNumbers(hijri.month.toString().padStart(2, '0'))}/${toArabicNumbers(hijri.day.toString().padStart(2, '0'))}هـ`;
-                })()}
-              </div>
-              <div className="text-gray-700 whitespace-nowrap" style={{ fontSize: '8.5px', lineHeight: '10px' }}>
-                {toArabicNumbers(currentDateTime.getFullYear())}/
-                {toArabicNumbers((currentDateTime.getMonth() + 1).toString().padStart(2, '0'))}/
-                {toArabicNumbers(currentDateTime.getDate().toString().padStart(2, '0'))}م
-              </div>
-            </div>
+        {/* Session Timer */}
+        <div className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg px-3 py-2 shadow-sm border border-green-200">
+          <Clock className="w-4 h-4 text-green-700" />
+          <div className="text-center">
+            <span className="text-gray-600 text-[10px] leading-tight">مدة الجلسة</span>
+            <br />
+            <span className="text-green-800 font-mono font-bold text-xs leading-tight">
+              {toArabicNumbers(sessionDuration.hours.toString().padStart(2, '0'))}:
+              {toArabicNumbers(sessionDuration.minutes.toString().padStart(2, '0'))}:
+              {toArabicNumbers(sessionDuration.seconds.toString().padStart(2, '0'))}
+            </span>
           </div>
+        </div>
 
-          {/* القسم الأيسر - معلومات المستخدم وعداد الجلسة والمستخدمين النشطين */}
-          <div className="flex items-center flex-shrink-0" style={{ gap: '6px', minWidth: 0, maxWidth: '42%' }}>
-            {/* معلومات المستخدم */}
-            <div className="flex items-center bg-white/80 rounded-lg shadow-sm border border-blue-200 min-w-0" style={{ 
-              padding: '3px 8px',
-              gap: '5px',
-              height: '30px'
-            }}>
-              <User style={{ width: '13px', height: '13px', color: '#2563eb', flexShrink: 0 }} />
-              <div className="flex flex-col justify-center min-w-0" style={{ gap: '0' }}>
-                <div className="flex items-center min-w-0" style={{ gap: '4px' }}>
-                  <span className="bg-blue-100 text-blue-800 rounded flex-shrink-0" style={{ 
-                    fontFamily: 'Tajawal, sans-serif', 
-                    fontWeight: 600, 
-                    padding: '1px 3px', 
-                    fontSize: '7.5px',
-                    lineHeight: '9px'
-                  }}>
-                    {userJobTitle}
-                  </span>
-                  <span className="text-blue-700 truncate" style={{ 
-                    fontFamily: 'Tajawal, sans-serif', 
-                    fontWeight: 700, 
-                    fontSize: '9.5px',
-                    lineHeight: '11px'
-                  }} title={`${userFirstName} ${userLastName}`}>
-                    {userFirstName} {userLastName}
-                  </span>
-                </div>
-                <span className="text-gray-600 truncate" style={{ 
-                  fontFamily: 'Tajawal, sans-serif', 
-                  fontSize: '7px',
-                  lineHeight: '8px'
-                }}>
-                  آخر دخول: {lastLoginTime}
+        {/* Online Users Button */}
+        <Dialog open={showOnlineUsersModal} onOpenChange={setShowOnlineUsersModal}>
+          <DialogTrigger asChild>
+            <button
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-50 to-violet-50 rounded-lg px-3 py-2 shadow-sm border border-purple-200 hover:shadow-md transition-all duration-200"
+              aria-label="المستخدمون النشطون"
+            >
+              <Users className="w-4 h-4 text-purple-700" />
+              <div className="text-center">
+                <span className="text-gray-600 text-[10px] leading-tight">نشطون</span>
+                <br />
+                <span className="text-purple-800 font-bold text-xs leading-tight">
+                  {isLoadingEmployees ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    toArabicNumbers(onlineUsers.length)
+                  )}
                 </span>
               </div>
-            </div>
+            </button>
+          </DialogTrigger>
 
-            {/* عداد الجلسة */}
-            <div className="flex items-center bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg shadow-sm border border-green-300 flex-shrink-0" style={{ 
-              padding: '3px 7px',
-              gap: '5px',
-              height: '30px'
-            }}>
-              <Clock style={{ width: '13px', height: '13px', color: '#059669', flexShrink: 0 }} />
-              <div className="flex flex-col items-center justify-center" style={{ gap: '0' }}>
-                <span className="text-gray-600 whitespace-nowrap" style={{ 
-                  fontFamily: 'Tajawal, sans-serif', 
-                  fontSize: '6.5px',
-                  lineHeight: '8px'
-                }}>
-                  مدة الجلسة
-                </span>
-                <span className="text-green-700 font-mono whitespace-nowrap" style={{ 
-                  fontWeight: 700, 
-                  fontSize: '9.5px',
-                  lineHeight: '11px'
-                }}>
-                  {toArabicNumbers(sessionDuration.hours)}س {toArabicNumbers(sessionDuration.minutes)}د
-                </span>
-              </div>
-            </div>
-
-            {/* المستخدمين المتصلين حالياً */}
-            <Dialog open={showOnlineUsersModal} onOpenChange={setShowOnlineUsersModal}>
-              <DialogTrigger asChild>
-                <div className="flex items-center bg-gradient-to-r from-purple-50 to-violet-50 rounded-lg shadow-sm border border-purple-300 cursor-pointer hover:shadow-md transition-all duration-200 flex-shrink-0" style={{ 
-                  padding: '3px 7px',
-                  gap: '5px',
-                  height: '30px'
-                }}>
-                  <Users style={{ width: '13px', height: '13px', color: '#7c3aed', flexShrink: 0 }} />
-                  <div className="flex flex-col items-center justify-center" style={{ gap: '0' }}>
-                    <span className="text-gray-600 whitespace-nowrap" style={{ 
-                      fontFamily: 'Tajawal, sans-serif', 
-                      fontSize: '6.5px',
-                      lineHeight: '8px'
-                    }}>
-                      نشطين
-                    </span>
-                    <span className="text-purple-700 whitespace-nowrap" style={{ 
-                      fontFamily: 'Tajawal, sans-serif', 
-                      fontWeight: 700, 
-                      fontSize: '9.5px',
-                      lineHeight: '11px'
-                    }}>
-                      {toArabicNumbers(onlineUsers.length)}
-                    </span>
-                  </div>
-                </div>
-              </DialogTrigger>
-              
-              {/* نافذة المستخدمين المتصلين */}
-              <DialogContent className="max-w-3xl dialog-rtl" dir="rtl">
+          {/* Modal Content */}
+          <DialogContent className="max-w-3xl dialog-rtl" dir="rtl">
                 <DialogHeader className="dialog-header">
                   <div className="flex items-center justify-between">
                     <DialogTitle className="dialog-title flex items-center gap-2" style={{ fontFamily: 'Tajawal, sans-serif' }}>
                       <Users className="h-5 w-5 text-purple-600" />
-                      المستخدمين المتصلين حالياً ({onlineUsers.length})
+                      المستخدمين المتصلين حالياً ({toArabicNumbers(onlineUsers.length)})
                     </DialogTitle>
                     <Button
                       variant="ghost"
@@ -522,11 +255,15 @@ export default function SystemHeader({
                   </div>
                 </DialogHeader>
                 
-                <div className="space-y-3">
-                  {onlineUsers.map((user) => (
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto px-1">
+                  {isLoadingEmployees ? (
+                    <div className="flex justify-center py-8">
+                       <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                    </div>
+                  ) : onlineUsers.map((user) => (
                     <div 
                       key={user.id}
-                      className="p-4 border rounded-lg bg-gradient-to-r from-white to-purple-50 hover:shadow-md transition-all duration-200"
+                      className={`p-4 border rounded-lg transition-all duration-200 ${user.isCurrentUser ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-300' : 'bg-gradient-to-r from-white to-purple-50 hover:shadow-md'}`}
                     >
                       <div className="flex items-center gap-4">
                         {/* Avatar */}
@@ -538,7 +275,7 @@ export default function SystemHeader({
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif', fontWeight: 700, color: '#1f2937' }}>
-                              {user.name}
+                              {user.name} {user.isCurrentUser && <span className="text-[10px] text-blue-600">(أنت)</span>}
                             </span>
                             <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">
                               {user.jobTitle}
@@ -549,8 +286,6 @@ export default function SystemHeader({
                               <div className={`w-2 h-2 rounded-full ${user.status === 'نشط' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
                               {user.status}
                             </span>
-                            <span>•</span>
-                            <span>{user.lastActivity}</span>
                             <span>•</span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
@@ -566,6 +301,10 @@ export default function SystemHeader({
                       </div>
                     </div>
                   ))}
+                  
+                  {!isLoadingEmployees && onlineUsers.length === 0 && (
+                    <div className="text-center text-gray-500 py-8">لا يوجد مستخدمين نشطين حالياً</div>
+                  )}
                 </div>
                 
                 <div className="flex items-center justify-end pt-4 border-t border-gray-200">
@@ -578,9 +317,18 @@ export default function SystemHeader({
                   </Button>
                 </div>
               </DialogContent>
-            </Dialog>
-          </div>
-        </div>
+        </Dialog>
+
+        {/* Logout Button */}
+        <button
+          onClick={logout}
+          className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg px-3 py-2 transition-colors duration-200 text-xs font-medium"
+          aria-label="تسجيل الخروج"
+        >
+          <LogOut className="w-4 h-4" />
+          تسجيل خروج
+        </button>
+      </div>
     </header>
   );
 }

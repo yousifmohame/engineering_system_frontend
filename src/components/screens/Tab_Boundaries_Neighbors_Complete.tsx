@@ -1,22 +1,23 @@
 /**
- * تاب الحدود والمجاورين
+ * تاب الحدود والمجاورين - متصل بالـ Backend
  * =====================
- * 
- * المميزات:
- * ✅ تحديد المجاورين من الأربع جهات
- * ✅ إضافة صور للمجاورين
- * ✅ معلومات تفصيلية لكل جار
- * ✅ حفظ في localStorage
+ * * المميزات:
+ * ✅ متصل بقاعدة البيانات (حقل boundaries)
+ * ✅ يحفظ الصور والبيانات لكل جهة
+ * ✅ يعرض البيانات المحفوظة مسبقاً
  */
 
 import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
-import { Save, AlertCircle, Compass, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Save, AlertCircle, Compass, Upload, Image as ImageIcon, Trash2, Loader2 } from 'lucide-react';
 import { InputWithCopy, TextAreaWithCopy } from '../InputWithCopy';
 import CodeDisplay from '../CodeDisplay';
+import { getTransactionById, updateTransactionBoundaries } from '../../api/transactionApi';
+import { toast } from 'sonner';
 
 interface Neighbor {
   direction: string;        // north, south, east, west
@@ -34,20 +35,16 @@ interface BoundariesNeighborsProps {
 }
 
 const neighborTypes = [
-  'شارع',
-  'أرض فضاء',
-  'مبنى سكني',
-  'مبنى تجاري',
-  'مبنى حكومي',
-  'حديقة',
-  'موقف سيارات',
-  'أخرى'
+  'شارع', 'أرض فضاء', 'مبنى سكني', 'مبنى تجاري', 
+  'مبنى حكومي', 'حديقة', 'موقف سيارات', 'أخرى'
 ];
 
 const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
-  transactionId = 'NEW',
+  transactionId = '',
   readOnly = false
 }) => {
+  const queryClient = useQueryClient();
+  
   const defaultNeighbors: Neighbor[] = [
     { direction: 'north', directionAr: 'الشمال', name: '', type: '', width: 0, description: '', images: [] },
     { direction: 'south', directionAr: 'الجنوب', name: '', type: '', width: 0, description: '', images: [] },
@@ -58,18 +55,39 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
   const [neighbors, setNeighbors] = useState<Neighbor[]>(defaultNeighbors);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // تحميل البيانات
+  // 1. جلب البيانات
+  const { data: transaction, isLoading } = useQuery({
+    queryKey: ['transaction', transactionId],
+    queryFn: () => getTransactionById(transactionId),
+    enabled: !!transactionId && transactionId !== 'new',
+  });
+
+  // 2. مزامنة البيانات
   useEffect(() => {
-    const savedData = localStorage.getItem(`boundaries_neighbors_${transactionId}`);
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData);
-        setNeighbors(parsed);
-      } catch (error) {
-        console.error('Error loading boundaries data:', error);
-      }
+    if (transaction?.boundaries && Array.isArray(transaction.boundaries) && transaction.boundaries.length > 0) {
+      // دمج البيانات المحفوظة مع الهيكل الافتراضي لضمان وجود الجهات الأربع
+      const merged = defaultNeighbors.map(def => {
+        const saved = transaction.boundaries.find((b: Neighbor) => b.direction === def.direction);
+        return saved || def;
+      });
+      setNeighbors(merged);
+    } else if (transactionId === 'new') {
+        setNeighbors(defaultNeighbors);
     }
-  }, [transactionId]);
+  }, [transaction, transactionId]);
+
+  // 3. Mutation للحفظ
+  const saveMutation = useMutation({
+    mutationFn: (data: Neighbor[]) => updateTransactionBoundaries(transactionId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transaction', transactionId] });
+      setHasUnsavedChanges(false);
+      toast.success('تم حفظ الحدود والمجاورين بنجاح');
+    },
+    onError: (error: any) => {
+      toast.error('فشل الحفظ: ' + (error.response?.data?.message || error.message));
+    }
+  });
 
   // تحديث بيانات المجاور
   const updateNeighbor = (direction: string, field: keyof Neighbor, value: any) => {
@@ -109,9 +127,11 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
 
   // حفظ البيانات
   const handleSave = () => {
-    localStorage.setItem(`boundaries_neighbors_${transactionId}`, JSON.stringify(neighbors));
-    setHasUnsavedChanges(false);
-    alert('✅ تم حفظ الحدود والمجاورين بنجاح!');
+    if (transactionId === 'new') {
+        toast.warning('يجب حفظ المعاملة أولاً');
+        return;
+    }
+    saveMutation.mutate(neighbors);
   };
 
   // الألوان لكل جهة
@@ -122,41 +142,30 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
     west: { bg: '#f3e8ff', border: '#a855f7', text: '#6b21a8', gradient: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)' }
   };
 
+  if (isLoading) {
+    return <div className="h-64 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-500"/></div>;
+  }
+
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: '100%' }}>
-      <CodeDisplay code="TAB-BOUNDARIES-NEIGHBORS" position="top-right" />
+      <CodeDisplay code="TAB-BOUNDARIES-BACKEND" position="top-right" />
       
       <ScrollArea style={{ height: 'calc(100vh - 180px)' }}>
         <style>{`
-          .scroll-area-viewport::-webkit-scrollbar {
-            width: 8px !important;
-            display: block !important;
-          }
-          .scroll-area-viewport::-webkit-scrollbar-track {
-            background: rgba(37, 99, 235, 0.1) !important;
-            border-radius: 4px !important;
-          }
-          .scroll-area-viewport::-webkit-scrollbar-thumb {
-            background: #2563eb !important;
-            border-radius: 4px !important;
-          }
+          .scroll-area-viewport::-webkit-scrollbar { width: 8px !important; display: block !important; }
+          .scroll-area-viewport::-webkit-scrollbar-track { background: rgba(37, 99, 235, 0.1) !important; border-radius: 4px !important; }
+          .scroll-area-viewport::-webkit-scrollbar-thumb { background: #2563eb !important; border-radius: 4px !important; }
         `}</style>
         
         <div className="p-4 space-y-4">
           {/* ملاحظة توضيحية */}
-          <Card style={{
-            background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
-            border: '2px solid #3b82f6'
-          }}>
+          <Card style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', border: '2px solid #3b82f6' }}>
             <CardContent className="p-3">
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
                 <div>
                   <p style={{ fontSize: '12px', color: '#1e40af', marginBottom: '4px' }}>
-                    <strong>ملاحظة:</strong> حدد معلومات المجاورين من الأربع جهات (الشمال، الجنوب، الشرق، الغرب).
-                  </p>
-                  <p style={{ fontSize: '12px', color: '#1e40af' }}>
-                    يمكنك إضافة صور توضيحية لكل جهة عن طريق رفع روابط الصور.
+                    <strong>ملاحظة:</strong> حدد معلومات المجاورين من الأربع جهات. يتم حفظ البيانات مركزياً.
                   </p>
                 </div>
               </div>
@@ -165,26 +174,15 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
 
           {/* تحذير التغييرات */}
           {hasUnsavedChanges && (
-            <Card style={{
-              background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
-              border: '2px solid #ef4444'
-            }}>
+            <Card style={{ background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)', border: '2px solid #ef4444' }}>
               <CardContent className="p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <AlertCircle className="h-5 w-5 text-red-600" />
-                    <span style={{ fontSize: '13px', color: '#991b1b', fontWeight: 600 }}>
-                      لديك تغييرات غير محفوظة
-                    </span>
+                    <span style={{ fontSize: '13px', color: '#991b1b', fontWeight: 600 }}>لديك تغييرات غير محفوظة</span>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={handleSave}
-                    disabled={readOnly}
-                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
-                  >
-                    <Save className="h-4 w-4 ml-1" />
-                    حفظ الآن
+                  <Button size="sm" onClick={handleSave} disabled={readOnly || saveMutation.isPending} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                    <Save className="h-4 w-4 ml-1" /> حفظ الآن
                   </Button>
                 </div>
               </CardContent>
@@ -197,27 +195,14 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
               const colors = directionColors[neighbor.direction as keyof typeof directionColors];
               
               return (
-                <Card key={neighbor.direction} className="card-rtl" style={{
-                  background: colors.gradient,
-                  border: `2px solid ${colors.border}`
-                }}>
-                  <CardHeader style={{
-                    borderBottom: `2px solid ${colors.border}`,
-                    paddingBottom: '12px'
-                  }}>
+                <Card key={neighbor.direction} className="card-rtl" style={{ background: colors.gradient, border: `2px solid ${colors.border}` }}>
+                  <CardHeader style={{ borderBottom: `2px solid ${colors.border}`, paddingBottom: '12px' }}>
                     <div className="flex items-center gap-2">
                       <Compass className="h-5 w-5" style={{ color: colors.border }} />
-                      <CardTitle style={{ 
-                        fontFamily: 'Tajawal, sans-serif', 
-                        fontSize: '16px',
-                        color: colors.text
-                      }}>
+                      <CardTitle style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '16px', color: colors.text }}>
                         {neighbor.directionAr}
                       </CardTitle>
-                      <Badge style={{
-                        background: colors.border,
-                        color: 'white'
-                      }}>
+                      <Badge style={{ background: colors.border, color: 'white' }}>
                         {neighbor.direction}
                       </Badge>
                     </div>
@@ -229,7 +214,7 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
                       id={`name-${neighbor.direction}`}
                       value={neighbor.name}
                       onChange={(e) => updateNeighbor(neighbor.direction, 'name', e.target.value)}
-                      placeholder="مثال: شارع الملك فهد، أرض فضاء، مبنى سكني..."
+                      placeholder="مثال: شارع الملك فهد، أرض فضاء..."
                       disabled={readOnly}
                       copyable={true}
                       clearable={true}
@@ -237,30 +222,12 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
 
                     {/* نوع المجاور */}
                     <div>
-                      <label style={{ 
-                        display: 'block', 
-                        marginBottom: '6px', 
-                        fontSize: '13px', 
-                        fontWeight: 600,
-                        color: colors.text
-                      }}>
-                        نوع المجاور
-                      </label>
+                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: colors.text }}>نوع المجاور</label>
                       <select
                         value={neighbor.type}
                         onChange={(e) => updateNeighbor(neighbor.direction, 'type', e.target.value)}
                         disabled={readOnly}
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          border: `2px solid ${colors.border}`,
-                          background: 'white',
-                          fontFamily: 'Tajawal, sans-serif',
-                          fontSize: '13px',
-                          direction: 'rtl',
-                          textAlign: 'right'
-                        }}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: `2px solid ${colors.border}`, background: 'white', fontFamily: 'Tajawal, sans-serif', fontSize: '13px', direction: 'rtl', textAlign: 'right' }}
                       >
                         <option value="">-- اختر النوع --</option>
                         {neighborTypes.map(type => (
@@ -269,7 +236,7 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
                       </select>
                     </div>
 
-                    {/* عرض الشارع (إذا كان النوع شارع) */}
+                    {/* عرض الشارع */}
                     {neighbor.type === 'شارع' && (
                       <InputWithCopy
                         label="عرض الشارع (م)"
@@ -300,71 +267,24 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
                     {/* الصور */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <label style={{ 
-                          fontSize: '13px', 
-                          fontWeight: 600,
-                          color: colors.text
-                        }}>
-                          الصور ({neighbor.images.length})
-                        </label>
-                        <Button
-                          size="sm"
-                          onClick={() => addImage(neighbor.direction)}
-                          disabled={readOnly}
-                          style={{
-                            background: `linear-gradient(135deg, ${colors.border} 0%, ${colors.text} 100%)`,
-                            padding: '4px 8px',
-                            fontSize: '11px'
-                          }}
-                        >
-                          <Upload className="h-3 w-3 ml-1" />
-                          إضافة صورة
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: colors.text }}>الصور ({neighbor.images.length})</label>
+                        <Button size="sm" onClick={() => addImage(neighbor.direction)} disabled={readOnly} style={{ background: `linear-gradient(135deg, ${colors.border} 0%, ${colors.text} 100%)`, padding: '4px 8px', fontSize: '11px' }}>
+                          <Upload className="h-3 w-3 ml-1" /> إضافة صورة
                         </Button>
                       </div>
 
                       {neighbor.images.length > 0 ? (
                         <div className="grid grid-cols-2 gap-2">
                           {neighbor.images.map((img, index) => (
-                            <div 
-                              key={index} 
-                              className="relative group"
-                              style={{
-                                borderRadius: '6px',
-                                overflow: 'hidden',
-                                border: `2px solid ${colors.border}`,
-                                background: 'white'
-                              }}
-                            >
+                            <div key={index} className="relative group" style={{ borderRadius: '6px', overflow: 'hidden', border: `2px solid ${colors.border}`, background: 'white' }}>
                               <img 
                                 src={img} 
                                 alt={`${neighbor.directionAr} ${index + 1}`}
-                                style={{
-                                  width: '100%',
-                                  height: '80px',
-                                  objectFit: 'cover'
-                                }}
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Image+Error';
-                                }}
+                                style={{ width: '100%', height: '80px', objectFit: 'cover' }}
+                                onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Image+Error'; }}
                               />
                               {!readOnly && (
-                                <button
-                                  onClick={() => removeImage(neighbor.direction, index)}
-                                  style={{
-                                    position: 'absolute',
-                                    top: '4px',
-                                    right: '4px',
-                                    background: '#ef4444',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    padding: '4px',
-                                    cursor: 'pointer',
-                                    opacity: 0,
-                                    transition: 'opacity 0.2s'
-                                  }}
-                                  className="group-hover:opacity-100"
-                                >
+                                <button onClick={() => removeImage(neighbor.direction, index)} style={{ position: 'absolute', top: '4px', right: '4px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', opacity: 0, transition: 'opacity 0.2s' }} className="group-hover:opacity-100">
                                   <Trash2 className="h-3 w-3" />
                                 </button>
                               )}
@@ -372,19 +292,9 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
                           ))}
                         </div>
                       ) : (
-                        <div 
-                          style={{
-                            padding: '20px',
-                            textAlign: 'center',
-                            background: 'white',
-                            borderRadius: '6px',
-                            border: `2px dashed ${colors.border}`
-                          }}
-                        >
+                        <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '6px', border: `2px dashed ${colors.border}` }}>
                           <ImageIcon className="h-8 w-8 mx-auto mb-2" style={{ color: colors.border, opacity: 0.5 }} />
-                          <p style={{ fontSize: '11px', color: '#9ca3af' }}>
-                            لا توجد صور
-                          </p>
+                          <p style={{ fontSize: '11px', color: '#9ca3af' }}>لا توجد صور</p>
                         </div>
                       )}
                     </div>
@@ -398,14 +308,10 @@ const Tab_Boundaries_Neighbors_Complete: React.FC<BoundariesNeighborsProps> = ({
           <div className="flex gap-3 justify-end">
             <Button
               onClick={handleSave}
-              disabled={readOnly || !hasUnsavedChanges}
-              style={{ 
-                background: hasUnsavedChanges 
-                  ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
-                  : 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
-              }}
+              disabled={readOnly || saveMutation.isPending}
+              style={{ background: hasUnsavedChanges ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)' }}
             >
-              <Save className="h-4 w-4 ml-2" />
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 ml-2 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
               حفظ الحدود والمجاورين
             </Button>
           </div>

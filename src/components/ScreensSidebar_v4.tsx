@@ -260,7 +260,7 @@ export default function ScreensSidebar_v4() {
     <div 
       className="fixed right-0 z-40 shadow-2xl"
       style={{
-        top: '40px', // بداية من أسفل الهيدر مباشرة
+        top: '70px', // بداية من أسفل الهيدر مباشرة
         height: 'calc(100vh - 40px)', // ارتفاع بدون الهيدر
         width: '280px',
         background: 'linear-gradient(180deg, #f5f5f4 0%, #e7e5e4 50%, #d6d3d1 100%)',

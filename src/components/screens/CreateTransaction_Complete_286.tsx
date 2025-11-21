@@ -45,8 +45,7 @@ import {
   Tab_286_09_Appointments,
   Tab_286_11_Approvals,
   Tab_286_12_Notes,
-  Tab_286_13_Preview,
-  Tab_286_14_Settings
+  Tab_286_13_Preview_Complex,
 } from './Tab_286_RestTabs_Complete';
 import Tab_RequestPurpose_Brief_Complete from './Tab_RequestPurpose_Brief_Complete';
 import Tab_RequestPurpose_Detailed_Complete from './Tab_RequestPurpose_Detailed_Complete';
@@ -72,7 +71,6 @@ type BasicInfoFormData = NewTransactionData;
 
 const TABS_CONFIG: TabConfig[] = [
   { id: '286-01', number: '286-01', title: 'معلومات أساسية', icon: FileText },
-  // ... (باقي التابات كما هي)
   { id: '286-02', number: '286-02', title: 'تفاصيل المعاملة', icon: Target },
   { id: '286-03', number: '286-03', title: 'الغرض المختصر', icon: CheckCircle },
   { id: '286-04', number: '286-04', title: 'الغرض التفصيلي', icon: List },
@@ -84,17 +82,21 @@ const TABS_CONFIG: TabConfig[] = [
   { id: '286-10', number: '286-10', title: 'التكاليف', icon: Activity },
   { id: '286-11', number: '286-11', title: 'الموافقات', icon: CheckCircle },
   { id: '286-12', number: '286-12', title: 'الملاحظات', icon: FileText },
-  { id: '286-13', number: '286-13', title: 'معاينة', icon: Eye },
-  { id: '286-14', number: '286-14', title: 'الإعدادات', icon: Settings },
-  { id: '286-15', number: '286-15', title: 'مسميات وعدد الأدوار', icon: Layers },
-  { id: '286-16', number: '286-16', title: 'الارتدادات من الأربع جهات', icon: Navigation },
-  { id: '286-17', number: '286-17', title: 'المكونات التفصيلية النهائية', icon: Grid },
-  { id: '286-18', number: '286-18', title: 'المكونات حسب الرخصة القديمة', icon: FileText },
-  { id: '286-19', number: '286-19', title: 'المكونات حسب المقترح', icon: Target },
-  { id: '286-20', number: '286-20', title: 'المكونات حسب القائم', icon: Building },
-  { id: '286-21', number: '286-21', title: 'الحدود والمجاورين', icon: Compass },
-  { id: '286-22', number: '286-22', title: 'مساحة الأرض', icon: MapPin },
+
+  // الأجزاء الخاصة بالمخططات والبيانات الهندسية
+  { id: '286-14', number: '286-14', title: 'مسميات وعدد الأدوار', icon: Layers },
+  { id: '286-15', number: '286-15', title: 'الارتدادات من الأربع جهات', icon: Navigation },
+  { id: '286-16', number: '286-16', title: 'المكونات التفصيلية النهائية', icon: Grid },
+  { id: '286-17', number: '286-17', title: 'المكونات حسب الرخصة القديمة', icon: FileText },
+  { id: '286-18', number: '286-18', title: 'المكونات حسب المقترح', icon: Target },
+  { id: '286-19', number: '286-19', title: 'المكونات حسب القائم', icon: Building },
+  { id: '286-20', number: '286-20', title: 'الحدود والمجاورين', icon: Compass },
+  { id: '286-21', number: '286-21', title: 'مساحة الأرض', icon: MapPin },
+
+  // آخر تبويب
+  { id: '286-13', number: '286-22', title: 'معاينة', icon: Eye },
 ];
+
 
 const CreateTransaction_Complete_286: React.FC = () => {
   const [activeTab, setActiveTab] = useState('286-01');
@@ -248,16 +250,16 @@ const CreateTransaction_Complete_286: React.FC = () => {
         );
       
       // ... (باقي الحالات كما هي تماماً)
-      case '286-02': return <Tab_286_02_TransactionDetails_Complete transactionId={transactionId} onTypeSelected={handleTypeSelected} />;
-      case '286-03': return <Tab_RequestPurpose_Brief_Complete transactionId={transactionId} readOnly={isDisabled} onSave={handleBriefPurposeSave} />;
-      case '286-04': return <Tab_RequestPurpose_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} onSave={handleDetailedPurposeSave} />;
+      case '286-02': return <Tab_286_02_TransactionDetails_Complete transactionId={transactionId} />;
+      case '286-03': return <Tab_RequestPurpose_Brief_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-04': return <Tab_RequestPurpose_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
       
       case '286-05':
         if (isLoadingEmployees) return <div className="space-y-2 pt-4"><Skeleton className="h-10" /><Skeleton className="h-10" /></div>;
         return <Tab_286_05_Tasks_UltraDense transactionId={transactionId} templateTasks={templateTasks} employees={employees || []} onChange={handleTasksChange} />;
       
       case '286-06':
-        return <Tab_286_06_StaffAssignment_UltraDense assignedStaff={assignedStaff} employees={employees || []} tasks={transactionData.tasks || []} onChange={handleStaffChange} />;
+        return <Tab_286_06_StaffAssignment_UltraDense transactionId={transactionId} assignedStaff={assignedStaff} employees={employees || []} tasks={transactionData.tasks || []} onChange={handleStaffChange} />;
       
       case '286-07': return <Tab_286_07_ClientInfo readOnly={isDisabled} clientId={transactionData.clientId} />;
       
@@ -269,18 +271,17 @@ const CreateTransaction_Complete_286: React.FC = () => {
       case '286-10': return <Tab_286_10_Costs_UltraDense transactionId={transactionId} />;
       case '286-11': return <Tab_286_11_Approvals transactionId={transactionId} />;
       case '286-12': return <Tab_286_12_Notes transactionId={transactionId} />;
-      case '286-13': return <Tab_286_13_Preview transactionId={transactionId} />;
-      case '286-14': return <Tab_286_14_Settings />;
+      case '286-13': return <Tab_286_13_Preview_Complex transactionId={transactionId} />;
       
       // (باقي التابات كما هي)
-      case '286-15': return <Tab_FloorsNaming_Complete transactionId={transactionId} readOnly={isDisabled} />;
-      case '286-16': return <Tab_Setbacks_AllFloors_Complete transactionId={transactionId} readOnly={isDisabled} />;
-      case '286-17': return <Tab_FinalComponents_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
-      case '286-18': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="old-license" />;
-      case '286-19': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="proposed" />;
-      case '286-20': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="existing" />;
-      case '286-21': return <Tab_Boundaries_Neighbors_Complete transactionId={transactionId} readOnly={isDisabled} />;
-      case '286-22': return <Tab_LandArea_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-14': return <Tab_FloorsNaming_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-15': return <Tab_Setbacks_AllFloors_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-16': return <Tab_FinalComponents_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-17': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="old-license" />;
+      case '286-18': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="proposed" />;
+      case '286-19': return <Tab_Components_Generic_Complete transactionId={transactionId} readOnly={isDisabled} type="existing" />;
+      case '286-20': return <Tab_Boundaries_Neighbors_Complete transactionId={transactionId} readOnly={isDisabled} />;
+      case '286-21': return <Tab_LandArea_Complete transactionId={transactionId} readOnly={isDisabled} />;
 
       default: return <div className="flex justify-center h-96 items-center text-gray-400">Tab {activeTab} under construction</div>;
     }

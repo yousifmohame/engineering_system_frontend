@@ -34,7 +34,7 @@ import {
 } from '../../api/attachmentApi';
 import { Skeleton } from '../ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
-import { getTransactionById, updateTransactionCosts, updateTransactionTasks } from '../../api/transactionApi';
+import { getTransactionById, updateTransactionCosts, updateTransactionStaff, updateTransactionTasks } from '../../api/transactionApi';
 import { toast } from 'sonner';
 
 // ... (الواجهات Interfaces تبقى كما هي) ...
@@ -69,6 +69,19 @@ interface Employee {
   phone: string;
 }
 
+interface AssignedStaffItem {
+  id: string; // local unique id for list rendering
+  employeeId: string;
+  role: string;
+}
+
+interface StaffTabProps {
+  transactionId: string;
+  employees: Employee[];
+  tasks: any[]; // Used for stats calculation
+  onChange?: (staff: any[]) => void;
+}
+
 interface TasksTabProps {
   transactionId: string;
   templateTasks: any[];
@@ -78,12 +91,6 @@ interface TasksTabProps {
 
 type TaskFormData = Omit<Task, 'id' | 'status' | 'assignedToId'>;
 
-interface StaffTabProps {
-  assignedStaff: AssignedStaff[];
-  employees: Employee[];
-  tasks: Task[];
-  onChange: (staff: AssignedStaff[]) => void;
-}
 
 interface AttachmentsTabProps {
   transactionId: string;
@@ -98,7 +105,7 @@ interface CostsTabProps {
 const TaskEditDialog: React.FC<{
   isOpen: boolean;
   onClose: () => void;
-  onSave: (taskData: TaskFormData) => void;
+  onSave: (taskData: TaskFormData) => void; // يتوقع دالة تستلم بيانات المهمة
   task: TaskFormData | null;
 }> = ({ isOpen, onClose, onSave, task }) => {
   const [formData, setFormData] = useState<TaskFormData>({
@@ -123,6 +130,7 @@ const TaskEditDialog: React.FC<{
       alert('الرجاء إدخال اسم المهمة');
       return;
     }
+    // هنا كان الخطأ: تم استدعاء هذا، ولكنك كنت تمرر كائناً بدلاً من دالة
     onSave(formData);
   };
 
@@ -194,7 +202,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isSaved, setIsSaved] = useState(true);
 
-  // ✅ 1. جلب المهام الحقيقية من المعاملة (بدلاً من الاعتماد فقط على القالب)
+  // ... (كود useQuery و useEffect كما هو) ...
   const { data: transaction } = useQuery({
     queryKey: ['transaction', transactionId],
     queryFn: () => getTransactionById(transactionId),
@@ -203,18 +211,16 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
 
   useEffect(() => {
     if (transaction?.tasks && transaction.tasks.length > 0) {
-      // تحويل مهام الباك إند إلى شكل الواجهة
       const dbTasks = transaction.tasks.map((t: any) => ({
         id: t.id,
         name: t.title,
-        duration: 1, // (أو استخراجه من الوصف إذا طبقنا ذلك)
+        duration: 1,
         assignedToId: t.assignedToId,
         priority: (t.priority?.toLowerCase() || 'medium') as any,
         status: (t.status?.toLowerCase() === 'in progress' ? 'in-progress' : t.status?.toLowerCase()) as any || 'pending',
       }));
       setTasks(dbTasks);
     } else if (templateTasks && templateTasks.length > 0 && tasks.length === 0) {
-      // استخدام القالب فقط إذا لم تكن هناك مهام محفوظة
       const newTasks = templateTasks.map((t: any) => ({
         id: nanoid(10),
         name: t.name || 'مهمة',
@@ -233,6 +239,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
     }
   }, [tasks, onChange]);
 
+  // هذا Mutation للحفظ في السيرفر (الكل)
   const saveMutation = useMutation({
     mutationFn: (currentTasks: Task[]) => updateTransactionTasks(transactionId, currentTasks),
     onSuccess: () => {
@@ -243,6 +250,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
     onError: () => toast.error('فشل حفظ المهام')
   });
 
+  // دالة لحفظ المعاملة بالكامل عند الضغط على زر الحفظ العلوي
   const handleManualSave = () => {
     if (transactionId === 'new') {
       toast.warning('يجب حفظ المعاملة أولاً قبل حفظ المهام');
@@ -251,10 +259,38 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
     saveMutation.mutate(tasks);
   };
 
+  // ✅✅✅ التصحيح هنا: دالة للتعامل مع مخرجات الـ Dialog
+  const handleDialogSave = (taskData: TaskFormData) => {
+    let updatedTasks: Task[];
+
+    if (editingTask) {
+      // تعديل مهمة موجودة
+      updatedTasks = tasks.map(t => 
+        t.id === editingTask.id 
+          ? { ...t, ...taskData } 
+          : t
+      );
+    } else {
+      // إضافة مهمة جديدة
+      const newTask: Task = {
+        id: nanoid(),
+        ...taskData,
+        status: 'pending',
+        assignedToId: null
+      };
+      updatedTasks = [...tasks, newTask];
+    }
+
+    setTasks(updatedTasks);
+    setIsSaved(false); // تفعيل زر الحفظ الرئيسي
+    setIsTaskDialogOpen(false); // إغلاق النافذة
+    setEditingTask(null);
+  };
+
   const updateTasks = (newTasks: Task[]) => {
     setTasks(newTasks);
     setIsSaved(false);
-    onChange(newTasks); // تحديث الأب أيضاً
+    onChange(newTasks);
   };
 
   const getPriorityColor = (priority: string) => {
@@ -266,6 +302,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
       default: return '#6b7280';
     }
   };
+  
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return '#10b981';
@@ -281,22 +318,21 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
         task.id === taskId ? { ...task, assignedToId: employeeId } : task
       )
     );
+    setIsSaved(false);
   };
 
   const handleDeleteTask = (taskId: string) => {
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-  };
-
-  const handleOpenAddTask = () => {
-    setEditingTask(null);
-    setIsTaskDialogOpen(true);
+    if (!window.confirm("هل أنت متأكد من رغبتك في حذف هذه المهمة نهائياً؟")) return;
+    const updatedTasks = tasks.filter(task => task.id !== taskId);
+    setTasks(updatedTasks);
+    setIsSaved(false);
+    toast.info("تمت إزالة المهمة. اضغط 'حفظ التغييرات' لتأكيد الحذف.");
   };
 
   const handleOpenEditTask = (task: Task) => {
     setEditingTask(task);
     setIsTaskDialogOpen(true);
   };
-
 
   const stats = [
     { label: 'إجمالي المهام', value: tasks.length, color: '#3b82f6' },
@@ -328,9 +364,9 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
             <h3 className="text-sm font-bold">قائمة المهمات</h3>
             <div className="flex gap-2">
               <Button size="sm" style={{ height: '24px', fontSize: '11px' }} onClick={() => { setEditingTask(null); setIsTaskDialogOpen(true); }}><Plus className="h-3 w-3 ml-1" /> مهمة جديدة</Button>
-              {/* ✅ زر الحفظ */}
-              <Button size="sm" variant={isSaved ? "outline" : "default"} className={!isSaved ? "bg-green-600 hover:bg-green-700 text-white" : ""} style={{ height: '24px', fontSize: '11px' }} onClick={handleManualSave}>
-                 <Save className="h-3 w-3 ml-1" /> {isSaved ? 'تم الحفظ' : 'حفظ التغييرات'}
+              <Button size="sm" variant={isSaved ? "outline" : "default"} className={!isSaved ? "bg-green-600 hover:bg-green-700 text-white" : ""} style={{ height: '24px', fontSize: '11px' }} onClick={handleManualSave} disabled={saveMutation.isPending}>
+                 {saveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin ml-1"/> : <Save className="h-3 w-3 ml-1" />} 
+                 {isSaved ? 'تم الحفظ' : 'حفظ التغييرات'}
               </Button>
             </div>
           </div>
@@ -350,9 +386,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
               <TableBody>
                 {tasks.map((task, index) => (
                   <TableRow key={task.id} style={{ height: '32px' }}>
-                    <TableCell className="text-right text-[10px] py-1">
-                      {task.name}
-                    </TableCell>
+                    <TableCell className="text-right text-[10px] py-1">{task.name}</TableCell>
                     <TableCell className="text-right text-[10px] py-1">
                       <div className="flex items-center gap-1">
                         <Clock className="h-3 w-3" style={{ color: '#64748b' }} />
@@ -368,7 +402,7 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
                           <SelectValue placeholder="اختر موظف..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {employees.map(emp => (
+                          {employees.map((emp: any) => (
                             <SelectItem key={emp.id} value={emp.id} className="text-[10px]">
                               {emp.name}
                             </SelectItem>
@@ -377,28 +411,13 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
                       </Select>
                     </TableCell>
                     <TableCell className="text-right py-1">
-                      <Badge style={{
-                        background: getPriorityColor(task.priority),
-                        color: '#ffffff',
-                        fontSize: '9px',
-                        padding: '2px 6px',
-                        height: '18px'
-                      }}>
-                        {task.priority === 'urgent' ? 'عاجلة' : 
-                         task.priority === 'high' ? 'عالية' :
-                         task.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
+                      <Badge style={{ background: getPriorityColor(task.priority), color: '#fff', fontSize: '9px', padding: '2px 6px' }}>
+                        {task.priority === 'urgent' ? 'عاجلة' : task.priority === 'high' ? 'عالية' : task.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right py-1">
-                      <Badge style={{
-                        background: getStatusColor(task.status),
-                        color: '#ffffff',
-                        fontSize: '9px',
-                        padding: '2px 6px',
-                        height: '18px'
-                      }}>
-                        {task.status === 'completed' ? 'مكتملة' :
-                         task.status === 'in-progress' ? 'جارية' : 'معلقة'}
+                      <Badge style={{ background: getStatusColor(task.status), color: '#fff', fontSize: '9px', padding: '2px 6px' }}>
+                        {task.status === 'completed' ? 'مكتملة' : task.status === 'in-progress' ? 'جارية' : 'معلقة'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right py-1">
@@ -409,7 +428,6 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
                         <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }} onClick={() => handleDeleteTask(task.id)}>
                           <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
                         </Button>
-                        
                       </div>
                     </TableCell>
                   </TableRow>
@@ -420,10 +438,11 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
         </CardContent>
       </Card>
 
+      {/* ✅ تمرير الدالة الصحيحة هنا */}
       <TaskEditDialog
         isOpen={isTaskDialogOpen}
         onClose={() => setIsTaskDialogOpen(false)}
-        onSave={saveMutation}
+        onSave={handleDialogSave} 
         task={editingTask ? { name: editingTask.name, duration: editingTask.duration, priority: editingTask.priority } : null}
       />
     </div>
@@ -433,53 +452,68 @@ export const Tab_286_05_Tasks_UltraDense: React.FC<TasksTabProps> = ({
 // ============================================
 // --- مودال إضافة موظف ---
 // ============================================
-const StaffAddDialog: React.FC<{
+
+
+const StaffAddEditDialog: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   onSave: (employeeId: string, role: string) => void;
-  employees: Employee[]; 
-  existingEmployeeIds: string[]; 
-}> = ({ isOpen, onClose, onSave, employees, existingEmployeeIds }) => {
+  employees: Employee[];
+  existingEmployeeIds: string[];
+  editingItem: AssignedStaffItem | null;
+}> = ({ isOpen, onClose, onSave, employees, existingEmployeeIds, editingItem }) => {
   
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [assignedRole, setAssignedRole] = useState<string>('');
 
+  // Reset form when dialog opens or item changes
+  useEffect(() => {
+    if (isOpen) {
+      if (editingItem) {
+        setSelectedEmployeeId(editingItem.employeeId);
+        setAssignedRole(editingItem.role);
+      } else {
+        setSelectedEmployeeId('');
+        setAssignedRole('');
+      }
+    }
+  }, [isOpen, editingItem]);
+
   const availableEmployees = useMemo(() => {
-    return employees.filter(emp => !existingEmployeeIds.includes(emp.id));
-  }, [employees, existingEmployeeIds]);
+    // In edit mode, include the current employee so it shows in select
+    // In add mode, exclude already assigned employees
+    return employees.filter(emp => 
+      (editingItem && emp.id === editingItem.employeeId) || 
+      !existingEmployeeIds.includes(emp.id)
+    );
+  }, [employees, existingEmployeeIds, editingItem]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmployeeId) {
-      alert('الرجاء اختيار موظف');
+      toast.error('الرجاء اختيار موظف');
       return;
     }
     if (!assignedRole) {
-      alert('الرجاء إدخال دور الموظف');
+      toast.error('الرجاء إدخال دور الموظف');
       return;
     }
     onSave(selectedEmployeeId, assignedRole);
   };
-  
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedEmployeeId('');
-      setAssignedRole('');
-    }
-  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="card-rtl">
+      <DialogContent className="card-rtl sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>إضافة موظف إلى المعاملة</DialogTitle>
+          <DialogTitle>{editingItem ? 'تعديل بيانات الموظف' : 'إضافة موظف إلى المعاملة'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div>
-            <Label htmlFor="staff-select">اختيار الموظف</Label>
+            <Label htmlFor="staff-select">الموظف</Label>
             <Select
               value={selectedEmployeeId}
               onValueChange={setSelectedEmployeeId}
+              disabled={!!editingItem} // Disable changing employee in edit mode (usually better to delete and re-add)
             >
               <SelectTrigger id="staff-select">
                 <SelectValue placeholder="اختر موظف..." />
@@ -492,9 +526,7 @@ const StaffAddDialog: React.FC<{
                     </SelectItem>
                   ))
                 ) : (
-                  <div className="p-4 text-center text-sm text-gray-500">
-                    جميع الموظفين مسندون
-                  </div>
+                  <div className="p-2 text-center text-xs text-gray-500">لا يوجد موظفين متاحين</div>
                 )}
               </SelectContent>
             </Select>
@@ -505,12 +537,12 @@ const StaffAddDialog: React.FC<{
               id="staff-role"
               value={assignedRole}
               onChange={(e) => setAssignedRole(e.target.value)}
-              placeholder="مثال: مهندس معماري، مدير المشروع..."
+              placeholder="مثال: مهندس معماري، مشرف..."
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>إلغاء</Button>
-            <Button type="submit">إضافة وإسناد</Button>
+            <Button type="submit">{editingItem ? 'حفظ التعديلات' : 'إضافة'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -522,58 +554,134 @@ const StaffAddDialog: React.FC<{
 // TAB 286-06: إسناد الموظفين (المصحح)
 // ============================================
 export const Tab_286_06_StaffAssignment_UltraDense: React.FC<StaffTabProps> = ({
-  assignedStaff,
-  employees,
-  tasks, 
+  transactionId,
+  employees = [],
+  tasks = [],
   onChange
 }) => {
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const [staffList, setStaffList] = useState<AssignedStaffItem[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<AssignedStaffItem | null>(null);
+  const [isSaved, setIsSaved] = useState(true);
 
-  const displayStaff = useMemo(() => {
-    return assignedStaff.map(as => {
-      const employee = employees.find(e => e.id === as.employeeId);
-      const tasksForThisEmployee = tasks.filter(t => t.assignedToId === as.employeeId);
-      const taskCount = tasksForThisEmployee.length;
-      const totalDuration = tasksForThisEmployee.reduce((sum, t) => sum + t.duration, 0);
+  // 1. Fetch Transaction Data
+  const { data: transaction, isLoading } = useQuery({
+    queryKey: ['transaction', transactionId],
+    queryFn: () => getTransactionById(transactionId),
+    enabled: !!transactionId && transactionId !== 'new'
+  });
 
-      return {
-        id: as.employeeId,
-        assignmentId: as.assignmentId,
-        role: as.role,
-        name: employee?.name || 'موظف غير موجود',
-        email: employee?.email || 'N/A',
-        phone: employee?.phone || 'N/A',
-        taskCount: taskCount,
-        totalDuration: totalDuration,
+  // 2. Sync Backend Data to Local State
+  useEffect(() => {
+    if (transaction?.transactionEmployees) {
+      const mappedStaff = transaction.transactionEmployees.map((te: any) => ({
+        id: te.id || nanoid(),
+        employeeId: te.employeeId,
+        role: te.role
+      }));
+      setStaffList(mappedStaff);
+      setIsSaved(true);
+    }
+  }, [transaction]);
+
+  // Notify parent component if needed
+  useEffect(() => {
+    if (onChange) onChange(staffList);
+  }, [staffList, onChange]);
+
+  // 3. Save Mutation
+  const saveMutation = useMutation({
+    mutationFn: (currentStaff: AssignedStaffItem[]) => 
+      updateTransactionStaff(transactionId, currentStaff.map(s => ({ 
+        employeeId: s.employeeId, 
+        role: s.role 
+      }))),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transaction', transactionId] });
+      toast.success('تم حفظ فريق العمل بنجاح');
+      setIsSaved(true);
+    },
+    onError: (error) => {
+      toast.error('حدث خطأ أثناء الحفظ');
+      console.error(error);
+    }
+  });
+
+  // 4. Handlers
+  const handleManualSave = () => {
+    if (transactionId === 'new') {
+      toast.warning('يرجى حفظ المعاملة أولاً');
+      return;
+    }
+    saveMutation.mutate(staffList);
+  };
+
+  const handleDialogSave = (employeeId: string, role: string) => {
+    if (editingItem) {
+      // Edit Mode
+      setStaffList(prev => prev.map(item => 
+        item.id === editingItem.id ? { ...item, role } : item
+      ));
+    } else {
+      // Add Mode
+      const newItem: AssignedStaffItem = {
+        id: nanoid(),
+        employeeId,
+        role
       };
-    });
-  }, [assignedStaff, employees, tasks]);
-
-  const handleSaveStaff = (employeeId: string, role: string) => {
-    const newAssignment: AssignedStaff = {
-      assignmentId: nanoid(10),
-      employeeId: employeeId,
-      role: role,
-    };
-    onChange([...assignedStaff, newAssignment]);
-    setIsAddDialogOpen(false);
+      setStaffList(prev => [...prev, newItem]);
+    }
+    
+    setIsSaved(false);
+    setIsDialogOpen(false);
+    setEditingItem(null);
   };
 
-  const handleDeleteStaff = (assignmentId: string) => {
-    onChange(assignedStaff.filter(s => s.assignmentId !== assignmentId));
+  const handleDelete = (id: string) => {
+    if (confirm('هل أنت متأكد من إزالة هذا الموظف من الفريق؟')) {
+      setStaffList(prev => prev.filter(item => item.id !== id));
+      setIsSaved(false);
+    }
   };
-  
-  const stats = [
-    { label: 'عدد الفريق', value: displayStaff.length, color: '#3b82f6' },
-    { label: 'إجمالي المهام', value: displayStaff.reduce((sum, m) => sum + m.taskCount, 0), color: '#10b981' },
-    { label: 'إجمالي المدة', value: `${displayStaff.reduce((sum, m) => sum + m.totalDuration, 0)} يوم`, color: '#f59e0b' },
-    { label: 'موظفون متاحون', value: employees.length - displayStaff.length, color: '#8b5cf6' }
-  ];
+
+  const openAddDialog = () => {
+    setEditingItem(null);
+    setIsDialogOpen(true);
+  };
+
+  const openEditDialog = (item: AssignedStaffItem) => {
+    setEditingItem(item);
+    setIsDialogOpen(true);
+  };
+
+  // 5. Stats Calculation
+  const stats = useMemo(() => {
+    const totalMembers = staffList.length;
+    const assignedTaskCount = tasks.filter(t => t.assignedToId && staffList.some(s => s.employeeId === t.assignedToId)).length;
+    // Example logic: Assume 8 hours per day for task duration
+    const totalHours = tasks
+      .filter(t => t.assignedToId && staffList.some(s => s.employeeId === t.assignedToId))
+      .reduce((sum, t) => sum + (t.duration * 8), 0);
+
+    return [
+      { label: 'عدد الفريق', value: totalMembers, color: '#3b82f6' },
+      { label: 'مهام مسندة', value: assignedTaskCount, color: '#10b981' },
+      { label: 'ساعات العمل', value: `${totalHours} س`, color: '#f59e0b' },
+      { label: 'متاح للإضافة', value: Math.max(0, employees.length - totalMembers), color: '#8b5cf6' }
+    ];
+  }, [staffList, tasks, employees]);
+
+  // 6. Render Loading State
+  if (isLoading) {
+    return <div className="h-64 flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" /></div>;
+  }
 
   return (
     <div style={{ fontFamily: 'Tajawal, sans-serif', direction: 'rtl', height: 'calc(100vh - 180px)' }}>
-      <CodeDisplay code="TAB-286-06-DYN" position="top-right" />
+      <CodeDisplay code="TAB-286-06-BACKEND" position="top-right" />
       
+      {/* Stats Header */}
       <div className="grid grid-cols-4 gap-1 mb-2">
         {stats.map((stat, index) => (
           <Card key={index} style={{ border: `1px solid ${stat.color}40` }}>
@@ -585,72 +693,128 @@ export const Tab_286_06_StaffAssignment_UltraDense: React.FC<StaffTabProps> = ({
         ))}
       </div>
 
+      {/* Main Content */}
       <Card style={{ height: 'calc(100% - 70px)' }}>
         <CardContent className="p-2 h-full flex flex-col">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
-            <h3 className="text-sm font-bold">فريق العمل</h3>
-            <Button size="sm" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }} onClick={() => setIsAddDialogOpen(true)}>
-              <Plus className="h-3 w-3 ml-1" />
-              إضافة موظف
-            </Button>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-gray-500" />
+              <h3 className="text-sm font-bold">أعضاء الفريق</h3>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                variant="outline"
+                style={{ height: '24px', fontSize: '11px' }} 
+                onClick={openAddDialog}
+              >
+                <Plus className="h-3 w-3 ml-1" />
+                إضافة موظف
+              </Button>
+              <Button 
+                size="sm" 
+                variant={isSaved ? "ghost" : "default"}
+                className={!isSaved ? "bg-green-600 hover:bg-green-700 text-white" : "text-gray-500"} 
+                style={{ height: '24px', fontSize: '11px' }} 
+                onClick={handleManualSave}
+                disabled={saveMutation.isPending}
+              >
+                {saveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin ml-1"/> : <Save className="h-3 w-3 ml-1" />} 
+                {isSaved ? 'تم الحفظ' : 'حفظ التغييرات'}
+              </Button>
+            </div>
           </div>
           
-          <ScrollArea className="flex-grow">
+          <ScrollArea className="flex-grow border rounded-md bg-gray-50/30">
             <Table className="table-rtl">
-              {/* ✅ التصحيح: إزالة التعليقات من داخل TableRow */}
               <TableHeader>
                 <TableRow style={{ height: '28px' }}>
                   <TableHead className="text-right text-[10px] py-1">الاسم</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">الدور</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">البريد</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">الدور الوظيفي</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">البريد الإلكتروني</TableHead>
                   <TableHead className="text-right text-[10px] py-1">الجوال</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">المهام</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">المدة (أيام)</TableHead>
-                  <TableHead className="text-right text-[10px] py-1">إجراءات</TableHead>
+                  <TableHead className="text-right text-[10px] py-1">مهام حالية</TableHead>
+                  <TableHead className="text-right text-[10px] py-1 w-[80px]">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {displayStaff.map((member) => (
-                  <TableRow key={member.assignmentId} style={{ height: '32px' }}>
-                    <TableCell className="text-right text-[10px] py-1 font-semibold">{member.name}</TableCell>
-                    <TableCell className="text-right text-[10px] py-1">{member.role}</TableCell>
-                    <TableCell className="text-right text-[10px] py-1">
-                      <div className="flex items-center gap-1">
-                        <Mail className="h-3 w-3" style={{ color: '#64748b' }} />
-                        {member.email}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right text-[10px] py-1">
-                      <div className="flex items-center gap-1">
-                        <Phone className="h-3 w-3" style={{ color: '#64748b' }} />
-                        {member.phone}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right py-1">
-                      <Badge style={{ fontSize: '9px', padding: '2px 6px' }}>{member.taskCount}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-[10px] py-1">{member.totalDuration} يوم</TableCell>
-                    <TableCell className="text-right py-1">
-                      <div className="flex gap-0.5">
-                        <Button size="sm" variant="ghost" style={{ height: '22px', width: '22px', padding: 0 }} onClick={() => handleDeleteStaff(member.assignmentId)}>
-                          <Trash2 className="h-3 w-3" style={{ color: '#ef4444' }} />
-                        </Button>
-                      </div>
+                {staffList.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-gray-400 text-xs">
+                      لم يتم إسناد أي موظفين لهذه المعاملة بعد
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  staffList.map((staffItem) => {
+                    const employee = employees.find(e => e.id === staffItem.employeeId);
+                    const empTasks = tasks.filter(t => t.assignedToId === staffItem.employeeId);
+                    
+                    return (
+                      <TableRow key={staffItem.id} style={{ height: '32px' }}>
+                        <TableCell className="text-right text-[10px] py-1 font-semibold">
+                          {employee?.name || 'غير معروف'}
+                        </TableCell>
+                        <TableCell className="text-right text-[10px] py-1 text-blue-600">
+                          {staffItem.role}
+                        </TableCell>
+                        <TableCell className="text-right text-[10px] py-1">
+                          <div className="flex items-center gap-1 text-gray-500">
+                            <Mail className="h-3 w-3" />
+                            {employee?.email || '-'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-[10px] py-1">
+                          <div className="flex items-center gap-1 text-gray-500">
+                            <Phone className="h-3 w-3" />
+                            {employee?.phone || '-'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right py-1">
+                          {empTasks.length > 0 ? (
+                            <Badge variant="secondary" className="text-[9px] h-[18px] px-1">
+                              {empTasks.length} مهام
+                            </Badge>
+                          ) : (
+                            <span className="text-[9px] text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right py-1">
+                          <div className="flex gap-1">
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-6 w-6 hover:text-blue-600 hover:bg-blue-50" 
+                              onClick={() => openEditDialog(staffItem)}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-6 w-6 hover:text-red-600 hover:bg-red-50" 
+                              onClick={() => handleDelete(staffItem.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </ScrollArea>
         </CardContent>
       </Card>
 
-      <StaffAddDialog
-        isOpen={isAddDialogOpen}
-        onClose={() => setIsAddDialogOpen(false)}
-        onSave={handleSaveStaff}
+      <StaffAddEditDialog
+        isOpen={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        onSave={handleDialogSave}
         employees={employees}
-        existingEmployeeIds={displayStaff.map(s => s.id)}
+        existingEmployeeIds={staffList.map(s => s.employeeId)}
+        editingItem={editingItem}
       />
     </div>
   );
