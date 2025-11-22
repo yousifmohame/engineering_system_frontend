@@ -1,16 +1,16 @@
-import { api } from './axiosConfig'; // [cite: yousifmohame/engineering_system_frontend/engineering_system_frontend-56bd58b8f79ad81e27761f75c12a8cb186450dfa/src/api/axiosConfig.js]
+import { api } from './axiosConfig';
 import { 
   Transaction, 
   NewTransactionData,
   TransactionType,
   SelectOption,
   TransactionUpdateData,
-  // (استيراد الأنواع الفرعية)
   TransactionTask,
   TransactionFee,
   TransactionStage,
   CostCategory,
 } from '../types/transactionTypes';
+
 /**
  * ============================================================================
  * 1. إنشاء معاملة جديدة (مسودة) (لشاشة 286)
@@ -41,10 +41,7 @@ type ApiSimpleOption = {
 export const getTransactionTypes = async (): Promise<ApiSimpleOption[]> => {
   try {
     const { data } = await api.get('/transactions/types/simple');
-    
-    // --- ✅ 1. (تم حذف التحويل .map من هنا) ---
-    return data; // (إرجاع البيانات الخام كما هي: [{ id, name }])
-
+    return data;
   } catch (error: any) {
     console.error('Error fetching transaction types:', error);
     throw new Error(error.response?.data?.message || 'فشل في جلب أنواع المعاملات');
@@ -56,9 +53,8 @@ export const getTransactionTypes = async (): Promise<ApiSimpleOption[]> => {
 // ============================================================================
 export const getFullTransactionTypes = async (): Promise<TransactionType[]> => {
   try {
-    // --- ✅ 3. استدعاء المسار "الكامل" الجديد ---
     const { data } = await api.get('/transactions/types/full');
-    return data; // (إرجاع البيانات الكاملة كما هي)
+    return data;
   } catch (error: any) {
     console.error('Error fetching full transaction types:', error);
     throw new Error(error.response?.data?.message || 'فشل في جلب أنواع المعاملات');
@@ -83,7 +79,6 @@ export const createTransactionType = async (typeData: TransactionTypeCreateData)
   }
 };
 
-
 /**
  * ============================================================================
  * 5. (جديد) تعديل نوع معاملة (لشاشة 701)
@@ -91,7 +86,6 @@ export const createTransactionType = async (typeData: TransactionTypeCreateData)
  * ============================================================================
  */
 type TransactionTypeUpdateData = Omit<TransactionType, 'id' | 'code'>;
-
 
 export const updateTransactionType = async (id: string, typeData: Partial<TransactionTypeUpdateData>): Promise<TransactionType> => {
   try {
@@ -103,19 +97,15 @@ export const updateTransactionType = async (id: string, typeData: Partial<Transa
   }
 };
 
-
 export const updateTransaction = async (
   id: string, 
   data: Partial<TransactionUpdateData>
 ): Promise<Transaction> => {
   try {
-    // يستدعي المسار الصحيح في الخادم
-    // (PUT /api/transactions/:id)
     const response = await api.put<Transaction>(`/transactions/${id}`, data);
     return response.data;
   } catch (error) {
     console.error('Error updating transaction:', error);
-    // أعد إرسال الخطأ ليتم التقاطه بواسطة useMutation
     throw error;
   }
 };
@@ -188,7 +178,6 @@ export const updateTransactionStaff = async (id: string, staff: { employeeId: st
 };
 
 export const updateTransactionFloors = async (id: string, floors: any[]) => {
-  // نستخدم نفس endpoint التحديث العام، حيث أن الـ Controller يقبل تحديث أي حقل في الـ Schema
   const response = await api.put(`/transactions/${id}`, { floors });
   return response.data;
 };
@@ -208,16 +197,12 @@ export const updateTransactionGenericComponents = async (
   type: 'old-license' | 'proposed' | 'existing', 
   data: any[]
 ) => {
-  // تحديد اسم الحقل في قاعدة البيانات بناءً على النوع
   const fieldMap = {
     'old-license': 'componentsOldLicense',
     'proposed': 'componentsProposed',
     'existing': 'componentsExisting'
   };
-  
   const fieldName = fieldMap[type];
-  
-  // إرسال التحديث ديناميكياً
   const response = await api.put(`/transactions/${id}`, { [fieldName]: data });
   return response.data;
 };
@@ -246,4 +231,28 @@ export const deleteTransactionType = async (id: string): Promise<{ message: stri
     console.error('Error deleting transaction type:', error);
     throw new Error(error.response?.data?.message || 'فشل في حذف نوع المعاملة');
   }
+};
+
+// ✅✅✅ هذا هو الجزء الناقص: تجميع كل الدوال وتصديرها ككائن واحد
+export const transactionApi = {
+  createTransaction,
+  getTransactionTypes,
+  getFullTransactionTypes,
+  createTransactionType,
+  updateTransactionType,
+  updateTransaction,
+  getAllTransactions,
+  deleteTransaction,
+  getTransactionById,
+  updateTransactionCosts,
+  getTransactionTemplateFees,
+  updateTransactionTasks,
+  updateTransactionStaff,
+  updateTransactionFloors,
+  updateTransactionSetbacks,
+  updateTransactionComponents,
+  updateTransactionGenericComponents,
+  updateTransactionBoundaries,
+  updateTransactionLandArea,
+  deleteTransactionType
 };

@@ -1,51 +1,46 @@
 /**
- * الشاشة 936 - حسابات خاصة (المدفوعات الكاش) v1.0 COMPLETE
+ * الشاشة 936 - حسابات خاصة (المدفوعات الكاش) v1.0 CONNECTED
  * ========================================================
  * 
- * نظام شامل لتسجيل جميع المدفوعات النقدية (كاش فقط)
+ * نظام شامل لتسجيل جميع المدفوعات النقدية (كاش فقط) مع ربط فعلي بـ backend
  * 
- * المميزات:
- * ✅ تسجيل المدفوعات الكاش فقط
- * ✅ ربط بالمعاملات والعملاء
- * ✅ قسم خاص لأتعاب التعقيب
- * ✅ تفاصيل السداد الكاملة
- * ✅ التواريخ والمبالغ
- * ✅ رفع صور الإيصالات
- * ✅ سجل شامل لجميع المدفوعات
- * 
- * التابات (10 تابات):
- * 936-01: نظرة عامة
- * 936-02: إضافة دفعة جديدة
- * 936-03: المدفوعات الكاش
- * 936-04: أتعاب التعقيب
- * 936-05: تقرير المدفوعات
- * 936-06: بحث وفلترة
- * 936-07: الإحصائيات
- * 936-08: صور الإيصالات
- * 936-09: التصدير
- * 936-10: الإعدادات
- * 
- * @version 1.0 COMPLETE
- * @date 28 أكتوبر 2025
+ * @version 1.0 CONNECTED
+ * @date 22 نوفمبر 2025
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { paymentApi, Payment } from '../../api/paymentApi';
+import { transactionApi } from '../../api/transactionApi';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '../ui/table';
 import { ScrollArea } from '../ui/scroll-area';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Progress } from '../ui/progress';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { Input } from '../ui/input';
 import UnifiedTabsSidebar, { TabConfig } from '../UnifiedTabsSidebar';
 import { InputWithCopy, SelectWithCopy, TextAreaWithCopy } from '../InputWithCopy';
 import { EnhancedSwitch } from '../EnhancedSwitch';
+import { toast } from 'sonner';
 import {
-  DollarSign, FileText, Plus, Eye, Edit, Download, Search, Filter,
-  Calendar, Building2, User, Paperclip, TrendingUp, Activity,
-  CheckCircle, Clock, Banknote, Receipt, Image as ImageIcon,
-  AlertCircle, Settings, CreditCard
+  DollarSign, FileText, Plus, Eye, Download, Search,
+  Activity, CheckCircle, Banknote, Receipt, Image as ImageIcon,
+  CreditCard, Paperclip, TrendingUp, Settings, Loader2,
+  Calendar, ArrowRight, Wallet, PieChart, AlertTriangle, Clock, User, Building2, Filter, Edit
 } from 'lucide-react';
+
+// --- Helper: Format Client Name ---
+const formatClientName = (nameData: any): string => {
+  if (!nameData) return 'غير محدد';
+  if (typeof nameData === 'string') return nameData;
+  if (typeof nameData === 'object') {
+    const { firstName, fatherName, grandFatherName, familyName } = nameData;
+    return [firstName, fatherName, grandFatherName, familyName].filter(Boolean).join(' ');
+  }
+  return 'غير معروف';
+};
 
 // ============================================================
 // تكوين التابات
@@ -65,117 +60,206 @@ const TABS_CONFIG: TabConfig[] = [
 ];
 
 // ============================================================
-// البيانات الوهمية - المدفوعات الكاش (80 دفعة)
-// ============================================================
-
-const mockCashPayments = Array.from({ length: 80 }, (_, i) => ({
-  id: `CASH-2025-${String(i + 1).padStart(3, '0')}`,
-  transactionId: `2510${String((i % 50) + 1).padStart(3, '0')}`,
-  clientName: ['أحمد بن محمد السالم', 'فاطمة بنت علي المطيري', 'خالد بن عبدالله العتيبي'][i % 3],
-  clientId: `CLT-2025-${String((i % 100) + 1).padStart(3, '0')}`,
-  amount: [5000, 8000, 10000, 15000, 20000, 25000, 30000][i % 7],
-  paymentDate: `2025-${String((i % 12) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
-  paymentFor: ['أتعاب مكتب', 'أتعاب تعقيب', 'رسوم حكومية', 'رسوم بلدية', 'رسوم استشارية'][i % 5],
-  isFollowUpFee: i % 5 === 1, // أتعاب تعقيب
-  receivedBy: ['م. أحمد السالم', 'م. سارة المطيري', 'م. خالد العتيبي'][i % 3],
-  notes: i % 3 === 0 ? 'دفعة أولى من إجمالي المبلغ' : i % 3 === 1 ? 'دفعة نهائية' : 'دفعة جزئية',
-  hasReceipt: i % 4 !== 0, // 75% لديهم إيصالات
-  receiptImage: i % 4 !== 0 ? `receipt-${i + 1}.jpg` : null,
-  method: 'كاش', // كلها كاش فقط
-  status: i % 10 === 0 ? 'معلق' : 'مؤكد',
-}));
-
-// ============================================================
 // المكون الرئيسي
 // ============================================================
 
 const CashPayments_Complete_936_v1: React.FC = () => {
+  const { employee } = useAuth();
   const [activeTab, setActiveTab] = useState('936-01');
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState<any>(null);
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('all');
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  
+  // For Add Payment
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const [transactionSearchTerm, setTransactionSearchTerm] = useState('');
+  const [allocations, setAllocations] = useState<{ itemId: string; itemName: string; category: string; totalCost: number; prevPaid: number; currentPaying: number }[]>([]);
+  const [showReviewDialog, setShowReviewDialog] = useState(false);
 
-  // بيانات النموذج
-  const [formData, setFormData] = useState({
-    transactionId: '',
-    clientName: '',
-    clientId: '',
-    amount: '',
-    paymentDate: new Date().toISOString().split('T')[0],
-    paymentFor: 'أتعاب مكتب',
-    isFollowUpFee: false,
-    receivedBy: '',
-    notes: '',
-    receiptImage: null as File | null,
+  const queryClient = useQueryClient();
+
+  // Queries
+  const { data: payments = [], isLoading: loadingPayments } = useQuery({
+    queryKey: ['cashPayments'],
+    queryFn: paymentApi.getAllCashPayments,
   });
 
-  // حساب الإحصائيات
-  const statistics = useMemo(() => {
-    const total = mockCashPayments.reduce((sum, p) => sum + p.amount, 0);
-    const confirmed = mockCashPayments.filter(p => p.status === 'مؤكد').length;
-    const followUpTotal = mockCashPayments
-      .filter(p => p.isFollowUpFee)
-      .reduce((sum, p) => sum + p.amount, 0);
-    const todayPayments = mockCashPayments.filter(
-      p => p.paymentDate === new Date().toISOString().split('T')[0]
-    ).length;
+  const { data: transactions = [], isLoading: loadingTransactions } = useQuery({
+    queryKey: ['transactionsForPayment'],
+    queryFn: async () => {
+      const res = await transactionApi.getAllTransactions();
+      return Array.isArray(res) ? res : (res.data || []);
+    },
+    enabled: activeTab === '936-01' || activeTab === '936-02' || activeTab === '936-03'
+  });
 
-    return {
-      total,
-      count: mockCashPayments.length,
-      confirmed,
-      followUpTotal,
-      todayPayments,
-      avgPayment: Math.round(total / mockCashPayments.length),
-    };
-  }, []);
+  const { data: fullTransactionDetails, isLoading: loadingDetails } = useQuery({
+    queryKey: ['transactionDetails', selectedTransaction?.id],
+    queryFn: () => transactionApi.getTransactionById(selectedTransaction.id),
+    enabled: !!selectedTransaction?.id
+  });
 
-  // ============================================================
-  // عرض محتوى التابات
-  // ============================================================
+  const { data: transactionHistory = [], isLoading: loadingHistory } = useQuery({
+    queryKey: ['transactionPayments', selectedTransaction?.id],
+    queryFn: () => paymentApi.getPaymentsByTransaction(selectedTransaction.id),
+    enabled: !!selectedTransaction?.id
+  });
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case '936-01':
-        return renderTab01_Overview();
-      case '936-02':
-        return renderTab02_AddPayment();
-      case '936-03':
-        return renderTab03_CashPayments();
-      case '936-04':
-        return renderTab04_FollowUpFees();
-      case '936-05':
-        return renderTab05_Report();
-      case '936-06':
-        return renderTab06_Search();
-      case '936-07':
-        return renderTab07_Statistics();
-      case '936-08':
-        return renderTab08_Receipts();
-      case '936-09':
-        return renderTab09_Export();
-      case '936-10':
-        return renderTab10_Settings();
-      default:
-        return <div>التاب غير موجود</div>;
+  // Mutation
+  const createMutation = useMutation({
+    mutationFn: paymentApi.createCashPayment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cashPayments'] });
+      queryClient.invalidateQueries({ queryKey: ['transactionPayments'] });
+      queryClient.invalidateQueries({ queryKey: ['transactionsForPayment'] });
+      queryClient.invalidateQueries({ queryKey: ['transactionDetails'] });
+      toast.success('تم تسجيل الدفعة بنجاح');
+      setShowReviewDialog(false);
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error(`فشل التسجيل: ${error.response?.data?.message || 'خطأ غير معروف'}`);
+      setShowReviewDialog(false);
     }
+  });
+
+  const resetForm = () => {
+    setFormData({
+      paymentDate: new Date().toISOString().split('T')[0],
+      isFollowUpFee: false,
+      notes: '',
+      receiptImage: null,
+    });
+    setAllocations([]);
+    setSelectedTransaction(null);
   };
 
+  const initialFormData = {
+    paymentDate: new Date().toISOString().split('T')[0],
+    isFollowUpFee: false,
+    notes: '',
+    receiptImage: null as File | null,
+  };
+  const [formData, setFormData] = useState(initialFormData);
+
+  // Populate allocations when transaction selected
+  useEffect(() => {
+    if (fullTransactionDetails?.costDetails) {
+      const initialAllocations: { itemId: string; itemName: string; category: string; totalCost: number; prevPaid: number; currentPaying: number }[] = [];
+      fullTransactionDetails.costDetails.forEach((cat: any) => {
+        if (cat.items) {
+          cat.items.forEach((item: any) => {
+            const cost = Number(item.amount) || 0;
+            const paid = Number(item.paid) || 0;
+            const remaining = cost - paid;
+            if (remaining > 0) {
+              initialAllocations.push({
+                itemId: item.id || item.name,
+                itemName: item.name,
+                category: cat.category,
+                totalCost: cost,
+                prevPaid: paid,
+                currentPaying: 0
+              });
+            }
+          });
+        }
+      });
+      setAllocations(initialAllocations);
+    }
+  }, [fullTransactionDetails]);
+
+  const totalAllocatedAmount = useMemo(() => {
+    return allocations.reduce((sum, item) => sum + (Number(item.currentPaying) || 0), 0);
+  }, [allocations]);
+
+  const handleAllocationChange = (index: number, value: string) => {
+    const newAllocations = [...allocations];
+    const numValue = parseFloat(value);
+    const item = newAllocations[index];
+    const maxPayable = item.totalCost - item.prevPaid;
+    if (numValue > maxPayable) {
+      toast.warning(`المبلغ المدخل أكبر من المتبقي (${maxPayable.toLocaleString()})`);
+      newAllocations[index].currentPaying = maxPayable;
+    } else {
+      newAllocations[index].currentPaying = numValue >= 0 ? numValue : 0;
+    }
+    setAllocations(newAllocations);
+  };
+
+  const handleReviewClick = () => {
+    if (!selectedTransaction) {
+      toast.error('الرجاء اختيار معاملة');
+      return;
+    }
+    if (totalAllocatedAmount <= 0) {
+      toast.error('الرجاء تخصيص مبلغ للدفع');
+      return;
+    }
+    if (!employee?.id) {
+      toast.error("بيانات الموظف غير متوفرة");
+      return;
+    }
+    setShowReviewDialog(true);
+  };
+
+  const handleConfirmPayment = () => {
+    const activeAllocations = allocations
+      .filter(a => a.currentPaying > 0)
+      .map(a => ({
+        itemId: a.itemId,
+        itemName: a.itemName,
+        amount: a.currentPaying
+      }));
+
+    const submitData = new FormData();
+    submitData.append('transactionId', selectedTransaction.transactionCode || selectedTransaction.id);
+    submitData.append('amount', totalAllocatedAmount.toString());
+    submitData.append('paymentDate', formData.paymentDate);
+    submitData.append('isFollowUpFee', String(formData.isFollowUpFee));
+    submitData.append('receivedById', employee?.id || '');
+    submitData.append('notes', formData.notes);
+    submitData.append('allocations', JSON.stringify(activeAllocations));
+    if (formData.receiptImage) {
+      submitData.append('receiptImage', formData.receiptImage);
+    }
+    createMutation.mutate(submitData);
+  };
+
+  const statistics = useMemo(() => {
+    const totalCollected = payments.reduce((sum: number, p: Payment) => sum + Number(p.amount), 0);
+    const count = payments.length;
+    const todayPayments = payments.filter((p: Payment) => p.paymentDate === new Date().toISOString().split('T')[0]).length;
+    const totalExpectedRevenue = transactions.reduce((sum: number, t: any) => sum + (Number(t.totalFees) || 0), 0);
+    const totalRemaining = transactions.reduce((sum: number, t: any) => sum + (Number(t.remainingAmount) || 0), 0);
+    const collectionRate = totalExpectedRevenue > 0 ? Math.round((totalCollected / totalExpectedRevenue) * 100) : 0;
+    const followUpTotal = payments.filter(p => p.isFollowUpFee).reduce((sum, p) => sum + Number(p.amount), 0);
+    const confirmed = payments.filter(p => p.status === 'مؤكد').length;
+
+    return {
+      totalCollected,
+      totalExpectedRevenue,
+      totalRemaining,
+      collectionRate,
+      count,
+      todayPayments,
+      avgPayment: count > 0 ? Math.round(totalCollected / count) : 0,
+      followUpTotal,
+      confirmed,
+    };
+  }, [payments, transactions]);
+
   // ============================================================
-  // التاب 936-01: نظرة عامة
+  // TABS RENDERING (same UI as mock version)
   // ============================================================
 
   const renderTab01_Overview = () => (
     <div className="space-y-4">
-      {/* البطاقات الإحصائية */}
       <div className="grid grid-cols-6 gap-3">
         <Card style={{ background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)', border: '2px solid #86efac' }}>
           <CardContent className="p-3 text-center">
             <DollarSign className="h-5 w-5 mx-auto text-green-600 mb-1" />
             <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-              {statistics.total.toLocaleString()}
+              {statistics.totalCollected.toLocaleString()}
             </p>
             <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي المدفوعات</p>
           </CardContent>
@@ -226,12 +310,11 @@ const CashPayments_Complete_936_v1: React.FC = () => {
         </Card>
       </div>
 
-      {/* جدول المدفوعات الأخيرة */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>آخر 20 دفعة</CardTitle>
-            <Button size="sm" onClick={() => setShowAddDialog(true)}>
+            <Button size="sm" onClick={() => setActiveTab('936-02')}>
               <Plus className="h-3 w-3 ml-1" />
               إضافة دفعة
             </Button>
@@ -243,7 +326,6 @@ const CashPayments_Complete_936_v1: React.FC = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الرقم</TableHead>
                   <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعاملة</TableHead>
                   <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>العميل</TableHead>
                   <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المبلغ</TableHead>
@@ -256,60 +338,48 @@ const CashPayments_Complete_936_v1: React.FC = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockCashPayments.slice(0, 20).map((payment, index) => (
-                  <TableRow key={payment.id}>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
+                {payments.slice(0, 20).map((p: Payment, i: number) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{i + 1}</TableCell>
                     <TableCell className="text-right">
-                      <code className="text-xs bg-blue-50 px-2 py-1 rounded">{payment.id}</code>
+                      <Badge variant="outline" className="font-mono">{p.transactionId}</Badge>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <code className="text-xs">{payment.transactionId}</code>
+                    <TableCell className="font-medium" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
+                      {formatClientName(p.clientName)}
                     </TableCell>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                      {payment.clientName}
+                    <TableCell className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                      {Number(p.amount).toLocaleString()} ر.س
                     </TableCell>
-                    <TableCell className="text-right">
-                      <span className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {payment.amount.toLocaleString()} ر.س
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge
-                        variant="outline"
-                        style={{
-                          background: payment.isFollowUpFee ? '#fef3c7' : '#dbeafe',
-                          color: payment.isFollowUpFee ? '#854d0e' : '#1e40af',
-                          fontFamily: 'Tajawal, sans-serif'
-                        }}
-                      >
-                        {payment.paymentFor}
+                    <TableCell>
+                      <Badge variant="outline" className={p.isFollowUpFee ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}>
+                        {p.paymentFor || (p.isFollowUpFee ? 'أتعاب تعقيب' : 'أتعاب مكتب')}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                      {payment.paymentDate}
+                    <TableCell className="text-sm text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                      {p.paymentDate}
                     </TableCell>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                      {payment.receivedBy}
+                    <TableCell className="text-sm" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
+                      {p.receivedByName || '---'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {payment.hasReceipt ? (
+                      {p.receiptImage ? (
                         <Badge style={{ background: '#dcfce7', color: '#166534', fontFamily: 'Tajawal, sans-serif' }}>
                           <ImageIcon className="h-3 w-3 ml-1" />
                           موجود
                         </Badge>
                       ) : (
-                        <Badge variant="outline" style={{ fontFamily: 'Tajawal, sans-serif' }}>غير موجود</Badge>
+                        <Badge variant="outline">غير موجود</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
                       <Badge
                         style={{
-                          background: payment.status === 'مؤكد' ? '#dcfce7' : '#fef3c7',
-                          color: payment.status === 'مؤكد' ? '#166534' : '#854d0e',
+                          background: p.status === 'مؤكد' ? '#dcfce7' : '#fef3c7',
+                          color: p.status === 'مؤكد' ? '#166534' : '#854d0e',
                           fontFamily: 'Tajawal, sans-serif'
                         }}
                       >
-                        {payment.status}
+                        {p.status || 'مؤكد'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -317,7 +387,7 @@ const CashPayments_Complete_936_v1: React.FC = () => {
                         size="sm"
                         variant="ghost"
                         onClick={() => {
-                          setSelectedPayment(payment);
+                          setSelectedPayment(p);
                           setShowDetailsDialog(true);
                         }}
                       >
@@ -334,224 +404,330 @@ const CashPayments_Complete_936_v1: React.FC = () => {
     </div>
   );
 
-  // ============================================================
-  // التاب 936-02: إضافة دفعة جديدة
-  // ============================================================
-
-  const renderTab02_AddPayment = () => (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة دفعة كاش جديدة</CardTitle>
-          <CardDescription style={{ fontFamily: 'Tajawal, sans-serif' }}>
-            تسجيل دفعة نقدية جديدة مع جميع التفاصيل
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* المعلومات الأساسية */}
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-bold mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعلومات الأساسية</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <InputWithCopy
-                  label="رقم المعاملة *"
-                  id="transactionId"
-                  value={formData.transactionId}
-                  onChange={(e) => setFormData({ ...formData, transactionId: e.target.value })}
-                  placeholder="2510001"
-                  required
-                  copyable={true}
-                  clearable={true}
-                />
-                <InputWithCopy
-                  label="اسم العميل *"
-                  id="clientName"
-                  value={formData.clientName}
-                  onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
-                  placeholder="أحمد بن محمد السالم"
-                  required
-                  copyable={true}
-                  clearable={true}
-                />
-                <InputWithCopy
-                  label="رمز العميل"
-                  id="clientId"
-                  value={formData.clientId}
-                  onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
-                  placeholder="CLT-2025-001"
-                  copyable={true}
-                  clearable={true}
-                />
+  const renderTab02_AddPayment = () => {
+    if (!selectedTransaction) {
+      const filteredTransactions = transactions.filter((t: any) =>
+        (t.transactionCode?.toLowerCase() || '').includes(transactionSearchTerm.toLowerCase()) ||
+        (formatClientName(t.client?.name)?.toLowerCase() || '').includes(transactionSearchTerm.toLowerCase())
+      );
+      return (
+        <div className="space-y-4">
+          <Card className="border-blue-100">
+            <CardHeader className="bg-blue-50/50 pb-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle className="text-blue-900">اختر معاملة للسداد</CardTitle>
+                  <CardDescription>ابحث عن المعاملة لإضافة دفعة جديدة لها</CardDescription>
+                </div>
+                <div className="relative w-72">
+                  <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="بحث برقم المعاملة أو اسم العميل..."
+                    value={transactionSearchTerm}
+                    onChange={(e) => setTransactionSearchTerm(e.target.value)}
+                    className="pr-9"
+                  />
+                </div>
               </div>
-            </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[550px]">
+                {loadingTransactions ? (
+                  <div className="flex justify-center items-center h-40">
+                    <Loader2 className="animate-spin h-8 w-8 text-blue-600" />
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader className="bg-gray-50 sticky top-0">
+                      <TableRow>
+                        <TableHead className="text-right">رقم المعاملة</TableHead>
+                        <TableHead className="text-right">العميل</TableHead>
+                        <TableHead className="text-right">النوع</TableHead>
+                        <TableHead className="text-right">الإجمالي</TableHead>
+                        <TableHead className="text-right">المدفوع</TableHead>
+                        <TableHead className="text-right">المتبقي</TableHead>
+                        <TableHead className="text-right">الإجراء</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredTransactions.length > 0 ? (
+                        filteredTransactions.map((t: any) => (
+                          <TableRow key={t.id} className="hover:bg-blue-50/30 transition-colors">
+                            <TableCell className="font-mono font-medium text-blue-700">{t.transactionCode}</TableCell>
+                            <TableCell>{formatClientName(t.client?.name)}</TableCell>
+                            <TableCell><Badge variant="outline">{t.transactionType?.name || 'عام'}</Badge></TableCell>
+                            <TableCell className="font-bold">{(t.totalFees || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-green-600">{(t.paidAmount || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-red-600 font-bold">{(t.remainingAmount || 0).toLocaleString()}</TableCell>
+                            <TableCell>
+                              <Button size="sm" onClick={() => setSelectedTransaction(t)} className="bg-blue-600 hover:bg-blue-700">
+                                سداد <ArrowRight className="mr-2 h-3 w-3" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                            لا توجد معاملات مطابقة
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
 
-            {/* تفاصيل الدفعة */}
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-bold mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>تفاصيل الدفعة</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <InputWithCopy
-                  label="المبلغ (ر.س) *"
-                  id="amount"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  placeholder="5000"
-                  required
-                  copyable={true}
-                  clearable={true}
-                />
-                <InputWithCopy
-                  label="تاريخ الدفع *"
-                  id="paymentDate"
-                  type="date"
-                  value={formData.paymentDate}
-                  onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                  required
-                  copyable={true}
-                  clearable={false}
-                />
-                <SelectWithCopy
-                  label="مقابل *"
-                  id="paymentFor"
-                  value={formData.paymentFor}
-                  onChange={(value) => setFormData({ ...formData, paymentFor: value })}
-                  options={[
-                    { value: 'أتعاب مكتب', label: 'أتعاب مكتب' },
-                    { value: 'أتعاب تعقيب', label: 'أتعاب تعقيب' },
-                    { value: 'رسوم حكومية', label: 'رسوم حكومية' },
-                    { value: 'رسوم بلدية', label: 'رسوم بلدية' },
-                    { value: 'رسوم استشارية', label: 'رسوم استشارية' }
-                  ]}
-                  copyable={true}
-                  clearable={true}
-                />
-              </div>
-            </div>
+    return (
+      <div className="space-y-4">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setSelectedTransaction(null);
+            resetForm();
+          }}
+          className="mb-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+        >
+          <ArrowRight className="ml-2 h-4 w-4" /> عودة للقائمة
+        </Button>
 
-            {/* مؤشر أتعاب التعقيب */}
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <EnhancedSwitch
-                id="isFollowUpFee"
-                checked={formData.isFollowUpFee}
-                onCheckedChange={(checked) => setFormData({ ...formData, isFollowUpFee: checked })}
-                label="هل هذه أتعاب تعقيب؟"
-                description="قم بتفعيل هذا الخيار إذا كانت الدفعة خاصة بأتعاب التعقيب"
-                variant="warning"
-              />
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <Card className="border-t-4 border-t-blue-600">
+              <CardHeader>
+                <div className="flex justify-between">
+                  <div>
+                    <CardTitle>تسجيل دفعة جديدة</CardTitle>
+                    <CardDescription>
+                      رقم المعاملة: <span className="font-mono font-bold text-blue-700">{selectedTransaction.transactionCode}</span>
+                    </CardDescription>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm text-gray-500">المتبقي للسداد</p>
+                    <p className="text-2xl font-bold text-red-600">
+                      {(selectedTransaction.remainingAmount || 0).toLocaleString()} <span className="text-sm text-gray-400">ر.س</span>
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="bg-gray-50 p-4 rounded-lg border grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">اسم العميل</p>
+                    <p className="font-medium">{formatClientName(selectedTransaction.client?.name)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">رقم الجوال</p>
+                    <p className="font-medium font-mono">{selectedTransaction.client?.mobile || '-'}</p>
+                  </div>
+                </div>
 
-            {/* معلومات إضافية */}
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h3 className="font-bold mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>معلومات إضافية</h3>
-              <div className="space-y-3">
-                <InputWithCopy
-                  label="المستلم *"
-                  id="receivedBy"
-                  value={formData.receivedBy}
-                  onChange={(e) => setFormData({ ...formData, receivedBy: e.target.value })}
-                  placeholder="م. أحمد السالم"
-                  required
-                  copyable={true}
-                  clearable={true}
-                />
-                <TextAreaWithCopy
-                  label="ملاحظات"
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
-                  placeholder="أي ملاحظات إضافية..."
-                  copyable={true}
-                  clearable={true}
-                />
-              </div>
-            </div>
+                <div className="border-t pt-2"></div>
 
-            {/* رفع صورة الإيصال */}
-            <div className="bg-teal-50 p-4 rounded-lg">
-              <h3 className="font-bold mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>صورة الإيصال</h3>
-              <Button variant="outline" className="w-full">
-                <Paperclip className="h-4 w-4 ml-2" />
-                رفع صورة الإيصال
-              </Button>
-            </div>
+                <div className="space-y-2">
+                  <h3 className="font-bold text-sm text-gray-700 flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-blue-500" />
+                    تخصيص مبلغ الدفع
+                  </h3>
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-gray-50">
+                        <TableRow>
+                          <TableHead className="text-right w-[30%]">البند</TableHead>
+                          <TableHead className="text-right">التكلفة</TableHead>
+                          <TableHead className="text-right">المدفوع</TableHead>
+                          <TableHead className="text-right">المتبقي</TableHead>
+                          <TableHead className="text-right w-[20%] bg-blue-50/50">المبلغ الحالي</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allocations.map((item, index) => (
+                          <TableRow key={item.itemId}>
+                            <TableCell className="font-medium">
+                              {item.itemName}
+                              <div className="text-[10px] text-gray-400">{item.category}</div>
+                            </TableCell>
+                            <TableCell>{item.totalCost.toLocaleString()}</TableCell>
+                            <TableCell className="text-green-600">{item.prevPaid.toLocaleString()}</TableCell>
+                            <TableCell className="text-red-600 font-bold">
+                              {(item.totalCost - item.prevPaid).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="bg-blue-50/30 p-1">
+                              <Input
+                                type="number"
+                                className="h-8 bg-white border-blue-200 focus:ring-blue-500 text-center font-bold text-blue-700"
+                                value={item.currentPaying || ''}
+                                onChange={(e) => handleAllocationChange(index, e.target.value)}
+                                placeholder="0"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                      <TableFooter className="bg-gray-100 font-bold">
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-left pl-4">إجمالي الدفعة الحالية:</TableCell>
+                          <TableCell className="text-center text-green-700 text-lg">
+                            {totalAllocatedAmount.toLocaleString()} <span className="text-xs">ر.س</span>
+                          </TableCell>
+                        </TableRow>
+                      </TableFooter>
+                    </Table>
+                  </div>
+                </div>
 
-            {/* الأزرار */}
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline">إلغاء</Button>
-              <Button>
-                <CheckCircle className="h-4 w-4 ml-2" />
-                حفظ الدفعة
-              </Button>
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <InputWithCopy
+                    label="تاريخ الدفع"
+                    type="date"
+                    value={formData.paymentDate}
+                    onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
+                  />
+                  <div className="flex items-end pb-2">
+                    <EnhancedSwitch
+                      label="هل هي أتعاب تعقيب؟"
+                      checked={formData.isFollowUpFee}
+                      onCheckedChange={(c) => setFormData({ ...formData, isFollowUpFee: c })}
+                      variant="warning"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <TextAreaWithCopy
+                    label="ملاحظات"
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  />
+                  <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
+                    <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                      <Paperclip className="h-4 w-4" /> صورة الإيصال (اختياري)
+                    </label>
+                    <input
+                      type="file"
+                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700"
+                      onChange={(e) => setFormData({ ...formData, receiptImage: e.target.files?.[0] || null })}
+                      accept="image/*,.pdf"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4">
+                  <Button
+                    onClick={handleReviewClick}
+                    disabled={createMutation.isPending}
+                    className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white min-w-[200px]"
+                  >
+                    {createMutation.isPending ? (
+                      <Loader2 className="animate-spin ml-2 h-4 w-4" />
+                    ) : (
+                      <CheckCircle className="ml-2 h-4 w-4" />
+                    )}
+                    مراجعة واعتماد الدفعة
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
 
-  // ============================================================
-  // التاب 936-03: المدفوعات الكاش
-  // ============================================================
+          <div className="lg:col-span-1">
+            <Card className="h-full bg-gray-50/50">
+              <CardHeader>
+                <CardTitle className="text-base">سجل المدفوعات السابقة</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[500px] px-4 pb-4">
+                  {loadingHistory ? (
+                    <div className="py-8 text-center">
+                      <Loader2 className="animate-spin h-6 w-6 mx-auto" />
+                    </div>
+                  ) : transactionHistory.length === 0 ? (
+                    <div className="text-center text-gray-400 py-10">لا يوجد دفعات سابقة</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {transactionHistory.map((p: Payment) => (
+                        <div key={p.id} className="bg-white border p-3 rounded-lg shadow-sm relative overflow-hidden">
+                          <div className={`absolute top-0 right-0 w-1 h-full ${p.isFollowUpFee ? 'bg-amber-500' : 'bg-green-500'}`}></div>
+                          <div className="flex justify-between items-start pr-2">
+                            <div>
+                              <p className="font-bold text-lg">{Number(p.amount).toLocaleString()}</p>
+                              <p className="text-xs text-gray-500 mt-1">{p.paymentDate}</p>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={p.isFollowUpFee ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"}
+                            >
+                              {p.isFollowUpFee ? 'تعقيب' : 'مكتب'}
+                            </Badge>
+                          </div>
+                          {p.notes && (
+                            <p className="text-xs text-gray-600 mt-2 pr-2 border-t pt-2">{p.notes}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderTab03_CashPayments = () => (
     <Card>
       <CardHeader>
-        <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>جميع المدفوعات الكاش ({mockCashPayments.length})</CardTitle>
+        <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>
+          جميع المدفوعات الكاش ({payments.length})
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[600px]">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الرقم</TableHead>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعاملة</TableHead>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>العميل</TableHead>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المبلغ</TableHead>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>مقابل</TableHead>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التاريخ</TableHead>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المستلم</TableHead>
-                <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
+                <TableHead className="text-right">#</TableHead>
+                <TableHead className="text-right">المعاملة</TableHead>
+                <TableHead className="text-right">العميل</TableHead>
+                <TableHead className="text-right">المبلغ</TableHead>
+                <TableHead className="text-right">الغرض</TableHead>
+                <TableHead className="text-right">التاريخ</TableHead>
+                <TableHead className="text-right">المستلم</TableHead>
+                <TableHead className="text-right">الحالة</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockCashPayments.map((payment, index) => (
-                <TableRow key={payment.id}>
-                  <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
-                  <TableCell className="text-right">
-                    <code className="text-xs bg-blue-50 px-2 py-1 rounded">{payment.id}</code>
+              {payments.map((p: Payment, i: number) => (
+                <TableRow key={p.id}>
+                  <TableCell className="text-right">{i + 1}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono">{p.transactionId}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <code className="text-xs">{payment.transactionId}</code>
-                  </TableCell>
-                  <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                    {payment.clientName}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                      {payment.amount.toLocaleString()} ر.س
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant="outline" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                      {payment.paymentFor}
+                  <TableCell className="font-medium">{formatClientName(p.clientName)}</TableCell>
+                  <TableCell className="font-bold text-green-600">{Number(p.amount).toLocaleString()}</TableCell>
+                  <TableCell>
+                    <Badge className={p.isFollowUpFee ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}>
+                      {p.paymentFor || (p.isFollowUpFee ? 'أتعاب تعقيب' : 'أتعاب مكتب')}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    {payment.paymentDate}
-                  </TableCell>
-                  <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                    {payment.receivedBy}
-                  </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-sm text-gray-600">{p.paymentDate}</TableCell>
+                  <TableCell className="text-sm">{p.receivedByName || '---'}</TableCell>
+                  <TableCell>
                     <Badge
                       style={{
-                        background: payment.status === 'مؤكد' ? '#dcfce7' : '#fef3c7',
-                        color: payment.status === 'مؤكد' ? '#166534' : '#854d0e',
+                        background: p.status === 'مؤكد' ? '#dcfce7' : '#fef3c7',
+                        color: p.status === 'مؤكد' ? '#166534' : '#854d0e',
                         fontFamily: 'Tajawal, sans-serif'
                       }}
                     >
-                      {payment.status}
+                      {p.status || 'مؤكد'}
                     </Badge>
                   </TableCell>
                 </TableRow>
@@ -563,13 +739,9 @@ const CashPayments_Complete_936_v1: React.FC = () => {
     </Card>
   );
 
-  // ============================================================
-  // التاب 936-04: أتعاب التعقيب
-  // ============================================================
-
   const renderTab04_FollowUpFees = () => {
-    const followUpPayments = mockCashPayments.filter(p => p.isFollowUpFee);
-    const total = followUpPayments.reduce((sum, p) => sum + p.amount, 0);
+    const followUpPayments = payments.filter((p: Payment) => p.isFollowUpFee);
+    const total = followUpPayments.reduce((sum: number, p: Payment) => sum + Number(p.amount), 0);
 
     return (
       <div className="space-y-4">
@@ -594,39 +766,25 @@ const CashPayments_Complete_936_v1: React.FC = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الرقم</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعاملة</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>العميل</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المبلغ</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التاريخ</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المستلم</TableHead>
+                    <TableHead className="text-right">#</TableHead>
+                    <TableHead className="text-right">المعاملة</TableHead>
+                    <TableHead className="text-right">العميل</TableHead>
+                    <TableHead className="text-right">المبلغ</TableHead>
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">المستلم</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {followUpPayments.map((payment, index) => (
-                    <TableRow key={payment.id}>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
-                      <TableCell className="text-right">
-                        <code className="text-xs bg-yellow-50 px-2 py-1 rounded">{payment.id}</code>
+                  {followUpPayments.map((p: Payment, i: number) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="text-right">{i + 1}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono bg-amber-100">{p.transactionId}</Badge>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <code className="text-xs">{payment.transactionId}</code>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                        {payment.clientName}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-bold text-yellow-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                          {payment.amount.toLocaleString()} ر.س
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {payment.paymentDate}
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                        {payment.receivedBy}
-                      </TableCell>
+                      <TableCell className="font-medium">{formatClientName(p.clientName)}</TableCell>
+                      <TableCell className="font-bold text-yellow-600">{Number(p.amount).toLocaleString()}</TableCell>
+                      <TableCell className="text-sm">{p.paymentDate}</TableCell>
+                      <TableCell className="text-sm">{p.receivedByName || '---'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -638,38 +796,56 @@ const CashPayments_Complete_936_v1: React.FC = () => {
     );
   };
 
-  // التابات المتبقية (placeholders)
   const renderTab05_Report = () => (
-    <Card><CardContent className="p-8 text-center"><h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-05: تقرير المدفوعات - قيد التطوير</h3></CardContent></Card>
+    <Card>
+      <CardContent className="p-8 text-center">
+        <h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-05: تقرير المدفوعات - قيد التطوير</h3>
+      </CardContent>
+    </Card>
   );
 
   const renderTab06_Search = () => (
-    <Card><CardContent className="p-8 text-center"><h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-06: بحث وفلترة - قيد التطوير</h3></CardContent></Card>
+    <Card>
+      <CardContent className="p-8 text-center">
+        <h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-06: بحث وفلترة - قيد التطوير</h3>
+      </CardContent>
+    </Card>
   );
 
   const renderTab07_Statistics = () => (
-    <Card><CardContent className="p-8 text-center"><h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-07: الإحصائيات - قيد التطوير</h3></CardContent></Card>
+    <Card>
+      <CardContent className="p-8 text-center">
+        <h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-07: الإحصائيات - قيد التطوير</h3>
+      </CardContent>
+    </Card>
   );
 
   const renderTab08_Receipts = () => (
-    <Card><CardContent className="p-8 text-center"><h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-08: صور الإيصالات - قيد التطوير</h3></CardContent></Card>
+    <Card>
+      <CardContent className="p-8 text-center">
+        <h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-08: صور الإيصالات - قيد التطوير</h3>
+      </CardContent>
+    </Card>
   );
 
   const renderTab09_Export = () => (
-    <Card><CardContent className="p-8 text-center"><h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-09: التصدير - قيد التطوير</h3></CardContent></Card>
+    <Card>
+      <CardContent className="p-8 text-center">
+        <h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-09: التصدير - قيد التطوير</h3>
+      </CardContent>
+    </Card>
   );
 
   const renderTab10_Settings = () => (
-    <Card><CardContent className="p-8 text-center"><h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-10: الإعدادات - قيد التطوير</h3></CardContent></Card>
+    <Card>
+      <CardContent className="p-8 text-center">
+        <h3 style={{ fontFamily: 'Tajawal, sans-serif' }}>التاب 936-10: الإعدادات - قيد التطوير</h3>
+      </CardContent>
+    </Card>
   );
-
-  // ============================================================
-  // نافذة التفاصيل
-  // ============================================================
 
   const renderDetailsDialog = () => {
     if (!selectedPayment) return null;
-
     return (
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent className="max-w-3xl" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -680,28 +856,111 @@ const CashPayments_Complete_936_v1: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-blue-50 p-3 rounded">
                 <p className="text-xs text-gray-600">رقم الدفعة</p>
-                <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedPayment.id}</p>
+                <p className="font-bold">{selectedPayment.id}</p>
               </div>
               <div className="bg-green-50 p-3 rounded">
                 <p className="text-xs text-gray-600">المبلغ</p>
-                <p className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  {selectedPayment.amount.toLocaleString()} ر.س
+                <p className="font-bold text-green-600">
+                  {Number(selectedPayment.amount).toLocaleString()} ر.س
                 </p>
               </div>
+              <div className="bg-amber-50 p-3 rounded">
+                <p className="text-xs text-gray-600">العميل</p>
+                <p className="font-medium">{formatClientName(selectedPayment.clientName)}</p>
+              </div>
+              <div className="bg-purple-50 p-3 rounded">
+                <p className="text-xs text-gray-600">التاريخ</p>
+                <p>{selectedPayment.paymentDate}</p>
+              </div>
             </div>
+            {selectedPayment.notes && (
+              <div className="bg-gray-50 p-3 rounded">
+                <p className="text-xs text-gray-600">ملاحظات</p>
+                <p>{selectedPayment.notes}</p>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
     );
   };
 
-  // ============================================================
-  // الواجهة الرئيسية
-  // ============================================================
+  const renderReviewDialog = () => (
+    <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-blue-700">
+            <CheckCircle className="h-5 w-5" />
+            مراجعة وتأكيد الدفعة
+          </DialogTitle>
+          <DialogDescription>يرجى مراجعة تفاصيل توزيع الدفعة قبل الاعتماد النهائي</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="bg-gray-50 p-3 rounded border grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-gray-500">المعاملة</p>
+              <p className="font-bold">{selectedTransaction?.transactionCode}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">العميل</p>
+              <p className="font-bold">{formatClientName(selectedTransaction?.client?.name)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">تاريخ الدفع</p>
+              <p>{formData.paymentDate}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">إجمالي الدفعة</p>
+              <p className="font-bold text-green-600 text-lg">{totalAllocatedAmount.toLocaleString()} ر.س</p>
+            </div>
+          </div>
+          <div>
+            <h4 className="font-bold text-sm mb-2">تفاصيل التوزيع:</h4>
+            <div className="border rounded overflow-hidden">
+              <Table>
+                <TableHeader className="bg-gray-50">
+                  <TableRow>
+                    <TableHead>البند</TableHead>
+                    <TableHead className="text-right">المبلغ المخصص</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allocations.filter(a => a.currentPaying > 0).map((item) => (
+                    <TableRow key={item.itemId}>
+                      <TableCell>{item.itemName}</TableCell>
+                      <TableCell className="text-right font-bold">{item.currentPaying.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          {formData.notes && (
+            <div className="bg-yellow-50 p-3 rounded border border-yellow-100 text-sm">
+              <span className="font-bold">ملاحظات: </span> {formData.notes}
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setShowReviewDialog(false)}>
+            تعديل
+          </Button>
+          <Button
+            onClick={handleConfirmPayment}
+            disabled={createMutation.isPending}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <CheckCircle className="h-4 w-4 ml-2" />}
+            اعتماد نهائي
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-      {/* هيدر الشاشة */}
+      {/* Header */}
       <div
         style={{
           position: 'sticky',
@@ -711,8 +970,6 @@ const CashPayments_Complete_936_v1: React.FC = () => {
           borderBottom: '3px solid transparent',
           borderImage: 'linear-gradient(90deg, #2563eb 0%, #7c3aed 50%, #2563eb 100%) 1',
           padding: '0',
-          marginBottom: '0',
-          marginTop: '0',
           boxShadow: '0 4px 16px rgba(37, 99, 235, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06)'
         }}
       >
@@ -733,9 +990,8 @@ const CashPayments_Complete_936_v1: React.FC = () => {
                 border: '2px solid rgba(16, 185, 129, 0.2)'
               }}
             >
-              <Banknote className="h-6 w-6" style={{ color: '#10b981', filter: 'drop-shadow(0 1px 2px rgba(16, 185, 129, 0.3))' }} />
+              <Banknote className="h-6 w-6" style={{ color: '#10b981' }} />
             </div>
-
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
                 <h1
@@ -746,54 +1002,29 @@ const CashPayments_Complete_936_v1: React.FC = () => {
                     margin: 0,
                     background: 'linear-gradient(135deg, #1e40af 0%, #10b981 100%)',
                     WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    letterSpacing: '-0.02em'
+                    WebkitTextFillColor: 'transparent'
                   }}
                 >
                   حسابات خاصة (مدفوعات كاش)
                 </h1>
-
                 <div
                   style={{
                     padding: '4px 12px',
                     background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                     borderRadius: '8px',
-                    boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)'
+                    boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)'
                   }}
                 >
-                  <span className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff', letterSpacing: '0.05em' }}>
+                  <span className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff' }}>
                     936
                   </span>
                 </div>
               </div>
-
-              <p
-                style={{
-                  fontFamily: 'Tajawal, sans-serif',
-                  fontSize: '13px',
-                  color: '#64748b',
-                  margin: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <span
-                  style={{
-                    width: '4px',
-                    height: '4px',
-                    borderRadius: '50%',
-                    background: '#94a3b8',
-                    display: 'inline-block'
-                  }}
-                ></span>
+              <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
                 نظام شامل لتسجيل جميع المدفوعات النقدية (كاش فقط) مع أتعاب التعقيب
               </p>
             </div>
           </div>
-
           <div className="flex items-center gap-3">
             <div
               style={{
@@ -803,7 +1034,7 @@ const CashPayments_Complete_936_v1: React.FC = () => {
                 border: '1px solid rgba(16, 185, 129, 0.15)'
               }}
             >
-              <span style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '12px', color: '#475569', fontWeight: 600 }}>
+              <span style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>
                 10 تبويبات
               </span>
             </div>
@@ -811,15 +1042,25 @@ const CashPayments_Complete_936_v1: React.FC = () => {
         </div>
       </div>
 
-      {/* المحتوى الرئيسي */}
+      {/* Main Content */}
       <div className="flex flex-1 overflow-hidden" style={{ gap: '4px', paddingTop: '16px' }}>
         <UnifiedTabsSidebar tabs={TABS_CONFIG} activeTab={activeTab} onTabChange={setActiveTab} />
-
-        <div className="flex-1 overflow-auto px-6">{renderTabContent()}</div>
+        <div className="flex-1 overflow-auto px-6">
+          {activeTab === '936-01' && renderTab01_Overview()}
+          {activeTab === '936-02' && renderTab02_AddPayment()}
+          {activeTab === '936-03' && renderTab03_CashPayments()}
+          {activeTab === '936-04' && renderTab04_FollowUpFees()}
+          {activeTab === '936-05' && renderTab05_Report()}
+          {activeTab === '936-06' && renderTab06_Search()}
+          {activeTab === '936-07' && renderTab07_Statistics()}
+          {activeTab === '936-08' && renderTab08_Receipts()}
+          {activeTab === '936-09' && renderTab09_Export()}
+          {activeTab === '936-10' && renderTab10_Settings()}
+        </div>
       </div>
 
-      {/* النوافذ المنبثقة */}
       {renderDetailsDialog()}
+      {renderReviewDialog()}
     </div>
   );
 };

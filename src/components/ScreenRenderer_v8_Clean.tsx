@@ -35,7 +35,6 @@ const ContractorsRelations_Complete_555_v4 = lazy(() => import('./screens/Contra
 const AccountsManagement_Complete_666 = lazy(() => import('./screens/AccountsManagement_Complete_666'));
 const PartnersAccounts_Complete_667_v3 = lazy(() => import('./screens/PartnersAccounts_Complete_667_v3_ULTRA'));
 const HardwareSoftware_Complete_677_v1 = lazy(() => import('./screens/HardwareSoftware_Complete_677_v1'));
-const SupervisionManagement_Complete_967 = lazy(() => import('./screens/SupervisionManagement_Complete_967'));
 const MaintenanceServicesManagement_Complete_672 = lazy(() => import('./screens/MaintenanceServicesManagement_Complete_672'));
 const BuildingSafety_Complete_915 = lazy(() => import('./screens/BuildingSafety_Complete_915'));
 const OrganizationalPlans_Complete_918_v8 = lazy(() => import('./screens/OrganizationalPlans_Complete_918_v8'));
@@ -43,13 +42,9 @@ const OrganizationalPlans_Complete_918_v8 = lazy(() => import('./screens/Organiz
 // 700-799: المعاملات والتقارير
 const MainTransactionsScreen_Complete_284_v10 = lazy(() => import('./screens/MainTransactionsScreen_Complete_284'));
 const TransactionsSettings_Complete_701_v14_ALL_TABS = lazy(() => import('./screens/TransactionsSettings_Complete_701_v14_ALL_TABS'));
-const ContractSettings_Advanced_777_v2 = lazy(() => import('./screens/ContractSettings_Advanced_777_v2'));
-const ContractSettings_Advanced_777_v3 = lazy(() => import('./screens/ContractSettings_Advanced_777_v3_WITH_CONTRACT_TYPES'));
 const ContractSettings_Advanced_777_v3_4 = lazy(() => import('./screens/ContractSettings_Advanced_777_v3.4_COMPLETE'));
 const ContractApproval_Complete_778_v4 = lazy(() => import('./screens/ContractApproval_Complete_778_v4_ALL_TABS_FINAL'));
 const DigitalDocumentation_Complete_750_v8 = lazy(() => import('./screens/DigitalDocumentation_Complete_750_v8'));
-const TechnicalReports_Complete_950 = lazy(() => import('./screens/TechnicalReports_Complete_950'));
-const TechnicalReports_Complete_950_v2 = lazy(() => import('./screens/TechnicalReports_Complete_950_v2'));
 const TechnicalReports_Complete_950_v3 = lazy(() => import('./screens/TechnicalReports_Complete_950_v3'));
 
 // 800-899: العقود والمشاريع

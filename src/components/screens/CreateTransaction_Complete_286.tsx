@@ -3,12 +3,12 @@ import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'; 
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { toast } from 'sonner'; // ✅ إضافة التنبيهات
+import { toast } from 'sonner';
 
 import { 
   createTransaction, 
-  updateTransaction, // ✅ استيراد دالة التحديث
-  getTransactionById // ✅ استيراد دالة الجلب للتأكد من البيانات
+  updateTransaction, 
+  getTransactionById 
 } from '../../api/transactionApi';
 import { getEmployees } from '../../api/employeeApi'; 
 import { 
@@ -20,7 +20,6 @@ import {
 import { Task } from '../../types/taskTypes';
 import { AssignedStaff } from '@/types/employeeTypes';
 
-// ... (باقي الاستيرادات كما هي)
 import {
   FileText, Plus, CheckCircle, Users, Calendar,
   Paperclip, Target, AlertCircle, Settings,
@@ -30,10 +29,9 @@ import {
 import CodeDisplay from '../CodeDisplay';
 import UnifiedTabsSidebar, { TabConfig } from '../UnifiedTabsSidebar';
 
-// ... (استيراد التابات كما هي)
+// استيراد التابات
 import Tab_286_01_BasicInfo_UltraDense from './Tab_286_01_BasicInfo_UltraDense';
-// ... (باقي التابات)
-import Tab_286_02_TransactionDetails_Complete from './Tab_286_02_TransactionDetails_Complete';
+import Tab_286_02_TransactionDetails_Complete from './Tab_286_02_TransactionDetails_Complete'; // ✅ التبويب الثاني
 import {
   Tab_286_05_Tasks_UltraDense,
   Tab_286_06_StaffAssignment_UltraDense,
@@ -57,12 +55,11 @@ import Tab_Boundaries_Neighbors_Complete from './Tab_Boundaries_Neighbors_Comple
 import Tab_LandArea_Complete from './Tab_LandArea_Complete';
 import { Skeleton } from '../ui/skeleton'; 
 
-// ... (Schema وتعريف التابات كما هي)
-
+// --- Schema Validation ---
 const basicInfoSchema = z.object({
   title: z.string().min(1, "العنوان مطلوب"),
   clientId: z.string().min(1, "يجب اختيار العميل"),
-  type: z.string().optional(),
+  // type: z.string().optional(), // ⚠️ لم يعد مطلوباً في الخطوة الأولى
   priority: z.string().default('medium'),
   description: z.string().optional(),
 });
@@ -71,7 +68,7 @@ type BasicInfoFormData = NewTransactionData;
 
 const TABS_CONFIG: TabConfig[] = [
   { id: '286-01', number: '286-01', title: 'معلومات أساسية', icon: FileText },
-  { id: '286-02', number: '286-02', title: 'تفاصيل المعاملة', icon: Target },
+  { id: '286-02', number: '286-02', title: 'نوع المعاملة', icon: Target }, // ✅ تعديل العنوان
   { id: '286-03', number: '286-03', title: 'الغرض المختصر', icon: CheckCircle },
   { id: '286-04', number: '286-04', title: 'الغرض التفصيلي', icon: List },
   { id: '286-05', number: '286-05', title: 'المهمات', icon: CheckCircle },
@@ -82,21 +79,16 @@ const TABS_CONFIG: TabConfig[] = [
   { id: '286-10', number: '286-10', title: 'التكاليف', icon: Activity },
   { id: '286-11', number: '286-11', title: 'الموافقات', icon: CheckCircle },
   { id: '286-12', number: '286-12', title: 'الملاحظات', icon: FileText },
-
-  // الأجزاء الخاصة بالمخططات والبيانات الهندسية
   { id: '286-14', number: '286-14', title: 'مسميات وعدد الأدوار', icon: Layers },
-  { id: '286-15', number: '286-15', title: 'الارتدادات من الأربع جهات', icon: Navigation },
-  { id: '286-16', number: '286-16', title: 'المكونات التفصيلية النهائية', icon: Grid },
-  { id: '286-17', number: '286-17', title: 'المكونات حسب الرخصة القديمة', icon: FileText },
-  { id: '286-18', number: '286-18', title: 'المكونات حسب المقترح', icon: Target },
-  { id: '286-19', number: '286-19', title: 'المكونات حسب القائم', icon: Building },
+  { id: '286-15', number: '286-15', title: 'الارتدادات', icon: Navigation },
+  { id: '286-16', number: '286-16', title: 'المكونات النهائية', icon: Grid },
+  { id: '286-17', number: '286-17', title: 'الرخصة القديمة', icon: FileText },
+  { id: '286-18', number: '286-18', title: 'المقترح', icon: Target },
+  { id: '286-19', number: '286-19', title: 'القائم', icon: Building },
   { id: '286-20', number: '286-20', title: 'الحدود والمجاورين', icon: Compass },
   { id: '286-21', number: '286-21', title: 'مساحة الأرض', icon: MapPin },
-
-  // آخر تبويب
   { id: '286-13', number: '286-22', title: 'معاينة', icon: Eye },
 ];
-
 
 const CreateTransaction_Complete_286: React.FC = () => {
   const [activeTab, setActiveTab] = useState('286-01');
@@ -113,7 +105,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
     defaultValues: {
       title: "",
       clientId: "",
-      type: "",
+      type: "", // يبقى فارغاً في البداية
       priority: "medium",
       description: "",
     },
@@ -137,26 +129,24 @@ const CreateTransaction_Complete_286: React.FC = () => {
   useEffect(() => {
     if (existingTransaction) {
       setTransactionData(existingTransaction);
+      // إذا كانت المعاملة تحتوي على نوع، نقوم بتخزينه في الحالة
       if (existingTransaction.transactionType) {
         setSelectedType(existingTransaction.transactionType);
       }
-      // يمكنك تحديث حالة الموظفين والمهام هنا إذا لزم الأمر
     }
   }, [existingTransaction]);
 
-
   // --- Mutations ---
 
-  // 1. إنشاء معاملة جديدة
+  // 1. إنشاء معاملة جديدة (بدون نوع في البداية)
   const createTransactionMutation = useMutation({
     mutationFn: (data: BasicInfoFormData) => createTransaction(data),
     onSuccess: (createdTransaction: Transaction) => {
       setTransactionId(createdTransaction.id);
       setTransactionData(createdTransaction); 
-      toast.success('تم إنشاء مسودة المعاملة بنجاح');
-      // setActiveTab('286-02'); // (اختياري: الانتقال للتاب التالي)
+      toast.success('تم إنشاء مسودة المعاملة بنجاح، انتقل لاختيار النوع');
+      setActiveTab('286-02'); // ✅ الانتقال التلقائي للتاب الثاني لاختيار النوع
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] }); // تحديث القائمة الجانبية
     },
     onError: (error: Error) => {
       toast.error(`فشل الإنشاء: ${error.message}`);
@@ -170,7 +160,6 @@ const CreateTransaction_Complete_286: React.FC = () => {
       setTransactionData(prev => ({ ...prev, ...updatedTransaction }));
       toast.success('تم حفظ التعديلات بنجاح');
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] });
     },
     onError: (error: Error) => {
       toast.error(`فشل التعديل: ${error.message}`);
@@ -179,7 +168,6 @@ const CreateTransaction_Complete_286: React.FC = () => {
 
   // --- Handlers ---
   
-  // ✅ دالة المعالجة الرئيسية للنموذج (الآن تفرق بين الإنشاء والتعديل)
   const onSubmitBasicInfo = (data: BasicInfoFormData) => {
     if (transactionId === 'new') {
       createTransactionMutation.mutate(data);
@@ -188,12 +176,11 @@ const CreateTransaction_Complete_286: React.FC = () => {
     }
   };
 
-  // ✅ دالة اختيار معاملة للتعديل (تمرر للتاب 1)
+  // عند اختيار معاملة من القائمة الجانبية (للتعديل)
   const handleTransactionSelect = (tx: Transaction) => {
     setTransactionId(tx.id);
     setTransactionData(tx);
     
-    // تحديث الفورم بالبيانات المسترجعة
     form.reset({
       title: tx.title,
       clientId: tx.clientId,
@@ -202,27 +189,28 @@ const CreateTransaction_Complete_286: React.FC = () => {
       description: tx.description || "",
     });
 
-    // إذا كان للمعاملة نوع، نحدث الحالة لتعمل التابات الأخرى
-    // (ملاحظة: tx هنا قد لا يحتوي على تفاصيل النوع الكاملة، لذا نعتمد على useQuery أعلاه لجلب التفاصيل)
+    // تحديث نوع المعاملة المختار
+    if (tx.transactionType) {
+        setSelectedType(tx.transactionType);
+    }
     
     toast.info(`تم تحميل المعاملة: ${tx.transactionCode}`);
   };
 
+  // ✅ هذه الدالة يتم استدعاؤها من Tab 02 عندما يختار المستخدم نوعاً
   const handleTypeSelected = (type: TransactionType) => {
-    setSelectedType(type);
-    setTransactionData(prev => ({...prev, type: type.id})); 
-    setActiveTab('286-03');
+    setSelectedType(type); // تحديث الحالة المحلية
+    setTransactionData(prev => ({...prev, transactionTypeId: type.id})); 
+    
+    // تحديث الفورم أيضاً (اختياري)
+    form.setValue('type', type.id); 
+    console.log(type.id);
+
+    toast.success(`تم اختيار النوع: ${type.name}`);
+    // setActiveTab('286-03');
   };
 
-  // ... (باقي الـ Handlers كما هي)
-  const handleBriefPurposeSave = (purposes: any) => {
-    setTransactionData(prev => ({...prev, requestPurposes: purposes})); 
-    setActiveTab('286-04'); 
-  };
-  const handleDetailedPurposeSave = (purposes: any) => {
-    setTransactionData(prev => ({...prev, detailedPurposes: purposes})); 
-    setActiveTab('286-05'); 
-  };
+  // ... (Other Handlers)
   const handleTasksChange = useCallback((tasks: Task[]) => {
     setTransactionData(prev => ({...prev, tasks: tasks}));
   }, []);
@@ -231,7 +219,6 @@ const CreateTransaction_Complete_286: React.FC = () => {
     setAssignedStaff(staff);
     setTransactionData(prev => ({...prev, staff: staff as any})); 
   };
-
 
   // --- Render Content ---
   const renderTabContent = () => {
@@ -244,13 +231,20 @@ const CreateTransaction_Complete_286: React.FC = () => {
             <Tab_286_01_BasicInfo_UltraDense
               form={form} 
               isSaving={createTransactionMutation.isPending || updateTransactionMutation.isPending}
-              onSelectTransaction={handleTransactionSelect} // ✅ تمرير دالة الاختيار
+              onSelectTransaction={handleTransactionSelect} 
             />
           </form>
         );
       
-      // ... (باقي الحالات كما هي تماماً)
-      case '286-02': return <Tab_286_02_TransactionDetails_Complete transactionId={transactionId} />;
+      case '286-02': 
+        return (
+            // ✅ تمرير دالة الاختيار إلى التبويب الثاني
+            <Tab_286_02_TransactionDetails_Complete 
+                transactionId={transactionId} 
+                onTypeSelected={handleTypeSelected} 
+            />
+        );
+
       case '286-03': return <Tab_RequestPurpose_Brief_Complete transactionId={transactionId} readOnly={isDisabled} />;
       case '286-04': return <Tab_RequestPurpose_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
       
@@ -273,7 +267,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
       case '286-12': return <Tab_286_12_Notes transactionId={transactionId} />;
       case '286-13': return <Tab_286_13_Preview_Complex transactionId={transactionId} />;
       
-      // (باقي التابات كما هي)
+      // Engineering Tabs
       case '286-14': return <Tab_FloorsNaming_Complete transactionId={transactionId} readOnly={isDisabled} />;
       case '286-15': return <Tab_Setbacks_AllFloors_Complete transactionId={transactionId} readOnly={isDisabled} />;
       case '286-16': return <Tab_FinalComponents_Detailed_Complete transactionId={transactionId} readOnly={isDisabled} />;
@@ -290,7 +284,7 @@ const CreateTransaction_Complete_286: React.FC = () => {
   return (
     <div className="w-full h-full" dir="rtl">
       <CodeDisplay code="SCR-286" position="top-right" />
-      {/* (Header - نفس الكود السابق) */}
+      {/* Header */}
       <div style={{ position: 'sticky', top: '0', zIndex: 10, background: '#fff', borderBottom: '3px solid #2563eb', padding: '14px 20px' }}>
          <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
