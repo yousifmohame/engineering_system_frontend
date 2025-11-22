@@ -68,7 +68,6 @@ const JobRoles_Complete_903_v10 = lazy(() => import('./screens/JobRoles_Complete
 const OfficeBranches_Complete_905_v1 = lazy(() => import('./screens/OfficeBranches_Complete_905_v1'));
 const DocumentsPrinting_Complete_832 = lazy(() => import('./screens/DocumentsPrinting_Complete_832'));
 const TransactionDocumentsCreation_Complete_833 = lazy(() => import('./screens/TransactionDocumentsCreation_Complete_833'));
-const LicensesManagement_Complete_841 = lazy(() => import('./screens/LicensesManagement_Complete_841'));
 const LicensesManagement_Complete_841_v8 = lazy(() => import('./screens/LicensesManagement_Complete_841_v8'));
 const AnnualBudget_Complete_850 = lazy(() => import('./screens/AnnualBudget_Complete_850'));
 const CommunicationChannels_Complete_856 = lazy(() => import('./screens/CommunicationChannels_Complete_856'));
@@ -94,9 +93,7 @@ const ExceptionsSpecialRequests_Complete_935_v2 = lazy(() => import('./screens/E
 const CashPayments_Complete_936_v1 = lazy(() => import('./screens/CashPayments_Complete_936_v1'));
 const FollowUpAgents_Complete_937_v1 = lazy(() => import('./screens/FollowUpAgents_Complete_937_v1'));
 const FollowUpFees_Complete_938_v1 = lazy(() => import('./screens/FollowUpFees_Complete_938_v1'));
-const RiyadhStreets_Complete_939_v1 = lazy(() => import('./screens/RiyadhStreets_Complete_939_v1'));
 const RiyadhStreets_Complete_939_v2 = lazy(() => import('./screens/RiyadhStreets_Complete_939_v2_ALL_TABS_WORKING'));
-const SectorsDistricts_Complete_948_v1 = lazy(() => import('./screens/SectorsDistricts_Complete_948_v1'));
 const SectorsDistricts_Complete_948_v2 = lazy(() => import('./screens/SectorsDistricts_Complete_948_v2_ULTRA_ENHANCED'));
 const LocationsMap_Complete_949 = lazy(() => import('./screens/LocationsMap_Complete_949'));
 const CommitmentsDeclarations_Complete_940_v8 = lazy(() => import('./screens/CommitmentsDeclarations_Complete_940_v8'));
