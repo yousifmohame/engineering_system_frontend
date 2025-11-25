@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Copy, CheckCircle, X } from 'lucide-react';
 import { copyToClipboard } from './utils/clipboard';
 
+// ... (InputWithCopy and TextAreaWithCopy components remain unchanged) ...
+
+// ... (InputWithCopy Interfaces) ...
 interface InputWithCopyProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   copyable?: boolean;
@@ -9,7 +12,7 @@ interface InputWithCopyProps extends React.InputHTMLAttributes<HTMLInputElement>
   onClear?: () => void;
 }
 
-// ✅ 1. استخدام React.forwardRef لتغليف المكون
+// ✅ InputWithCopy Component
 export const InputWithCopy = React.forwardRef<
   HTMLInputElement,
   InputWithCopyProps
@@ -25,12 +28,11 @@ export const InputWithCopy = React.forwardRef<
       onClear,
       ...props
     },
-    ref // ✅ 2. استقبال الـ ref
+    ref
   ) => {
     const [copied, setCopied] = useState(false);
     const [localValue, setLocalValue] = useState(defaultValue || '');
 
-    // إذا كان هناك onChange، استخدم controlled mode، وإلا استخدم uncontrolled mode
     const isControlled = onChange !== undefined || value !== undefined;
     const currentValue = isControlled ? value : localValue;
 
@@ -48,7 +50,7 @@ export const InputWithCopy = React.forwardRef<
     const handleClear = () => {
       if (isControlled) {
         if (onChange) {
-          // @ts-ignore - Create a synthetic event
+          // @ts-ignore
           onChange({ target: { value: '' } } as any);
         }
         if (onClear) {
@@ -69,7 +71,6 @@ export const InputWithCopy = React.forwardRef<
       }
     };
 
-    // تحديد القيمة النهائية للـ controlled input
     const inputProps = isControlled
       ? { value: value ?? '', onChange: handleChange }
       : { value: localValue, onChange: handleChange };
@@ -99,7 +100,7 @@ export const InputWithCopy = React.forwardRef<
           <input
             {...props}
             {...inputProps}
-            ref={ref} // ✅ 3. تمرير الـ ref إلى عنصر input
+            ref={ref}
             className={`enhanced-input-field ${props.className || ''}`}
             style={{
               ...props.style,
@@ -139,10 +140,9 @@ export const InputWithCopy = React.forwardRef<
     );
   }
 );
-// ✅ 4. إضافة اسم للعرض (جيد للـ debugging)
 InputWithCopy.displayName = 'InputWithCopy';
 
-
+// ✅ TextAreaWithCopy Component
 interface TextAreaWithCopyProps
   extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
@@ -151,7 +151,6 @@ interface TextAreaWithCopyProps
   onClear?: () => void;
 }
 
-// ✅ 1. استخدام React.forwardRef
 export const TextAreaWithCopy = React.forwardRef<
   HTMLTextAreaElement,
   TextAreaWithCopyProps
@@ -167,7 +166,7 @@ export const TextAreaWithCopy = React.forwardRef<
       onClear,
       ...props
     },
-    ref // ✅ 2. استقبال الـ ref
+    ref
   ) => {
     const [copied, setCopied] = useState(false);
     const [localValue, setLocalValue] = useState(defaultValue || '');
@@ -239,7 +238,7 @@ export const TextAreaWithCopy = React.forwardRef<
           <textarea
             {...props}
             {...textareaProps}
-            ref={ref} // ✅ 3. تمرير الـ ref إلى عنصر textarea
+            ref={ref}
             className={`enhanced-textarea-field ${props.className || ''}`}
             style={{
               ...props.style,
@@ -279,11 +278,10 @@ export const TextAreaWithCopy = React.forwardRef<
     );
   }
 );
-// ✅ 4. إضافة اسم للعرض
 TextAreaWithCopy.displayName = 'TextAreaWithCopy';
 
 
-// تعديل توقيع onChange ليدعم SyntheticEvent المزيف
+// ✅ SelectWithCopy Component (MODIFIED)
 type SelectWithCopyChangeHandler = (event: React.ChangeEvent<HTMLSelectElement> | { target: { id: string; value: string } }) => void;
 
 interface SelectWithCopyProps {
@@ -302,7 +300,6 @@ interface SelectWithCopyProps {
   children?: React.ReactNode;
 }
 
-// ✅ 1. استخدام React.forwardRef
 export const SelectWithCopy = React.forwardRef<
   HTMLSelectElement,
   SelectWithCopyProps
@@ -323,7 +320,7 @@ export const SelectWithCopy = React.forwardRef<
       style,
       children,
     },
-    ref // ✅ 2. استقبال الـ ref
+    ref
   ) => {
     const [copied, setCopied] = useState(false);
     const [localValue, setLocalValue] = useState(defaultValue || '');
@@ -334,7 +331,7 @@ export const SelectWithCopy = React.forwardRef<
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       if (isControlled) {
         if (onChange) {
-          onChange(e); // تمرير الحدث الكامل
+          onChange(e);
         }
       } else {
         setLocalValue(e.target.value);
@@ -359,7 +356,6 @@ export const SelectWithCopy = React.forwardRef<
     const handleClear = () => {
       if (isControlled) {
         if (onChange) {
-          // 💡 تمرير SyntheticEvent مزيف مع id و value
           onChange({ target: { id: id || '', value: '' } } as any);
         }
         if (onClear) {
@@ -399,7 +395,7 @@ export const SelectWithCopy = React.forwardRef<
           <select
             id={id}
             {...selectProps}
-            ref={ref} // ✅ 3. تمرير الـ ref إلى عنصر select
+            ref={ref}
             required={required}
             className={`enhanced-select-field ${className || ''}`}
             style={{
@@ -410,10 +406,13 @@ export const SelectWithCopy = React.forwardRef<
               fontSize: '13px',
             }}
           >
+            {/* ✅ التعديل هنا: إضافة خيار فارغ في البداية */}
+            {!children && <option value="">-- اختر --</option>}
+            
             {children ||
               options?.map((option, index) => (
                 <option
-                  key={`${option.value}-${index}`} // Fixed: Use unique key
+                  key={`${option.value}-${index}`}
                   value={option.value}
                   style={{
                     fontSize: '13px',
@@ -455,8 +454,6 @@ export const SelectWithCopy = React.forwardRef<
     );
   }
 );
-// ✅ 4. إضافة اسم للعرض
 SelectWithCopy.displayName = 'SelectWithCopy';
-
 
 export default InputWithCopy;

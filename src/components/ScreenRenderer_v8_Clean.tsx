@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { JSX, Suspense, lazy } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
 import { AlertCircle, RefreshCw } from 'lucide-react';

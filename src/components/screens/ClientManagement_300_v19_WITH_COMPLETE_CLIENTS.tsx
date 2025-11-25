@@ -61,7 +61,8 @@ import {
 import {
   getAllClients,
   createClient,
-  updateClient
+  updateClient,
+  deleteClient, // ✅ تمت إضافة دالة الحذف
 } from '../../api/clientApi';
 import {
   getSystemSettings,
@@ -148,14 +149,13 @@ const TabBasicData: React.FC<{
               id="clientType"
               value={localClient.type}
               onChange={(e: any) => {
-                // التحقق مما إذا كان المتغير هو "حدث" أم "قيمة"
                 const val = e?.target ? e.target.value : e;
                 setLocalClient({ ...localClient, type: val });
               }}
               options={[
                 { value: 'فرد', label: 'فرد' },
                 { value: 'شركة', label: 'شركة' },
-                { value: 'جهة ح-governmentية', label: 'جهة ح-governmentية' } // تأكد من إزالة الأحرف الزائدة إن وجدت
+                { value: 'جهة حكومية', label: 'جهة حكومية' } // تأكد من إزالة الأحرف الزائدة إن وجدت
               ]}
             />
             <SelectWithCopy
@@ -1122,6 +1122,29 @@ const ClientManagement_300_v19: React.FC = () => {
       toast.error(toastTitle, { description: toastDescription });
     }
   };
+
+  // ============================================================================
+  // دالة حذف العميل
+  // ============================================================================
+  const handleDeleteClient = async (clientId: string) => {
+    if (confirm('هل أنت متأكد من حذف هذا العميل؟ لا يمكن التراجع عن هذا الإجراء.')) {
+      try {
+        await deleteClient(clientId);
+        // تحديث القائمة محلياً بحذف العميل منها
+        setClients(prev => prev.filter(c => c.id !== clientId));
+        
+        // إذا كان العميل المحذوف هو العميل المختار حالياً، قم بإلغاء الاختيار
+        if (selectedClient?.id === clientId) {
+          setSelectedClient(null);
+        }
+        
+        toast.success('تم حذف العميل بنجاح');
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err.message || 'فشل حذف العميل');
+      }
+    }
+  };
   // ============================================================================
   // إحصائيات
   // ============================================================================
@@ -1736,18 +1759,20 @@ const ClientManagement_300_v19: React.FC = () => {
           label="نوع العميل *"
           id="clientType"
           value={newClientData.type || ''}
-          onChange={(value) => setNewClientData({ ...newClientData, type: value as any })}
+          // ✅ التصحيح: استخدام e.target.value لأن المكون يرسل حدثاً
+          onChange={(e) => setNewClientData({ ...newClientData, type: e.target.value })}
           options={[
             { value: 'فرد', label: 'فرد' },
             { value: 'شركة', label: 'شركة' },
-            { value: 'جهة ح-governmentية', label: 'جهة ح-governmentية' }
+            { value: 'جهة حكومية', label: 'جهة حكومية' }
           ]}
         />
         <SelectWithCopy
           label="التصنيف *"
           id="clientCategory"
           value={newClientData.category || ''}
-          onChange={(value) => setNewClientData({ ...newClientData, category: value })}
+          // ✅ التصحيح: استخدام e.target.value
+          onChange={(e) => setNewClientData({ ...newClientData, category: e.target.value })}
           options={clientClassifications.filter(c => c.isActive).map(c => ({
             value: c.name,
             label: c.name
@@ -2002,9 +2027,10 @@ const ClientManagement_300_v19: React.FC = () => {
           label="نوع الهوية *"
           id="idType"
           value={newClientData.identification?.idType || ''}
-          onChange={(value) => setNewClientData({
+          // ✅ التصحيح: التعامل مع e كحدث واستخراج القيمة
+          onChange={(e) => setNewClientData({
             ...newClientData,
-            identification: { ...newClientData.identification, idType: value as any } as ClientIdentification
+            identification: { ...newClientData.identification, idType: e.target.value as any } as ClientIdentification
           })}
           options={[
             { value: 'هوية وطنية', label: 'هوية وطنية' },
@@ -2374,7 +2400,7 @@ const ClientManagement_300_v19: React.FC = () => {
                   { value: 'all', label: 'جميع الأنواع' },
                   { value: 'فرد', label: 'فرد' },
                   { value: 'شركة', label: 'شركة' },
-                  { value: 'جهة ح-governmentية', label: 'جهة ح-governmentية' }
+                  { value: 'جهة حكومية', label: 'جهة حكومية' }
                 ]}
               />
               <SelectWithCopy
@@ -2598,9 +2624,22 @@ const ClientManagement_300_v19: React.FC = () => {
                                 size="sm"
                                 variant={client.id === pinnedClientId ? "secondary" : "ghost"}
                                 onClick={() => togglePinnedClient(client.id)}
-                                title={client.id === pinnedClientId ? "إلغاء التثبيت" : "تثبيت كعميل مميز"}
+                                title={client.id === pinnedClientId ? "إلغاء التثبيت" : "تثبيت العميل "}
                               >
                                 <Pin className="h-3 w-3" />
+                              </Button>
+                              {/* ✅✅✅ زر الحذف الجديد ✅✅✅ */}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50" // تنسيق اللون الأحمر
+                                onClick={(e) => {
+                                  e.stopPropagation(); // منع فتح تفاصيل العميل عند الضغط على الحذف
+                                  handleDeleteClient(client.id);
+                                }}
+                                title="حذف العميل"
+                              >
+                                <Trash2 className="h-3 w-3" />
                               </Button>
                             </div>
                           </TableCell>

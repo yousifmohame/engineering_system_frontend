@@ -1,54 +1,36 @@
 /**
- * الشاشة 937 - إدارة المعقبين v1.0 COMPLETE
+ * الشاشة 937 - إدارة المعقبين v2.0 DYNAMIC
  * ========================================================
- * 
- * نظام شامل لإدارة المعقبين (أفراد وكيانات)
- * 
- * المميزات:
- * ✅ تسجيل معقبين أفراد وكيانات
- * ✅ إحصائيات دقيقة لكل معقب
- * ✅ المعاملات التي عمل عليها
- * ✅ المهام المحددة لكل معاملة
- * ✅ الجهات التي تم التعقيب فيها
- * ✅ عدد مرات التعقيب
- * ✅ نسب النجاح والفشل
- * ✅ الملاحظات والإفادات
- * 
- * التابات (12 تاب):
- * 937-01: نظرة عامة
- * 937-02: إضافة معقب
- * 937-03: قائمة المعقبين
- * 937-04: الأفراد
- * 937-05: الكيانات
- * 937-06: إحصائيات الأداء
- * 937-07: المعاملات النشطة
- * 937-08: سجل المهام
- * 937-09: الجهات الحكومية
- * 937-10: التقارير
- * 937-11: التقييمات
- * 937-12: الإعدادات
- * 
- * @version 1.0 COMPLETE
- * @date 28 أكتوبر 2025
+ * * ✅ مربوطة بالـ Backend API بالكامل
+ * ✅ تستخدم React Query لجلب البيانات وتخزينها
+ * ✅ إحصائيات حقيقية ومحسوبة من السيرفر
+ * * @version 2.0 DYNAMIC
+ * @date 2025-11-24
  */
 
 import React, { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { ScrollArea } from '../ui/scroll-area';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Progress } from '../ui/progress';
 import UnifiedTabsSidebar, { TabConfig } from '../UnifiedTabsSidebar';
 import { InputWithCopy, SelectWithCopy, TextAreaWithCopy } from '../InputWithCopy';
 import { EnhancedSwitch } from '../EnhancedSwitch';
+import { toast } from 'sonner';
 import {
   Users, UserPlus, User, Building2, TrendingUp, Activity,
   CheckCircle, XCircle, Clock, FileText, Eye, Edit, Trash2,
   Plus, Search, Filter, Download, Settings, Award, AlertCircle,
-  MapPin, Phone, Mail, Calendar, BarChart3, Target
+  MapPin, BarChart3, Target, Loader2
 } from 'lucide-react';
+
+// استيراد الأنواع والـ API
+import { FollowUpAgent, FollowUpTask, CreateAgentPayload } from '../../types/followUpTypes';
+import { getAllAgents, getAllTasks, createAgent } from '../../api/followUpApi';
 
 // ============================================================
 // تكوين التابات
@@ -70,177 +52,106 @@ const TABS_CONFIG: TabConfig[] = [
 ];
 
 // ============================================================
-// أنواع البيانات
-// ============================================================
-
-interface FollowUpAgent {
-  id: string;
-  type: 'individual' | 'entity';
-  name: string;
-  nationalId?: string;
-  commercialRegister?: string;
-  phone: string;
-  email: string;
-  address: string;
-  specialization: string[];
-  governmentEntities: string[];
-  joinDate: string;
-  status: 'active' | 'inactive' | 'suspended';
-  rating: number;
-  totalTransactions: number;
-  activeTransactions: number;
-  completedTransactions: number;
-  totalTasks: number;
-  successfulTasks: number;
-  failedTasks: number;
-  successRate: number;
-  averageCompletionTime: number; // بالأيام
-  notes: string;
-}
-
-interface FollowUpTask {
-  id: string;
-  agentId: string;
-  agentName: string;
-  transactionId: string;
-  transactionTitle: string;
-  governmentEntity: string;
-  taskDescription: string;
-  startDate: string;
-  targetDate: string;
-  completionDate?: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'failed';
-  attempts: number;
-  successStatus: 'success' | 'failed' | 'pending';
-  notes: string;
-  feedbacks: string[];
-}
-
-// ============================================================
-// البيانات الوهمية - المعقبين (60 معقب)
-// ============================================================
-
-const mockAgents: FollowUpAgent[] = Array.from({ length: 60 }, (_, i) => {
-  const isEntity = i % 3 === 0;
-  const successRate = 60 + Math.random() * 35; // 60-95%
-  const totalTasks = 10 + Math.floor(Math.random() * 90); // 10-100
-  const successfulTasks = Math.floor(totalTasks * (successRate / 100));
-  const failedTasks = totalTasks - successfulTasks;
-  
-  return {
-    id: `AGT-2025-${String(i + 1).padStart(3, '0')}`,
-    type: isEntity ? 'entity' : 'individual',
-    name: isEntity 
-      ? ['مؤسسة التعقيب المتقدم', 'شركة الخدمات الحكومية', 'مكتب الإنجاز السريع'][i % 3]
-      : ['محمد بن أحمد السالم', 'خالد بن عبدالله المطيري', 'فهد بن سعد العتيبي'][i % 3],
-    nationalId: !isEntity ? `1${String(Math.floor(Math.random() * 999999999)).padStart(9, '0')}` : undefined,
-    commercialRegister: isEntity ? `${String(Math.floor(Math.random() * 9999999)).padStart(7, '0')}` : undefined,
-    phone: `05${String(Math.floor(Math.random() * 99999999)).padStart(8, '0')}`,
-    email: `agent${i + 1}@follow-up.sa`,
-    address: ['الرياض، حي النرجس', 'جدة، حي الروضة', 'الدمام، حي الفيصلية'][i % 3],
-    specialization: [
-      ['البلدية', 'الدفاع المدني'],
-      ['الأمانة', 'الكهرباء', 'المياه'],
-      ['البلدية', 'الأمانة', 'النقل']
-    ][i % 3],
-    governmentEntities: [
-      ['البلدية', 'الدفاع المدني', 'الأمانة'],
-      ['الكهرباء', 'المياه', 'الصرف الصحي'],
-      ['النقل', 'البلدية', 'الدفاع المدني']
-    ][i % 3],
-    joinDate: `202${Math.floor(Math.random() * 3) + 3}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-15`,
-    status: i % 15 === 0 ? 'inactive' : i % 20 === 0 ? 'suspended' : 'active',
-    rating: 3 + Math.random() * 2, // 3-5
-    totalTransactions: 5 + Math.floor(Math.random() * 45), // 5-50
-    activeTransactions: Math.floor(Math.random() * 10), // 0-10
-    completedTransactions: 5 + Math.floor(Math.random() * 40),
-    totalTasks,
-    successfulTasks,
-    failedTasks,
-    successRate: parseFloat(successRate.toFixed(1)),
-    averageCompletionTime: 3 + Math.floor(Math.random() * 12), // 3-15 يوم
-    notes: i % 5 === 0 ? 'معقب ممتاز وسريع في الإنجاز' : i % 7 === 0 ? 'يحتاج متابعة' : '',
-  };
-});
-
-// ============================================================
-// البيانات الوهمية - المهام (150 مهمة)
-// ============================================================
-
-const mockTasks: FollowUpTask[] = Array.from({ length: 150 }, (_, i) => {
-  const agent = mockAgents[i % mockAgents.length];
-  const status: FollowUpTask['status'] = ['pending', 'in-progress', 'completed', 'failed'][Math.floor(Math.random() * 4)] as any;
-  const successStatus: FollowUpTask['successStatus'] = 
-    status === 'completed' ? 'success' : 
-    status === 'failed' ? 'failed' : 'pending';
-  
-  return {
-    id: `TASK-2025-${String(i + 1).padStart(4, '0')}`,
-    agentId: agent.id,
-    agentName: agent.name,
-    transactionId: `2510${String((i % 50) + 1).padStart(3, '0')}`,
-    transactionTitle: ['رخصة بناء فيلا', 'تجديد رخصة محل', 'فحص مخطط'][i % 3],
-    governmentEntity: ['البلدية', 'الدفاع المدني', 'الأمانة', 'الكهرباء', 'المياه'][i % 5],
-    taskDescription: [
-      'الحصول على موافقة البلدية',
-      'استخراج شهادة الدفاع المدني',
-      'تجديد الرخصة',
-      'متابعة الاعتراض',
-      'استلام الموافقة النهائية'
-    ][i % 5],
-    startDate: `2025-${String((i % 12) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
-    targetDate: `2025-${String(((i % 12) + 1) % 12 + 1).padStart(2, '0')}-${String(((i % 28) + 10) % 28 + 1).padStart(2, '0')}`,
-    completionDate: status === 'completed' || status === 'failed' 
-      ? `2025-${String(((i % 12) + 1) % 12 + 1).padStart(2, '0')}-${String(((i % 28) + 5) % 28 + 1).padStart(2, '0')}`
-      : undefined,
-    status,
-    attempts: 1 + Math.floor(Math.random() * 5),
-    successStatus,
-    notes: i % 3 === 0 ? 'تمت الموافقة بنجاح' : i % 3 === 1 ? 'يوجد ملاحظات بسيطة' : 'تحت المعالجة',
-    feedbacks: [
-      'تم استلام الطلب',
-      i % 2 === 0 ? 'تمت المراجعة الأولية' : '',
-      status === 'completed' ? 'تمت الموافقة النهائية' : ''
-    ].filter(Boolean),
-  };
-});
-
-// ============================================================
 // المكون الرئيسي
 // ============================================================
 
 const FollowUpAgents_Complete_937_v1: React.FC = () => {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('937-01');
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<FollowUpAgent | null>(null);
-  const [showAddDialog, setShowAddDialog] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'individual' | 'entity'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'suspended'>('all');
 
-  // بيانات النموذج
-  const [formData, setFormData] = useState({
-    type: 'individual' as 'individual' | 'entity',
+  // ============================================================
+  // 1. جلب البيانات (Queries)
+  // ============================================================
+
+  const { data: agents = [], isLoading: isLoadingAgents, error: agentsError } = useQuery({
+    queryKey: ['followUpAgents'],
+    queryFn: () => getAllAgents(),
+  });
+
+  const { data: tasks = [], isLoading: isLoadingTasks } = useQuery({
+    queryKey: ['followUpTasks'],
+    queryFn: getAllTasks,
+  });
+
+  // ============================================================
+  // 2. إدارة العمليات (Mutations)
+  // ============================================================
+
+  // بيانات نموذج إضافة معقب
+  const [formData, setFormData] = useState<CreateAgentPayload>({
+    type: 'individual',
     name: '',
     nationalId: '',
     commercialRegister: '',
     phone: '',
     email: '',
     address: '',
-    specialization: [] as string[],
-    governmentEntities: [] as string[],
+    specialization: [],
+    governmentEntities: [],
     notes: '',
   });
 
-  // حساب الإحصائيات العامة
+  const createAgentMutation = useMutation({
+    mutationFn: createAgent,
+    onSuccess: () => {
+      toast.success('تم إضافة المعقب بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['followUpAgents'] });
+      // إعادة تعيين النموذج
+      setFormData({
+        type: 'individual',
+        name: '',
+        nationalId: '',
+        commercialRegister: '',
+        phone: '',
+        email: '',
+        address: '',
+        specialization: [],
+        governmentEntities: [],
+        notes: '',
+      });
+      setActiveTab('937-03'); // الانتقال لقائمة المعقبين
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'حدث خطأ أثناء الإضافة');
+    }
+  });
+
+  const handleCreateSubmit = () => {
+    if (!formData.name || !formData.phone) {
+      toast.error('يرجى ملء الحقول الإلزامية (الاسم والجوال)');
+      return;
+    }
+    createAgentMutation.mutate(formData);
+  };
+
+  // ============================================================
+  // 3. الحسابات والفلترة (Memoized)
+  // ============================================================
+
+  // حساب الإحصائيات العامة بناءً على البيانات القادمة من الـ API
   const statistics = useMemo(() => {
-    const total = mockAgents.length;
-    const individuals = mockAgents.filter(a => a.type === 'individual').length;
-    const entities = mockAgents.filter(a => a.type === 'entity').length;
-    const active = mockAgents.filter(a => a.status === 'active').length;
-    const avgSuccessRate = mockAgents.reduce((sum, a) => sum + a.successRate, 0) / total;
-    const totalTasks = mockAgents.reduce((sum, a) => sum + a.totalTasks, 0);
-    const successfulTasks = mockAgents.reduce((sum, a) => sum + a.successfulTasks, 0);
-    const activeTasks = mockTasks.filter(t => t.status === 'in-progress' || t.status === 'pending').length;
+    if (!agents.length) return {
+      total: 0, individuals: 0, entities: 0, active: 0, avgSuccessRate: "0",
+      totalTasks: 0, successfulTasks: 0, activeTasks: 0
+    };
+
+    const total = agents.length;
+    const individuals = agents.filter(a => a.type === 'individual').length;
+    const entities = agents.filter(a => a.type === 'entity').length;
+    const active = agents.filter(a => a.status === 'active').length;
+    
+    // حساب المتوسط من البيانات المحسوبة في الباك إند
+    const avgSuccessRate = agents.reduce((sum, a) => sum + (a.successRate || 0), 0) / (total || 1);
+    
+    const totalTasks = agents.reduce((sum, a) => sum + (a.totalTasks || 0), 0);
+    const successfulTasks = agents.reduce((sum, a) => sum + (a.successfulTasks || 0), 0);
+    
+    // المهام النشطة يمكن حسابها من قائمة المهام الكلية
+    const activeTasks = tasks.filter(t => t.status === 'in-progress' || t.status === 'pending').length;
 
     return {
       total,
@@ -252,233 +163,105 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
       successfulTasks,
       activeTasks,
     };
-  }, []);
+  }, [agents, tasks]);
 
-  // فلترة المعقبين
+  // فلترة المعقبين للعرض
   const filteredAgents = useMemo(() => {
-    return mockAgents.filter(agent => {
+    return agents.filter(agent => {
       const typeMatch = filterType === 'all' || agent.type === filterType;
       const statusMatch = filterStatus === 'all' || agent.status === filterStatus;
       return typeMatch && statusMatch;
     });
-  }, [filterType, filterStatus]);
+  }, [agents, filterType, filterStatus]);
 
   // ============================================================
-  // عرض محتوى التابات
+  // 4. مكونات العرض (Render Functions)
   // ============================================================
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case '937-01':
-        return renderTab01_Overview();
-      case '937-02':
-        return renderTab02_AddAgent();
-      case '937-03':
-        return renderTab03_AllAgents();
-      case '937-04':
-        return renderTab04_Individuals();
-      case '937-05':
-        return renderTab05_Entities();
-      case '937-06':
-        return renderTab06_Performance();
-      case '937-07':
-        return renderTab07_ActiveTransactions();
-      case '937-08':
-        return renderTab08_TasksLog();
-      case '937-09':
-        return renderTab09_GovernmentEntities();
-      case '937-10':
-        return renderTab10_Reports();
-      case '937-11':
-        return renderTab11_Ratings();
-      case '937-12':
-        return renderTab12_Settings();
-      default:
-        return <div>التاب غير موجود</div>;
-    }
-  };
+  if (isLoadingAgents || isLoadingTasks) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium">جاري تحميل بيانات المعقبين...</p>
+        </div>
+      </div>
+    );
+  }
 
-  // ============================================================
-  // التاب 937-01: نظرة عامة
-  // ============================================================
+  if (agentsError) {
+    return (
+      <div className="flex items-center justify-center h-screen text-red-600">
+        <p>فشل في تحميل البيانات. يرجى التأكد من تشغيل الخادم.</p>
+      </div>
+    );
+  }
 
+  // --- 937-01: نظرة عامة ---
   const renderTab01_Overview = () => (
     <div className="space-y-4">
-      {/* البطاقات الإحصائية */}
       <div className="grid grid-cols-8 gap-3">
-        <Card style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', border: '2px solid #93c5fd' }}>
-          <CardContent className="p-3 text-center">
-            <Users className="h-5 w-5 mx-auto text-blue-600 mb-1" />
-            <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{statistics.total}</p>
-            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي المعقبين</p>
-          </CardContent>
-        </Card>
-
-        <Card style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', border: '2px solid #a5b4fc' }}>
-          <CardContent className="p-3 text-center">
-            <User className="h-5 w-5 mx-auto text-indigo-600 mb-1" />
-            <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{statistics.individuals}</p>
-            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>أفراد</p>
-          </CardContent>
-        </Card>
-
-        <Card style={{ background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)', border: '2px solid #d8b4fe' }}>
-          <CardContent className="p-3 text-center">
-            <Building2 className="h-5 w-5 mx-auto text-purple-600 mb-1" />
-            <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{statistics.entities}</p>
-            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>كيانات</p>
-          </CardContent>
-        </Card>
-
-        <Card style={{ background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)', border: '2px solid #86efac' }}>
-          <CardContent className="p-3 text-center">
-            <CheckCircle className="h-5 w-5 mx-auto text-green-600 mb-1" />
-            <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{statistics.active}</p>
-            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>نشط</p>
-          </CardContent>
-        </Card>
-
-        <Card style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '2px solid #fcd34d' }}>
-          <CardContent className="p-3 text-center">
-            <TrendingUp className="h-5 w-5 mx-auto text-yellow-600 mb-1" />
-            <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{statistics.avgSuccessRate}%</p>
-            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>متوسط النجاح</p>
-          </CardContent>
-        </Card>
-
-        <Card style={{ background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)', border: '2px solid #fca5a5' }}>
-          <CardContent className="p-3 text-center">
-            <FileText className="h-5 w-5 mx-auto text-red-600 mb-1" />
-            <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{statistics.totalTasks}</p>
-            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي المهام</p>
-          </CardContent>
-        </Card>
-
-        <Card style={{ background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)', border: '2px solid #f9a8d4' }}>
-          <CardContent className="p-3 text-center">
-            <Target className="h-5 w-5 mx-auto text-pink-600 mb-1" />
-            <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{statistics.successfulTasks}</p>
-            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>مهام ناجحة</p>
-          </CardContent>
-        </Card>
-
-        <Card style={{ background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)', border: '2px solid #fca5a5' }}>
-          <CardContent className="p-3 text-center">
-            <Activity className="h-5 w-5 mx-auto text-orange-600 mb-1" />
-            <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{statistics.activeTasks}</p>
-            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>مهام نشطة</p>
-          </CardContent>
-        </Card>
+        {[
+          { label: 'إجمالي المعقبين', value: statistics.total, icon: Users, color: 'blue' },
+          { label: 'أفراد', value: statistics.individuals, icon: User, color: 'indigo' },
+          { label: 'كيانات', value: statistics.entities, icon: Building2, color: 'purple' },
+          { label: 'نشط', value: statistics.active, icon: CheckCircle, color: 'green' },
+          { label: 'متوسط النجاح', value: `${statistics.avgSuccessRate}%`, icon: TrendingUp, color: 'yellow' },
+          { label: 'إجمالي المهام', value: statistics.totalTasks, icon: FileText, color: 'red' },
+          { label: 'مهام ناجحة', value: statistics.successfulTasks, icon: Target, color: 'pink' },
+          { label: 'مهام نشطة', value: statistics.activeTasks, icon: Activity, color: 'orange' },
+        ].map((stat, idx) => (
+          <Card key={idx} style={{ background: `var(--${stat.color}-50)`, borderColor: `var(--${stat.color}-200)` }} className={`bg-${stat.color}-50 border-${stat.color}-200 border-2`}>
+            <CardContent className="p-3 text-center">
+              <stat.icon className={`h-5 w-5 mx-auto text-${stat.color}-600 mb-1`} />
+              <p className="text-lg font-bold font-tajawal">{stat.value}</p>
+              <p className="text-xs text-gray-600 font-tajawal">{stat.label}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* جدول أفضل المعقبين */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>أفضل 20 معقب (حسب نسبة النجاح)</CardTitle>
+          <CardTitle className="font-tajawal">أفضل المعقبين أداءً</CardTitle>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[500px]">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الرمز</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>النوع</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الاسم</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التخصص</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>النجاح</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الفشل</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>نسبة النجاح</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التقييم</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجراءات</TableHead>
+                  <TableHead className="text-right font-tajawal">#</TableHead>
+                  <TableHead className="text-right font-tajawal">الاسم</TableHead>
+                  <TableHead className="text-right font-tajawal">النوع</TableHead>
+                  <TableHead className="text-right font-tajawal">إجمالي المهام</TableHead>
+                  <TableHead className="text-right font-tajawal">نسبة النجاح</TableHead>
+                  <TableHead className="text-right font-tajawal">التقييم</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {[...mockAgents]
-                  .sort((a, b) => b.successRate - a.successRate)
-                  .slice(0, 20)
+                {[...agents]
+                  .sort((a, b) => (b.successRate || 0) - (a.successRate || 0))
+                  .slice(0, 10)
                   .map((agent, index) => (
                     <TableRow key={agent.id}>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
+                      <TableCell className="text-right font-tajawal">{index + 1}</TableCell>
+                      <TableCell className="text-right font-tajawal font-medium">{agent.name}</TableCell>
                       <TableCell className="text-right">
-                        <code className="text-xs bg-blue-50 px-2 py-1 rounded">{agent.id}</code>
+                        <Badge variant="outline">{agent.type === 'individual' ? 'فرد' : 'كيان'}</Badge>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Badge
-                          style={{
-                            background: agent.type === 'individual' ? '#e0e7ff' : '#f3e8ff',
-                            color: agent.type === 'individual' ? '#4338ca' : '#7c3aed',
-                            fontFamily: 'Tajawal, sans-serif'
-                          }}
-                        >
-                          {agent.type === 'individual' ? 'فرد' : 'كيان'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                        {agent.name}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex flex-wrap gap-1">
-                          {agent.specialization.slice(0, 2).map((spec, i) => (
-                            <Badge key={i} variant="outline" style={{ fontSize: '9px', fontFamily: 'Tajawal, sans-serif' }}>
-                              {spec}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {agent.totalTasks}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                          {agent.successfulTasks}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-bold text-red-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                          {agent.failedTasks}
-                        </span>
-                      </TableCell>
+                      <TableCell className="text-right font-tajawal">{agent.totalTasks || 0}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center gap-2">
-                          <Progress value={agent.successRate} className="h-2 w-16" />
-                          <span className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                            {agent.successRate}%
-                          </span>
+                          <Progress value={agent.successRate || 0} className="h-2 w-16" />
+                          <span className="text-xs font-bold">{agent.successRate}%</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center gap-1">
-                          <Award className="h-3 w-3 text-yellow-500" />
-                          <span style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                            {agent.rating.toFixed(1)}
-                          </span>
+                        <div className="flex items-center gap-1 text-yellow-500">
+                          <Award className="h-3 w-3" />
+                          <span className="text-xs text-black">{agent.rating.toFixed(1)}</span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge
-                          style={{
-                            background: agent.status === 'active' ? '#dcfce7' : agent.status === 'inactive' ? '#fef3c7' : '#fee2e2',
-                            color: agent.status === 'active' ? '#166534' : agent.status === 'inactive' ? '#854d0e' : '#991b1b',
-                            fontFamily: 'Tajawal, sans-serif'
-                          }}
-                        >
-                          {agent.status === 'active' ? 'نشط' : agent.status === 'inactive' ? 'غير نشط' : 'موقوف'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setSelectedAgent(agent);
-                            setShowDetailsDialog(true);
-                          }}
-                        >
-                          <Eye className="h-3 w-3" />
-                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -490,164 +273,148 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
     </div>
   );
 
-  // ============================================================
-  // التاب 937-02: إضافة معقب
-  // ============================================================
-
+  // --- 937-02: إضافة معقب ---
   const renderTab02_AddAgent = () => (
-    <div className="space-y-4">
+    <div className="max-w-4xl mx-auto">
       <Card>
         <CardHeader>
-          <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة معقب جديد</CardTitle>
-          <CardDescription style={{ fontFamily: 'Tajawal, sans-serif' }}>
-            تسجيل معقب جديد (فرد أو كيان)
-          </CardDescription>
+          <CardTitle className="font-tajawal">إضافة معقب جديد</CardTitle>
+          <CardDescription className="font-tajawal">تسجيل بيانات معقب فرد أو مؤسسة في النظام</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* نوع المعقب */}
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-bold mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>نوع المعقب</h3>
-              <SelectWithCopy
-                label="النوع *"
-                id="type"
-                value={formData.type}
-                onChange={(value) => setFormData({ ...formData, type: value as any })}
-                options={[
-                  { value: 'individual', label: 'فرد' },
-                  { value: 'entity', label: 'كيان (مؤسسة/شركة)' }
-                ]}
-                copyable={true}
-                clearable={true}
-              />
-            </div>
-
-            {/* المعلومات الأساسية */}
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-bold mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعلومات الأساسية</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <InputWithCopy
-                  label="الاسم *"
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder={formData.type === 'individual' ? 'محمد بن أحمد السالم' : 'مؤسسة التعقيب المتقدم'}
-                  required
-                  copyable={true}
-                  clearable={true}
-                />
-                {formData.type === 'individual' ? (
-                  <InputWithCopy
-                    label="رقم الهوية *"
-                    id="nationalId"
-                    value={formData.nationalId}
-                    onChange={(e) => setFormData({ ...formData, nationalId: e.target.value })}
-                    placeholder="1234567890"
-                    required
-                    copyable={true}
-                    clearable={true}
-                  />
-                ) : (
-                  <InputWithCopy
-                    label="السجل التجاري *"
-                    id="commercialRegister"
-                    value={formData.commercialRegister}
-                    onChange={(e) => setFormData({ ...formData, commercialRegister: e.target.value })}
-                    placeholder="1234567"
-                    required
-                    copyable={true}
-                    clearable={true}
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* معلومات الاتصال */}
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h3 className="font-bold mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>معلومات الاتصال</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <InputWithCopy
-                  label="الجوال *"
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="0501234567"
-                  required
-                  copyable={true}
-                  clearable={true}
-                />
-                <InputWithCopy
-                  label="البريد الإلكتروني"
-                  id="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="agent@example.com"
-                  copyable={true}
-                  clearable={true}
-                />
-                <InputWithCopy
-                  label="العنوان *"
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="الرياض، حي النرجس"
-                  required
-                  copyable={true}
-                  clearable={true}
-                />
-              </div>
-            </div>
-
-            {/* التخصصات */}
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <h3 className="font-bold mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>التخصصات والجهات</h3>
-              <p className="text-sm text-gray-600 mb-3" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                حدد الجهات الحكومية التي يمكن للمعقب العمل معها
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {['البلدية', 'الدفاع المدني', 'الأمانة', 'الكهرباء', 'المياه', 'الصرف الصحي', 'النقل', 'الزراعة'].map(entity => (
-                  <div key={entity} className="flex items-center gap-2 bg-white p-2 rounded">
-                    <input type="checkbox" id={entity} className="w-4 h-4" />
-                    <label htmlFor={entity} style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '12px' }}>
-                      {entity}
-                    </label>
+        <CardContent className="space-y-6">
+          {/* نوع المعقب */}
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-gray-700 font-tajawal">نوع المعقب</label>
+            <div className="flex gap-4">
+              <div 
+                className={`flex-1 p-4 border rounded-lg cursor-pointer transition-all ${formData.type === 'individual' ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'hover:bg-gray-50'}`}
+                onClick={() => setFormData({ ...formData, type: 'individual' })}
+              >
+                <div className="flex items-center gap-3">
+                  <User className={`h-6 w-6 ${formData.type === 'individual' ? 'text-blue-600' : 'text-gray-400'}`} />
+                  <div>
+                    <p className="font-bold font-tajawal">فرد</p>
+                    <p className="text-xs text-gray-500 font-tajawal">معقب مستقل برقم هوية</p>
                   </div>
-                ))}
+                </div>
+              </div>
+              <div 
+                className={`flex-1 p-4 border rounded-lg cursor-pointer transition-all ${formData.type === 'entity' ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'hover:bg-gray-50'}`}
+                onClick={() => setFormData({ ...formData, type: 'entity' })}
+              >
+                <div className="flex items-center gap-3">
+                  <Building2 className={`h-6 w-6 ${formData.type === 'entity' ? 'text-purple-600' : 'text-gray-400'}`} />
+                  <div>
+                    <p className="font-bold font-tajawal">كيان / مؤسسة</p>
+                    <p className="text-xs text-gray-500 font-tajawal">مكتب تعقيب بسجل تجاري</p>
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
 
-            {/* ملاحظات */}
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <TextAreaWithCopy
-                label="ملاحظات"
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                rows={3}
-                placeholder="أي ملاحظات إضافية..."
-                copyable={true}
-                clearable={true}
+          <div className="grid grid-cols-2 gap-4">
+            <InputWithCopy
+              label="الاسم الكامل *"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder={formData.type === 'individual' ? "مثال: محمد عبدالله" : "مثال: مؤسسة الإنجاز السريع"}
+            />
+            
+            {formData.type === 'individual' ? (
+              <InputWithCopy
+                label="رقم الهوية الوطنية"
+                value={formData.nationalId || ''}
+                onChange={(e) => setFormData({ ...formData, nationalId: e.target.value })}
+                placeholder="10xxxxxxxx"
               />
-            </div>
+            ) : (
+              <InputWithCopy
+                label="رقم السجل التجاري"
+                value={formData.commercialRegister || ''}
+                onChange={(e) => setFormData({ ...formData, commercialRegister: e.target.value })}
+                placeholder="40xxxxxxxx"
+              />
+            )}
 
-            {/* الأزرار */}
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline">إلغاء</Button>
-              <Button>
-                <UserPlus className="h-4 w-4 ml-2" />
-                حفظ المعقب
-              </Button>
+            <InputWithCopy
+              label="رقم الجوال *"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              placeholder="05xxxxxxxx"
+            />
+
+            <InputWithCopy
+              label="البريد الإلكتروني"
+              value={formData.email || ''}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="email@example.com"
+            />
+          </div>
+
+          <InputWithCopy
+            label="العنوان"
+            value={formData.address || ''}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            placeholder="المدينة - الحي"
+          />
+
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-700 font-tajawal">التخصصات / الجهات</label>
+            <div className="grid grid-cols-3 gap-2">
+              {['البلدية', 'الدفاع المدني', 'شركة الكهرباء', 'شركة المياه', 'الأمانة', 'كتابة العدل'].map(entity => (
+                <div key={entity} className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.governmentEntities?.includes(entity)}
+                    onChange={(e) => {
+                      const entities = formData.governmentEntities || [];
+                      if (e.target.checked) {
+                        setFormData({ ...formData, governmentEntities: [...entities, entity] });
+                      } else {
+                        setFormData({ ...formData, governmentEntities: entities.filter(i => i !== entity) });
+                      }
+                    }}
+                    className="rounded border-gray-300 text-blue-600"
+                  />
+                  <span className="text-sm font-tajawal">{entity}</span>
+                </div>
+              ))}
             </div>
+          </div>
+
+          <TextAreaWithCopy
+            label="ملاحظات"
+            value={formData.notes || ''}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            rows={3}
+          />
+
+          <div className="flex justify-end pt-4 border-t">
+            <Button 
+              onClick={handleCreateSubmit} 
+              disabled={createAgentMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {createAgentMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  جاري الحفظ...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  حفظ بيانات المعقب
+                </>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>
     </div>
   );
 
-  // ============================================================
-  // التاب 937-03: قائمة المعقبين
-  // ============================================================
-
+  // --- 937-03: قائمة المعقبين ---
   const renderTab03_AllAgents = () => (
     <div className="space-y-4">
       {/* الفلاتر */}
@@ -658,28 +425,24 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
               label="النوع"
               id="filterType"
               value={filterType}
-              onChange={(value) => setFilterType(value as any)}
+              onChange={(e) => setFilterType(e.target.value as any)}
               options={[
                 { value: 'all', label: 'الكل' },
                 { value: 'individual', label: 'أفراد' },
                 { value: 'entity', label: 'كيانات' }
               ]}
-              copyable={false}
-              clearable={false}
             />
             <SelectWithCopy
               label="الحالة"
               id="filterStatus"
               value={filterStatus}
-              onChange={(value) => setFilterStatus(value as any)}
+              onChange={(e) => setFilterStatus(e.target.value as any)}
               options={[
                 { value: 'all', label: 'الكل' },
                 { value: 'active', label: 'نشط' },
                 { value: 'inactive', label: 'غير نشط' },
                 { value: 'suspended', label: 'موقوف' }
               ]}
-              copyable={false}
-              clearable={false}
             />
             <div className="col-span-2 flex items-end">
               <Button className="w-full">
@@ -695,10 +458,10 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>
+            <CardTitle className="font-tajawal">
               قائمة المعقبين ({filteredAgents.length})
             </CardTitle>
-            <Button size="sm" onClick={() => setShowAddDialog(true)}>
+            <Button size="sm" onClick={() => setActiveTab('937-02')}>
               <Plus className="h-3 w-3 ml-1" />
               إضافة معقب
             </Button>
@@ -709,91 +472,45 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الرمز</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>النوع</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الاسم</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الجوال</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التخصص</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعاملات</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>نسبة النجاح</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التقييم</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجراءات</TableHead>
+                  <TableHead className="text-right font-tajawal">#</TableHead>
+                  <TableHead className="text-right font-tajawal">الاسم</TableHead>
+                  <TableHead className="text-right font-tajawal">النوع</TableHead>
+                  <TableHead className="text-right font-tajawal">الجوال</TableHead>
+                  <TableHead className="text-right font-tajawal">المهام</TableHead>
+                  <TableHead className="text-right font-tajawal">نسبة النجاح</TableHead>
+                  <TableHead className="text-right font-tajawal">الحالة</TableHead>
+                  <TableHead className="text-right font-tajawal">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredAgents.map((agent, index) => (
                   <TableRow key={agent.id}>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
+                    <TableCell className="text-right font-tajawal">{index + 1}</TableCell>
+                    <TableCell className="text-right font-tajawal font-medium">{agent.name}</TableCell>
                     <TableCell className="text-right">
-                      <code className="text-xs bg-blue-50 px-2 py-1 rounded">{agent.id}</code>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge
-                        style={{
-                          background: agent.type === 'individual' ? '#e0e7ff' : '#f3e8ff',
-                          color: agent.type === 'individual' ? '#4338ca' : '#7c3aed',
-                          fontFamily: 'Tajawal, sans-serif'
-                        }}
-                      >
+                      <Badge variant={agent.type === 'individual' ? 'secondary' : 'default'} className="font-tajawal">
                         {agent.type === 'individual' ? 'فرد' : 'كيان'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                      {agent.name}
-                    </TableCell>
-                    <TableCell className="text-right" style={{ fontFamily: 'Courier New', fontSize: '11px' }}>
-                      {agent.phone}
-                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">{agent.phone}</TableCell>
+                    <TableCell className="text-right font-tajawal">{agent.totalTasks || 0}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex flex-wrap gap-1">
-                        {agent.specialization.slice(0, 2).map((spec, i) => (
-                          <Badge key={i} variant="outline" style={{ fontSize: '9px', fontFamily: 'Tajawal, sans-serif' }}>
-                            {spec}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                      {agent.totalTransactions}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {agent.successRate}%
+                      <span className={`font-bold ${agent.successRate && agent.successRate > 80 ? 'text-green-600' : 'text-orange-600'}`}>
+                        {agent.successRate || 0}%
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center gap-1">
-                        <Award className="h-3 w-3 text-yellow-500" />
-                        <span style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                          {agent.rating.toFixed(1)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge
-                        style={{
-                          background: agent.status === 'active' ? '#dcfce7' : agent.status === 'inactive' ? '#fef3c7' : '#fee2e2',
-                          color: agent.status === 'active' ? '#166534' : agent.status === 'inactive' ? '#854d0e' : '#991b1b',
-                          fontFamily: 'Tajawal, sans-serif'
-                        }}
-                      >
-                        {agent.status === 'active' ? 'نشط' : agent.status === 'inactive' ? 'غير نشط' : 'موقوف'}
+                      <Badge className={agent.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                        {agent.status === 'active' ? 'نشط' : 'غير نشط'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => {
-                          setSelectedAgent(agent);
-                          setShowDetailsDialog(true);
-                        }}>
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost">
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        setSelectedAgent(agent);
+                        setShowDetailsDialog(true);
+                      }}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -805,51 +522,51 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
     </div>
   );
 
-  // ============================================================
-  // التاب 937-04: الأفراد
-  // ============================================================
-
+  // --- 937-04: الأفراد ---
   const renderTab04_Individuals = () => {
-    const individuals = mockAgents.filter(a => a.type === 'individual');
+    const individuals = agents.filter(a => a.type === 'individual');
     const totalIndividuals = individuals.length;
     const activeIndividuals = individuals.filter(a => a.status === 'active').length;
-    const avgSuccessRate = individuals.reduce((sum, a) => sum + a.successRate, 0) / totalIndividuals;
+    // حساب متوسط النجاح
+    const avgSuccessRate = totalIndividuals > 0 
+      ? individuals.reduce((sum, a) => sum + (a.successRate || 0), 0) / totalIndividuals 
+      : 0;
 
     return (
       <div className="space-y-4">
         {/* إحصائيات الأفراد */}
         <div className="grid grid-cols-4 gap-3">
-          <Card style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', border: '2px solid #a5b4fc' }}>
+          <Card className="bg-indigo-50 border-indigo-200">
             <CardContent className="p-3 text-center">
               <User className="h-5 w-5 mx-auto text-indigo-600 mb-1" />
-              <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{totalIndividuals}</p>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي الأفراد</p>
+              <p className="text-lg font-bold font-tajawal">{totalIndividuals}</p>
+              <p className="text-xs text-gray-600 font-tajawal">إجمالي الأفراد</p>
             </CardContent>
           </Card>
 
-          <Card style={{ background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)', border: '2px solid #86efac' }}>
+          <Card className="bg-green-50 border-green-200">
             <CardContent className="p-3 text-center">
               <CheckCircle className="h-5 w-5 mx-auto text-green-600 mb-1" />
-              <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{activeIndividuals}</p>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>نشط</p>
+              <p className="text-lg font-bold font-tajawal">{activeIndividuals}</p>
+              <p className="text-xs text-gray-600 font-tajawal">نشط</p>
             </CardContent>
           </Card>
 
-          <Card style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '2px solid #fcd34d' }}>
+          <Card className="bg-yellow-50 border-yellow-200">
             <CardContent className="p-3 text-center">
               <TrendingUp className="h-5 w-5 mx-auto text-yellow-600 mb-1" />
-              <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{avgSuccessRate.toFixed(1)}%</p>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>متوسط النجاح</p>
+              <p className="text-lg font-bold font-tajawal">{avgSuccessRate.toFixed(1)}%</p>
+              <p className="text-xs text-gray-600 font-tajawal">متوسط النجاح</p>
             </CardContent>
           </Card>
 
-          <Card style={{ background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)', border: '2px solid #f9a8d4' }}>
+          <Card className="bg-pink-50 border-pink-200">
             <CardContent className="p-3 text-center">
               <FileText className="h-5 w-5 mx-auto text-pink-600 mb-1" />
-              <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                {individuals.reduce((sum, a) => sum + a.totalTasks, 0)}
+              <p className="text-lg font-bold font-tajawal">
+                {individuals.reduce((sum, a) => sum + (a.totalTasks || 0), 0)}
               </p>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي المهام</p>
+              <p className="text-xs text-gray-600 font-tajawal">إجمالي المهام</p>
             </CardContent>
           </Card>
         </div>
@@ -857,78 +574,46 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
         {/* جدول الأفراد */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>المعقبون الأفراد ({totalIndividuals})</CardTitle>
+            <CardTitle className="font-tajawal">المعقبون الأفراد ({totalIndividuals})</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[550px]">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الرمز</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الاسم</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>رقم الهوية</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الجوال</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التخصص</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>نسبة النجاح</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التقييم</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
+                    <TableHead className="text-right font-tajawal">#</TableHead>
+                    <TableHead className="text-right font-tajawal">الاسم</TableHead>
+                    <TableHead className="text-right font-tajawal">رقم الهوية</TableHead>
+                    <TableHead className="text-right font-tajawal">الجوال</TableHead>
+                    <TableHead className="text-right font-tajawal">المهام</TableHead>
+                    <TableHead className="text-right font-tajawal">نسبة النجاح</TableHead>
+                    <TableHead className="text-right font-tajawal">التقييم</TableHead>
+                    <TableHead className="text-right font-tajawal">الحالة</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {individuals.map((agent, index) => (
                     <TableRow key={agent.id}>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
-                      <TableCell className="text-right">
-                        <code className="text-xs bg-indigo-50 px-2 py-1 rounded">{agent.id}</code>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                        {agent.name}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <code className="text-xs">{agent.nationalId}</code>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Courier New', fontSize: '11px' }}>
-                        {agent.phone}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex flex-wrap gap-1">
-                          {agent.specialization.slice(0, 2).map((spec, i) => (
-                            <Badge key={i} variant="outline" style={{ fontSize: '9px', fontFamily: 'Tajawal, sans-serif' }}>
-                              {spec}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {agent.totalTasks}
-                      </TableCell>
+                      <TableCell className="text-right font-tajawal">{index + 1}</TableCell>
+                      <TableCell className="text-right font-tajawal font-medium">{agent.name}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{agent.nationalId || '-'}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{agent.phone}</TableCell>
+                      <TableCell className="text-right font-tajawal">{agent.totalTasks || 0}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center gap-2">
-                          <Progress value={agent.successRate} className="h-2 w-16" />
-                          <span className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                            {agent.successRate}%
-                          </span>
+                          <Progress value={agent.successRate || 0} className="h-2 w-16" />
+                          <span className="text-xs font-bold">{agent.successRate}%</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center gap-1">
-                          <Award className="h-3 w-3 text-yellow-500" />
-                          <span style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                            {agent.rating.toFixed(1)}
-                          </span>
+                        <div className="flex items-center gap-1 text-yellow-500">
+                          <Award className="h-3 w-3" />
+                          <span className="text-xs text-black">{agent.rating.toFixed(1)}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Badge
-                          style={{
-                            background: agent.status === 'active' ? '#dcfce7' : agent.status === 'inactive' ? '#fef3c7' : '#fee2e2',
-                            color: agent.status === 'active' ? '#166534' : agent.status === 'inactive' ? '#854d0e' : '#991b1b',
-                            fontFamily: 'Tajawal, sans-serif'
-                          }}
-                        >
-                          {agent.status === 'active' ? 'نشط' : agent.status === 'inactive' ? 'غير نشط' : 'موقوف'}
+                        <Badge className={agent.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                          {agent.status === 'active' ? 'نشط' : 'غير نشط'}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -942,51 +627,50 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
     );
   };
 
-  // ============================================================
-  // التاب 937-05: الكيانات
-  // ============================================================
-
+  // --- 937-05: الكيانات ---
   const renderTab05_Entities = () => {
-    const entities = mockAgents.filter(a => a.type === 'entity');
+    const entities = agents.filter(a => a.type === 'entity');
     const totalEntities = entities.length;
     const activeEntities = entities.filter(a => a.status === 'active').length;
-    const avgSuccessRate = entities.reduce((sum, a) => sum + a.successRate, 0) / totalEntities;
+    const avgSuccessRate = totalEntities > 0 
+      ? entities.reduce((sum, a) => sum + (a.successRate || 0), 0) / totalEntities 
+      : 0;
 
     return (
       <div className="space-y-4">
         {/* إحصائيات الكيانات */}
         <div className="grid grid-cols-4 gap-3">
-          <Card style={{ background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)', border: '2px solid #d8b4fe' }}>
+          <Card className="bg-purple-50 border-purple-200">
             <CardContent className="p-3 text-center">
               <Building2 className="h-5 w-5 mx-auto text-purple-600 mb-1" />
-              <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{totalEntities}</p>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي الكيانات</p>
+              <p className="text-lg font-bold font-tajawal">{totalEntities}</p>
+              <p className="text-xs text-gray-600 font-tajawal">إجمالي الكيانات</p>
             </CardContent>
           </Card>
 
-          <Card style={{ background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)', border: '2px solid #86efac' }}>
+          <Card className="bg-green-50 border-green-200">
             <CardContent className="p-3 text-center">
               <CheckCircle className="h-5 w-5 mx-auto text-green-600 mb-1" />
-              <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{activeEntities}</p>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>نشط</p>
+              <p className="text-lg font-bold font-tajawal">{activeEntities}</p>
+              <p className="text-xs text-gray-600 font-tajawal">نشط</p>
             </CardContent>
           </Card>
 
-          <Card style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '2px solid #fcd34d' }}>
+          <Card className="bg-yellow-50 border-yellow-200">
             <CardContent className="p-3 text-center">
               <TrendingUp className="h-5 w-5 mx-auto text-yellow-600 mb-1" />
-              <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{avgSuccessRate.toFixed(1)}%</p>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>متوسط النجاح</p>
+              <p className="text-lg font-bold font-tajawal">{avgSuccessRate.toFixed(1)}%</p>
+              <p className="text-xs text-gray-600 font-tajawal">متوسط النجاح</p>
             </CardContent>
           </Card>
 
-          <Card style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', border: '2px solid #93c5fd' }}>
+          <Card className="bg-blue-50 border-blue-200">
             <CardContent className="p-3 text-center">
               <FileText className="h-5 w-5 mx-auto text-blue-600 mb-1" />
-              <p className="text-lg font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                {entities.reduce((sum, a) => sum + a.totalTasks, 0)}
+              <p className="text-lg font-bold font-tajawal">
+                {entities.reduce((sum, a) => sum + (a.totalTasks || 0), 0)}
               </p>
-              <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>إجمالي المهام</p>
+              <p className="text-xs text-gray-600 font-tajawal">إجمالي المهام</p>
             </CardContent>
           </Card>
         </div>
@@ -994,78 +678,43 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
         {/* جدول الكيانات */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>الكيانات ({totalEntities})</CardTitle>
+            <CardTitle className="font-tajawal">الكيانات ({totalEntities})</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[550px]">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الرمز</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الاسم</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>السجل التجاري</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الجوال</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التخصص</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>نسبة النجاح</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التقييم</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
+                    <TableHead className="text-right font-tajawal">#</TableHead>
+                    <TableHead className="text-right font-tajawal">الاسم</TableHead>
+                    <TableHead className="text-right font-tajawal">السجل التجاري</TableHead>
+                    <TableHead className="text-right font-tajawal">الجوال</TableHead>
+                    <TableHead className="text-right font-tajawal">المهام</TableHead>
+                    <TableHead className="text-right font-tajawal">نسبة النجاح</TableHead>
+                    <TableHead className="text-right font-tajawal">التقييم</TableHead>
+                    <TableHead className="text-right font-tajawal">الحالة</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {entities.map((agent, index) => (
                     <TableRow key={agent.id}>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
+                      <TableCell className="text-right font-tajawal">{index + 1}</TableCell>
+                      <TableCell className="text-right font-tajawal font-medium">{agent.name}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{agent.commercialRegister || '-'}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{agent.phone}</TableCell>
+                      <TableCell className="text-right font-tajawal">{agent.totalTasks || 0}</TableCell>
                       <TableCell className="text-right">
-                        <code className="text-xs bg-purple-50 px-2 py-1 rounded">{agent.id}</code>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                        {agent.name}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <code className="text-xs">{agent.commercialRegister}</code>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Courier New', fontSize: '11px' }}>
-                        {agent.phone}
+                        <span className="font-bold text-green-600">{agent.successRate || 0}%</span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex flex-wrap gap-1">
-                          {agent.specialization.slice(0, 2).map((spec, i) => (
-                            <Badge key={i} variant="outline" style={{ fontSize: '9px', fontFamily: 'Tajawal, sans-serif' }}>
-                              {spec}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {agent.totalTasks}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center gap-2">
-                          <Progress value={agent.successRate} className="h-2 w-16" />
-                          <span className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                            {agent.successRate}%
-                          </span>
+                        <div className="flex items-center gap-1 text-yellow-500">
+                          <Award className="h-3 w-3" />
+                          <span className="text-xs text-black">{agent.rating.toFixed(1)}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center gap-1">
-                          <Award className="h-3 w-3 text-yellow-500" />
-                          <span style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                            {agent.rating.toFixed(1)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge
-                          style={{
-                            background: agent.status === 'active' ? '#dcfce7' : agent.status === 'inactive' ? '#fef3c7' : '#fee2e2',
-                            color: agent.status === 'active' ? '#166534' : agent.status === 'inactive' ? '#854d0e' : '#991b1b',
-                            fontFamily: 'Tajawal, sans-serif'
-                          }}
-                        >
-                          {agent.status === 'active' ? 'نشط' : agent.status === 'inactive' ? 'غير نشط' : 'موقوف'}
+                        <Badge className={agent.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                          {agent.status === 'active' ? 'نشط' : 'غير نشط'}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -1079,73 +728,49 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
     );
   };
 
-  // ============================================================
-  // التاب 937-06: إحصائيات الأداء
-  // ============================================================
-
+  // --- 937-06: إحصائيات الأداء ---
   const renderTab06_Performance = () => {
-    const topPerformers = [...mockAgents].sort((a, b) => b.successRate - a.successRate).slice(0, 10);
+    const topPerformers = [...agents].sort((a, b) => (b.successRate || 0) - (a.successRate || 0)).slice(0, 10);
     
     return (
       <div className="space-y-4">
-        {/* أفضل 10 معقبين */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>أفضل 10 معقبين (حسب نسبة النجاح)</CardTitle>
+            <CardTitle className="font-tajawal">أفضل 10 معقبين (حسب نسبة النجاح)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {topPerformers.map((agent, index) => (
-                <div key={agent.id} className="p-4 rounded-lg border-r-4" style={{ 
-                  background: index < 3 ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : '#f9fafb',
-                  borderColor: index === 0 ? '#f59e0b' : index === 1 ? '#d97706' : index === 2 ? '#b45309' : '#e5e7eb'
-                }}>
+                <div key={agent.id} className={`p-4 rounded-lg border-r-4 ${index < 3 ? 'bg-yellow-50 border-yellow-500' : 'bg-gray-50 border-gray-200'}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full" style={{
-                        background: index < 3 ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' : '#e5e7eb'
-                      }}>
-                        <span className="font-bold text-white" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                          {index + 1}
-                        </span>
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-full ${index < 3 ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                        <span className="font-bold font-tajawal">{index + 1}</span>
                       </div>
                       <div>
-                        <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{agent.name}</p>
-                        <div className="flex gap-2 mt-1">
-                          <Badge style={{ 
-                            background: agent.type === 'individual' ? '#e0e7ff' : '#f3e8ff',
-                            color: agent.type === 'individual' ? '#4338ca' : '#7c3aed',
-                            fontFamily: 'Tajawal, sans-serif'
-                          }}>
-                            {agent.type === 'individual' ? 'فرد' : 'كيان'}
-                          </Badge>
-                          <code className="text-xs bg-gray-100 px-2 py-1 rounded">{agent.id}</code>
-                        </div>
+                        <p className="font-bold font-tajawal">{agent.name}</p>
+                        <Badge variant="outline" className="mt-1">{agent.type === 'individual' ? 'فرد' : 'كيان'}</Badge>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-8">
-                      <div className="text-center">
-                        <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام</p>
-                        <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{agent.totalTasks}</p>
+                    <div className="flex items-center gap-8 text-center">
+                      <div>
+                        <p className="text-xs text-gray-600 font-tajawal">المهام</p>
+                        <p className="font-bold">{agent.totalTasks || 0}</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>الناجحة</p>
-                        <p className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>{agent.successfulTasks}</p>
+                      <div>
+                        <p className="text-xs text-gray-600 font-tajawal">الناجحة</p>
+                        <p className="font-bold text-green-600">{agent.successfulTasks || 0}</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>نسبة النجاح</p>
-                        <p className="text-xl font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                          {agent.successRate}%
-                        </p>
+                      <div>
+                        <p className="text-xs text-gray-600 font-tajawal">نسبة النجاح</p>
+                        <p className="text-xl font-bold text-green-600">{agent.successRate || 0}%</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>التقييم</p>
-                        <div className="flex items-center gap-1">
-                          <Award className="h-4 w-4 text-yellow-500" />
-                          <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                            {agent.rating.toFixed(1)}
-                          </p>
+                      <div>
+                        <p className="text-xs text-gray-600 font-tajawal">التقييم</p>
+                        <div className="flex items-center justify-center gap-1 text-yellow-500">
+                          <Award className="h-4 w-4" />
+                          <span className="font-bold text-black">{agent.rating.toFixed(1)}</span>
                         </div>
                       </div>
                     </div>
@@ -1155,90 +780,24 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-
-        {/* مخطط نسب النجاح */}
-        <div className="grid grid-cols-2 gap-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>توزيع نسب النجاح</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {[
-                  { range: '90-100%', count: mockAgents.filter(a => a.successRate >= 90).length, color: '#10b981' },
-                  { range: '80-89%', count: mockAgents.filter(a => a.successRate >= 80 && a.successRate < 90).length, color: '#3b82f6' },
-                  { range: '70-79%', count: mockAgents.filter(a => a.successRate >= 70 && a.successRate < 80).length, color: '#f59e0b' },
-                  { range: '60-69%', count: mockAgents.filter(a => a.successRate >= 60 && a.successRate < 70).length, color: '#ef4444' },
-                ].map((item, index) => (
-                  <div key={index}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '12px' }}>{item.range}</span>
-                      <span className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '12px' }}>
-                        {item.count} معقب
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="h-2 rounded-full" 
-                        style={{ 
-                          width: `${(item.count / mockAgents.length) * 100}%`,
-                          backgroundColor: item.color
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>متوسط وقت الإنجاز</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {[...mockAgents].sort((a, b) => a.averageCompletionTime - b.averageCompletionTime).slice(0, 5).map((agent, index) => (
-                  <div key={agent.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <div>
-                      <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '12px' }}>
-                        {agent.name}
-                      </p>
-                      <code className="text-xs">{agent.id}</code>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-blue-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {agent.averageCompletionTime}
-                      </p>
-                      <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>يوم</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     );
   };
 
-  // ============================================================
-  // التاب 937-07: المعاملات النشطة
-  // ============================================================
-
+  // --- 937-07: المعاملات النشطة ---
   const renderTab07_ActiveTransactions = () => {
-    const activeAgents = mockAgents.filter(a => a.activeTransactions > 0);
+    const activeAgents = agents.filter(a => (a.activeTransactions || 0) > 0);
     
     return (
       <div className="space-y-4">
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                المعقبون مع المعاملات النشطة ({activeAgents.length})
+              <CardTitle className="font-tajawal">
+                المعقبون مع مهام نشطة ({activeAgents.length})
               </CardTitle>
-              <Badge style={{ background: '#dbeafe', color: '#1e40af', fontFamily: 'Tajawal, sans-serif' }}>
-                {activeAgents.reduce((sum, a) => sum + a.activeTransactions, 0)} معاملة نشطة
+              <Badge className="bg-blue-100 text-blue-800 font-tajawal">
+                {activeAgents.reduce((sum, a) => sum + (a.activeTransactions || 0), 0)} مهمة جارية
               </Badge>
             </div>
           </CardHeader>
@@ -1246,69 +805,40 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
             <ScrollArea className="h-[600px]">
               <div className="space-y-3">
                 {activeAgents.map(agent => (
-                  <Card key={agent.id} className="border-r-4" style={{ borderColor: '#3b82f6' }}>
+                  <Card key={agent.id} className="border-r-4 border-blue-500">
                     <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          {agent.type === 'individual' ? (
-                            <User className="h-5 w-5 text-indigo-600" />
-                          ) : (
-                            <Building2 className="h-5 w-5 text-purple-600" />
-                          )}
+                          {agent.type === 'individual' ? <User className="h-5 w-5 text-indigo-600" /> : <Building2 className="h-5 w-5 text-purple-600" />}
                           <div>
-                            <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{agent.name}</p>
-                            <code className="text-xs">{agent.id}</code>
+                            <p className="font-bold font-tajawal">{agent.name}</p>
+                            <p className="text-xs text-gray-500 font-mono">{agent.phone}</p>
                           </div>
                         </div>
                         
-                        <div className="flex items-center gap-4">
-                          <div className="text-center">
-                            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>نشطة</p>
-                            <p className="text-xl font-bold text-blue-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                              {agent.activeTransactions}
-                            </p>
+                        <div className="flex items-center gap-6 text-center">
+                          <div>
+                            <p className="text-xs text-gray-600 font-tajawal">نشطة</p>
+                            <p className="text-xl font-bold text-blue-600">{agent.activeTransactions}</p>
                           </div>
-                          <div className="text-center">
-                            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>مكتملة</p>
-                            <p className="text-xl font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                              {agent.completedTransactions}
-                            </p>
+                          <div>
+                            <p className="text-xs text-gray-600 font-tajawal">مكتملة</p>
+                            <p className="text-xl font-bold text-green-600">{agent.completedTransactions || 0}</p>
                           </div>
-                          <div className="text-center">
-                            <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>الإجمالي</p>
-                            <p className="text-xl font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                              {agent.totalTransactions}
-                            </p>
+                          <div>
+                            <p className="text-xs text-gray-600 font-tajawal">نسبة النجاح</p>
+                            <p className="text-xl font-bold text-green-600">{agent.successRate || 0}%</p>
                           </div>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-blue-50 p-2 rounded text-center">
-                          <p className="text-xs text-gray-600">نسبة النجاح</p>
-                          <p className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                            {agent.successRate}%
-                          </p>
-                        </div>
-                        <div className="bg-green-50 p-2 rounded text-center">
-                          <p className="text-xs text-gray-600">التقييم</p>
-                          <div className="flex items-center justify-center gap-1">
-                            <Award className="h-3 w-3 text-yellow-500" />
-                            <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                              {agent.rating.toFixed(1)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="bg-purple-50 p-2 rounded text-center">
-                          <p className="text-xs text-gray-600">متوسط الإنجاز</p>
-                          <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                            {agent.averageCompletionTime} يوم
-                          </p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 ))}
+                {activeAgents.length === 0 && (
+                  <div className="text-center py-10 text-gray-500 font-tajawal">
+                    لا يوجد معقبون لديهم مهام نشطة حالياً
+                  </div>
+                )}
               </div>
             </ScrollArea>
           </CardContent>
@@ -1317,225 +847,132 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
     );
   };
 
-  // ============================================================
-  // التاب 937-08: سجل المهام
-  // ============================================================
-
+  // --- 937-08: سجل المهام ---
   const renderTab08_TasksLog = () => (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>
-            سجل جميع المهام ({mockTasks.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-[600px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>رقم المهمة</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعقب</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعاملة</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الجهة</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهمة</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المحاولات</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
-                  <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>النتيجة</TableHead>
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-tajawal">سجل جميع المهام ({tasks.length})</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-[600px]">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-right font-tajawal">رقم المهمة</TableHead>
+                <TableHead className="text-right font-tajawal">المعقب</TableHead>
+                <TableHead className="text-right font-tajawal">المعاملة</TableHead>
+                <TableHead className="text-right font-tajawal">الجهة</TableHead>
+                <TableHead className="text-right font-tajawal">الحالة</TableHead>
+                <TableHead className="text-right font-tajawal">النتيجة</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tasks.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell className="text-right font-mono text-xs">{task.id.slice(-6)}</TableCell>
+                  <TableCell className="text-right font-tajawal text-xs">{task.agentName}</TableCell>
+                  <TableCell className="text-right font-tajawal text-xs">{task.transactionTitle || task.transactionId}</TableCell>
+                  <TableCell className="text-right font-tajawal text-xs">{task.governmentEntity}</TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant="outline" className="font-tajawal text-xs">
+                      {task.status === 'completed' ? 'مكتمل' : 
+                       task.status === 'in-progress' ? 'جاري' : 
+                       task.status === 'failed' ? 'فشل' : 'معلق'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {task.successStatus === 'success' ? <CheckCircle className="h-4 w-4 text-green-500" /> : 
+                     task.successStatus === 'failed' ? <XCircle className="h-4 w-4 text-red-500" /> : 
+                     <Clock className="h-4 w-4 text-yellow-500" />}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockTasks.map((task, index) => (
-                  <TableRow key={task.id}>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
-                    <TableCell className="text-right">
-                      <code className="text-xs bg-gray-100 px-2 py-1 rounded">{task.id}</code>
-                    </TableCell>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                      {task.agentName}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <code className="text-xs">{task.transactionId}</code>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="outline" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '9px' }}>
-                        {task.governmentEntity}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '10px' }}>
-                      {task.taskDescription}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="outline">{task.attempts}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge
-                        style={{
-                          background: 
-                            task.status === 'completed' ? '#dcfce7' :
-                            task.status === 'in-progress' ? '#dbeafe' :
-                            task.status === 'failed' ? '#fee2e2' : '#fef3c7',
-                          color: 
-                            task.status === 'completed' ? '#166534' :
-                            task.status === 'in-progress' ? '#1e40af' :
-                            task.status === 'failed' ? '#991b1b' : '#854d0e',
-                          fontFamily: 'Tajawal, sans-serif',
-                          fontSize: '9px'
-                        }}
-                      >
-                        {task.status === 'completed' ? 'مكتمل' :
-                         task.status === 'in-progress' ? 'جاري' :
-                         task.status === 'failed' ? 'فشل' : 'معلق'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {task.successStatus === 'success' ? (
-                        <CheckCircle className="h-4 w-4 text-green-600 mx-auto" />
-                      ) : task.successStatus === 'failed' ? (
-                        <XCircle className="h-4 w-4 text-red-600 mx-auto" />
-                      ) : (
-                        <Clock className="h-4 w-4 text-yellow-600 mx-auto" />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-    </div>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 
-  // ============================================================
-  // التاب 937-09: الجهات الحكومية
-  // ============================================================
-
+  // --- 937-09: الجهات الحكومية ---
   const renderTab09_GovernmentEntities = () => {
-    // تجميع المهام حسب الجهة
+    // تجميع المهام حسب الجهة (Client-side grouping)
     const tasksByEntity: Record<string, FollowUpTask[]> = {};
-    mockTasks.forEach(task => {
-      if (!tasksByEntity[task.governmentEntity]) {
-        tasksByEntity[task.governmentEntity] = [];
+    tasks.forEach(task => {
+      const entity = task.governmentEntity || 'غير محدد';
+      if (!tasksByEntity[entity]) {
+        tasksByEntity[entity] = [];
       }
-      tasksByEntity[task.governmentEntity].push(task);
+      tasksByEntity[entity].push(task);
     });
 
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
-          {Object.entries(tasksByEntity).map(([entity, tasks]) => {
-            const successfulTasks = tasks.filter(t => t.successStatus === 'success').length;
-            const successRate = tasks.length > 0 ? (successfulTasks / tasks.length) * 100 : 0;
-            const uniqueAgents = new Set(tasks.map(t => t.agentId)).size;
+          {Object.entries(tasksByEntity).map(([entity, entityTasks]) => {
+            const successfulCount = entityTasks.filter(t => t.successStatus === 'success').length;
+            const successRate = entityTasks.length > 0 ? (successfulCount / entityTasks.length) * 100 : 0;
+            const uniqueAgents = new Set(entityTasks.map(t => t.agentId)).size;
 
             return (
-              <Card key={entity} className="border-r-4" style={{ borderColor: '#2563eb' }}>
+              <Card key={entity} className="border-r-4 border-blue-500">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <MapPin className="h-5 w-5 text-blue-600" />
-                    <h3 className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{entity}</h3>
+                    <h3 className="font-bold font-tajawal">{entity}</h3>
                   </div>
                   
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        إجمالي المهام
-                      </span>
-                      <span className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {tasks.length}
-                      </span>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">إجمالي المهام</span>
+                      <span className="font-bold">{entityTasks.length}</span>
                     </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        المعقبون
-                      </span>
-                      <span className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {uniqueAgents}
-                      </span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">عدد المعقبين</span>
+                      <span className="font-bold">{uniqueAgents}</span>
                     </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        نسبة النجاح
-                      </span>
-                      <span className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {successRate.toFixed(1)}%
-                      </span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">نسبة الإنجاز</span>
+                      <span className="font-bold text-green-600">{successRate.toFixed(1)}%</span>
                     </div>
-                    
-                    <Progress value={successRate} className="h-2" />
+                    <Progress value={successRate} className="h-2 mt-2" />
                   </div>
                 </CardContent>
               </Card>
             );
           })}
+          {Object.keys(tasksByEntity).length === 0 && (
+            <div className="col-span-3 text-center py-10 text-gray-500 font-tajawal">
+              لا توجد بيانات متاحة للجهات الحكومية
+            </div>
+          )}
         </div>
       </div>
     );
   };
 
-  // ============================================================
-  // التاب 937-10: التقارير
-  // ============================================================
-
+  // --- 937-10: التقارير ---
   const renderTab10_Reports = () => (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
         {[
-          { 
-            title: 'تقرير شامل بجميع المعقبين',
-            description: 'تقرير مفصل يحتوي على جميع بيانات المعقبين وإحصائياتهم',
-            icon: FileText,
-            color: '#2563eb'
-          },
-          { 
-            title: 'تقرير الأداء الشهري',
-            description: 'تقرير يوضح أداء المعقبين خلال الشهر الحالي',
-            icon: Activity,
-            color: '#10b981'
-          },
-          { 
-            title: 'تقرير المهام المكتملة',
-            description: 'تقرير بجميع المهام التي تم إنجازها بنجاح',
-            icon: CheckCircle,
-            color: '#f59e0b'
-          },
-          { 
-            title: 'تقرير الجهات الحكومية',
-            description: 'تقرير يوضح التعامل مع كل جهة حكومية',
-            icon: MapPin,
-            color: '#8b5cf6'
-          },
-          { 
-            title: 'تقرير المعقبين الأفراد',
-            description: 'تقرير خاص بالمعقبين الأفراد فقط',
-            icon: User,
-            color: '#ec4899'
-          },
-          { 
-            title: 'تقرير الكيانات',
-            description: 'تقرير خاص بالكيانات (المؤسسات والشركات)',
-            icon: Building2,
-            color: '#06b6d4'
-          }
+          { title: 'تقرير شامل', desc: 'جميع بيانات المعقبين وإحصائياتهم', icon: FileText, color: 'blue' },
+          { title: 'الأداء الشهري', desc: 'أداء المعقبين خلال الشهر الحالي', icon: Activity, color: 'green' },
+          { title: 'المهام المكتملة', desc: 'سجل المهام التي تم إنجازها بنجاح', icon: CheckCircle, color: 'yellow' },
+          { title: 'الجهات الحكومية', desc: 'تحليل التعامل مع الجهات', icon: MapPin, color: 'purple' },
+          { title: 'المعقبين الأفراد', desc: 'تقرير خاص بالأفراد فقط', icon: User, color: 'pink' },
+          { title: 'الكيانات', desc: 'تقرير خاص بالمؤسسات والشركات', icon: Building2, color: 'cyan' }
         ].map((report, index) => (
-          <Card key={index} className="cursor-pointer hover:shadow-lg transition-all">
+          <Card key={index} className="hover:shadow-lg transition-all cursor-pointer">
             <CardContent className="p-6">
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-3 rounded-lg" style={{ background: `${report.color}20` }}>
-                  <report.icon className="h-6 w-6" style={{ color: report.color }} />
+                <div className={`p-3 rounded-lg bg-${report.color}-50`}>
+                  <report.icon className={`h-6 w-6 text-${report.color}-600`} />
                 </div>
-                <h3 className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  {report.title}
-                </h3>
+                <h3 className="font-bold font-tajawal">{report.title}</h3>
               </div>
-              <p className="text-sm text-gray-600 mb-4" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                {report.description}
-              </p>
-              <Button className="w-full" style={{ background: report.color }}>
+              <p className="text-sm text-gray-600 mb-4 font-tajawal">{report.desc}</p>
+              <Button className={`w-full bg-${report.color}-600 hover:bg-${report.color}-700`}>
                 <Download className="h-4 w-4 ml-2" />
                 تحميل التقرير
               </Button>
@@ -1546,99 +983,69 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
     </div>
   );
 
-  // ============================================================
-  // التاب 937-11: التقييمات
-  // ============================================================
-
+  // --- 937-11: التقييمات ---
   const renderTab11_Ratings = () => {
     const ratingGroups = {
-      '5': mockAgents.filter(a => a.rating >= 4.5).length,
-      '4': mockAgents.filter(a => a.rating >= 3.5 && a.rating < 4.5).length,
-      '3': mockAgents.filter(a => a.rating >= 2.5 && a.rating < 3.5).length,
-      '2': mockAgents.filter(a => a.rating >= 1.5 && a.rating < 2.5).length,
-      '1': mockAgents.filter(a => a.rating < 1.5).length,
+      '5': agents.filter(a => a.rating >= 4.5).length,
+      '4': agents.filter(a => a.rating >= 3.5 && a.rating < 4.5).length,
+      '3': agents.filter(a => a.rating >= 2.5 && a.rating < 3.5).length,
+      '2': agents.filter(a => a.rating >= 1.5 && a.rating < 2.5).length,
+      '1': agents.filter(a => a.rating < 1.5).length,
     };
 
     return (
       <div className="space-y-4">
-        {/* توزيع التقييمات */}
         <div className="grid grid-cols-5 gap-3">
-          {Object.entries(ratingGroups).map(([stars, count]) => (
-            <Card key={stars} style={{ 
-              background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-              border: '2px solid #fcd34d'
-            }}>
+          {Object.entries(ratingGroups).reverse().map(([stars, count]) => (
+            <Card key={stars} className="bg-yellow-50 border-yellow-200">
               <CardContent className="p-4 text-center">
                 <div className="flex items-center justify-center gap-1 mb-2">
                   {Array.from({ length: parseInt(stars) }).map((_, i) => (
                     <Award key={i} className="h-4 w-4 text-yellow-500" />
                   ))}
                 </div>
-                <p className="text-2xl font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{count}</p>
-                <p className="text-xs text-gray-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>معقب</p>
+                <p className="text-2xl font-bold font-tajawal">{count}</p>
+                <p className="text-xs text-gray-600 font-tajawal">معقب</p>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        {/* جدول المعقبين حسب التقييم */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>المعقبون مرتبون حسب التقييم</CardTitle>
+            <CardTitle className="font-tajawal">المعقبون مرتبون حسب التقييم</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[500px]">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>#</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الرمز</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الاسم</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>النوع</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>التقييم</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهام</TableHead>
-                    <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>نسبة النجاح</TableHead>
+                    <TableHead className="text-right font-tajawal">#</TableHead>
+                    <TableHead className="text-right font-tajawal">الاسم</TableHead>
+                    <TableHead className="text-right font-tajawal">النوع</TableHead>
+                    <TableHead className="text-right font-tajawal">التقييم</TableHead>
+                    <TableHead className="text-right font-tajawal">المهام</TableHead>
+                    <TableHead className="text-right font-tajawal">نسبة النجاح</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[...mockAgents].sort((a, b) => b.rating - a.rating).map((agent, index) => (
+                  {[...agents].sort((a, b) => b.rating - a.rating).map((agent, index) => (
                     <TableRow key={agent.id}>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>{index + 1}</TableCell>
+                      <TableCell className="text-right font-tajawal">{index + 1}</TableCell>
+                      <TableCell className="text-right font-tajawal font-medium">{agent.name}</TableCell>
                       <TableCell className="text-right">
-                        <code className="text-xs bg-gray-100 px-2 py-1 rounded">{agent.id}</code>
-                      </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                        {agent.name}
+                        <Badge variant="outline">{agent.type === 'individual' ? 'فرد' : 'كيان'}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Badge
-                          style={{
-                            background: agent.type === 'individual' ? '#e0e7ff' : '#f3e8ff',
-                            color: agent.type === 'individual' ? '#4338ca' : '#7c3aed',
-                            fontFamily: 'Tajawal, sans-serif'
-                          }}
-                        >
-                          {agent.type === 'individual' ? 'فرد' : 'كيان'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 text-yellow-500">
                           {Array.from({ length: Math.round(agent.rating) }).map((_, i) => (
-                            <Award key={i} className="h-3 w-3 text-yellow-500" />
+                            <Award key={i} className="h-3 w-3" />
                           ))}
-                          <span className="font-bold mr-1" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                            {agent.rating.toFixed(1)}
-                          </span>
+                          <span className="text-xs text-black font-bold mr-1">{agent.rating.toFixed(1)}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                        {agent.totalTasks}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                          {agent.successRate}%
-                        </span>
-                      </TableCell>
+                      <TableCell className="text-right font-tajawal">{agent.totalTasks || 0}</TableCell>
+                      <TableCell className="text-right font-bold text-green-600">{agent.successRate || 0}%</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1650,111 +1057,58 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
     );
   };
 
-  // ============================================================
-  // التاب 937-12: الإعدادات
-  // ============================================================
-
+  // --- 937-12: الإعدادات ---
   const renderTab12_Settings = () => (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        {/* إعدادات عامة */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>إعدادات عامة</CardTitle>
+            <CardTitle className="font-tajawal">إعدادات عامة</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <EnhancedSwitch
               id="auto-assign"
+              label="التعيين التلقائي للمعقبين"
+              description="تعيين المهام تلقائياً بناءً على التخصص"
               checked={true}
               onCheckedChange={() => {}}
-              label="التعيين التلقائي للمعقبين"
-              description="تعيين تلقائي للمعقبين حسب التخصص"
-              variant="default"
             />
             <EnhancedSwitch
               id="notifications"
+              label="إشعارات المهام"
+              description="تنبيه المعقبين عند إسناد مهام جديدة"
               checked={true}
               onCheckedChange={() => {}}
-              label="إشعارات المهام"
-              description="إرسال إشعارات عند إسناد مهام جديدة"
-              variant="success"
             />
             <EnhancedSwitch
               id="rating-system"
+              label="التقييم التلقائي"
+              description="حساب التقييم بناءً على سرعة ونجاح المهام"
               checked={true}
               onCheckedChange={() => {}}
-              label="نظام التقييم التلقائي"
-              description="تقييم تلقائي حسب الأداء"
-              variant="warning"
             />
           </CardContent>
         </Card>
 
-        {/* إعدادات الأداء */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>إعدادات الأداء</CardTitle>
+            <CardTitle className="font-tajawal">إعدادات الأداء</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <div>
-              <label className="text-sm font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                الحد الأدنى لنسبة النجاح (%)
-              </label>
-              <InputWithCopy
-                id="min-success"
-                value="60"
-                onChange={() => {}}
-                placeholder="60"
-                copyable={false}
-                clearable={false}
-              />
+              <label className="text-sm font-bold mb-1 block font-tajawal">الحد الأدنى لنسبة النجاح (%)</label>
+              <InputWithCopy value="60" readOnly />
             </div>
             <div>
-              <label className="text-sm font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                الحد الأقصى للمهام المتزامنة
-              </label>
-              <InputWithCopy
-                id="max-tasks"
-                value="10"
-                onChange={() => {}}
-                placeholder="10"
-                copyable={false}
-                clearable={false}
-              />
+              <label className="text-sm font-bold mb-1 block font-tajawal">الحد الأقصى للمهام المتزامنة</label>
+              <InputWithCopy value="10" readOnly />
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* الصلاحيات */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>الصلاحيات والأدوار</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { name: 'إضافة معقبين', enabled: true },
-              { name: 'تعديل معقبين', enabled: true },
-              { name: 'حذف معقبين', enabled: false },
-              { name: 'عرض التقارير', enabled: true },
-              { name: 'تصدير البيانات', enabled: true },
-              { name: 'إدارة التقييمات', enabled: true },
-            ].map((permission, index) => (
-              <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                <input type="checkbox" defaultChecked={permission.enabled} className="w-4 h-4" />
-                <span style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '12px' }}>
-                  {permission.name}
-                </span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* أزرار الإجراءات */}
-      <div className="flex gap-3 justify-end">
-        <Button variant="outline">إلغاء التغييرات</Button>
+      
+      <div className="flex justify-end gap-2">
+        <Button variant="outline">إلغاء</Button>
         <Button>
           <Settings className="h-4 w-4 ml-2" />
           حفظ الإعدادات
@@ -1763,250 +1117,108 @@ const FollowUpAgents_Complete_937_v1: React.FC = () => {
     </div>
   );
 
-  // ============================================================
-  // نافذة التفاصيل
-  // ============================================================
-
-  const renderDetailsDialog = () => {
-    if (!selectedAgent) return null;
-
-    const agentTasks = mockTasks.filter(t => t.agentId === selectedAgent.id);
-
-    return (
-      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-          <DialogHeader>
-            <DialogTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>تفاصيل المعقب</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* معلومات أساسية */}
-            <div className="grid grid-cols-4 gap-4">
-              <div className="bg-blue-50 p-3 rounded">
-                <p className="text-xs text-gray-600">الرمز</p>
-                <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedAgent.id}</p>
-              </div>
-              <div className="bg-green-50 p-3 rounded">
-                <p className="text-xs text-gray-600">الاسم</p>
-                <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>{selectedAgent.name}</p>
-              </div>
-              <div className="bg-purple-50 p-3 rounded">
-                <p className="text-xs text-gray-600">نسبة النجاح</p>
-                <p className="font-bold text-green-600" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  {selectedAgent.successRate}%
-                </p>
-              </div>
-              <div className="bg-yellow-50 p-3 rounded">
-                <p className="text-xs text-gray-600">التقييم</p>
-                <div className="flex items-center gap-1">
-                  <Award className="h-4 w-4 text-yellow-500" />
-                  <p className="font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                    {selectedAgent.rating.toFixed(1)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* جدول المهام */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  سجل المهام ({agentTasks.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[400px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المعاملة</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الجهة</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المهمة</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>المحاولات</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>الحالة</TableHead>
-                        <TableHead className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>النتيجة</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {agentTasks.map(task => (
-                        <TableRow key={task.id}>
-                          <TableCell className="text-right">
-                            <code className="text-xs">{task.transactionId}</code>
-                          </TableCell>
-                          <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                            {task.governmentEntity}
-                          </TableCell>
-                          <TableCell className="text-right" style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '11px' }}>
-                            {task.taskDescription}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant="outline">{task.attempts}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge
-                              style={{
-                                background: 
-                                  task.status === 'completed' ? '#dcfce7' :
-                                  task.status === 'in-progress' ? '#dbeafe' :
-                                  task.status === 'failed' ? '#fee2e2' : '#fef3c7',
-                                color: 
-                                  task.status === 'completed' ? '#166534' :
-                                  task.status === 'in-progress' ? '#1e40af' :
-                                  task.status === 'failed' ? '#991b1b' : '#854d0e',
-                                fontFamily: 'Tajawal, sans-serif'
-                              }}
-                            >
-                              {task.status === 'completed' ? 'مكتمل' :
-                               task.status === 'in-progress' ? 'جاري' :
-                               task.status === 'failed' ? 'فشل' : 'معلق'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {task.successStatus === 'success' ? (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            ) : task.successStatus === 'failed' ? (
-                              <XCircle className="h-4 w-4 text-red-600" />
-                            ) : (
-                              <Clock className="h-4 w-4 text-yellow-600" />
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case '937-01': return renderTab01_Overview();
+      case '937-02': return renderTab02_AddAgent();
+      case '937-03': return renderTab03_AllAgents();
+      case '937-04': return renderTab04_Individuals(); // ✅ جديد
+      case '937-05': return renderTab05_Entities();    // ✅ جديد
+      case '937-06': return renderTab06_Performance(); // ✅ جديد
+      case '937-07': return renderTab07_ActiveTransactions(); // ✅ جديد
+      case '937-08': return renderTab08_TasksLog();
+      case '937-09': return renderTab09_GovernmentEntities(); // ✅ جديد
+      case '937-10': return renderTab10_Reports();     // ✅ جديد
+      case '937-11': return renderTab11_Ratings();     // ✅ جديد
+      case '937-12': return renderTab12_Settings();    // ✅ جديد
+      default: return <div className="p-8 text-center text-gray-500">هذا القسم قيد التطوير</div>;
+    }
   };
 
   // ============================================================
-  // الواجهة الرئيسية
+  // 5. نوافذ التفاصيل (Dialogs)
   // ============================================================
 
   return (
-    <div className="flex flex-col h-full" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-      {/* هيدر الشاشة */}
-      <div
-        style={{
-          position: 'sticky',
-          top: '0',
-          zIndex: 10,
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-          borderBottom: '3px solid transparent',
-          borderImage: 'linear-gradient(90deg, #2563eb 0%, #7c3aed 50%, #2563eb 100%) 1',
-          padding: '0',
-          marginBottom: '0',
-          marginTop: '0',
-          boxShadow: '0 4px 16px rgba(37, 99, 235, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06)'
-        }}
-      >
-        <div
-          className="flex items-center justify-between"
-          style={{
-            padding: '14px 20px',
-            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.03) 0%, rgba(124, 58, 237, 0.02) 100%)'
-          }}
-        >
-          <div className="flex items-center gap-4">
-            <div
-              style={{
-                padding: '10px',
-                background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
-                borderRadius: '12px',
-                boxShadow: '0 2px 8px rgba(99, 102, 241, 0.15)',
-                border: '2px solid rgba(99, 102, 241, 0.2)'
-              }}
-            >
-              <Users className="h-6 w-6" style={{ color: '#6366f1', filter: 'drop-shadow(0 1px 2px rgba(99, 102, 241, 0.3))' }} />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-3">
-                <h1
-                  style={{
-                    fontFamily: 'Tajawal, sans-serif',
-                    fontWeight: 700,
-                    fontSize: '20px',
-                    margin: 0,
-                    background: 'linear-gradient(135deg, #1e40af 0%, #6366f1 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    letterSpacing: '-0.02em'
-                  }}
-                >
-                  إدارة المعقبين
-                </h1>
-
-                <div
-                  style={{
-                    padding: '4px 12px',
-                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)'
-                  }}
-                >
-                  <span className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff', letterSpacing: '0.05em' }}>
-                    937
-                  </span>
-                </div>
-              </div>
-
-              <p
-                style={{
-                  fontFamily: 'Tajawal, sans-serif',
-                  fontSize: '13px',
-                  color: '#64748b',
-                  margin: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <span
-                  style={{
-                    width: '4px',
-                    height: '4px',
-                    borderRadius: '50%',
-                    background: '#94a3b8',
-                    display: 'inline-block'
-                  }}
-                ></span>
-                نظام شامل لإدارة المعقبين (أفراد وكيانات) مع إحصائيات دقيقة
-              </p>
-            </div>
+    <div className="flex flex-col h-full bg-gray-50/50" style={{ direction: 'rtl' }}>
+      {/* الهيدر */}
+      <div className="bg-white border-b sticky top-0 z-10 px-6 py-4 flex justify-between items-center shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-blue-100 rounded-lg">
+            <Users className="h-6 w-6 text-blue-600" />
           </div>
-
-          <div className="flex items-center gap-3">
-            <div
-              style={{
-                padding: '6px 14px',
-                background: 'rgba(99, 102, 241, 0.08)',
-                borderRadius: '8px',
-                border: '1px solid rgba(99, 102, 241, 0.15)'
-              }}
-            >
-              <span style={{ fontFamily: 'Tajawal, sans-serif', fontSize: '12px', color: '#475569', fontWeight: 600 }}>
-                12 تبويبات
-              </span>
-            </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-800 font-tajawal">إدارة المعقبين</h1>
+            <p className="text-sm text-gray-500 font-tajawal">نظام شامل لمتابعة وتقييم أداء المعقبين</p>
           </div>
+        </div>
+        <div className="px-3 py-1 bg-blue-50 border border-blue-200 rounded-full text-blue-700 text-sm font-bold font-mono">
+          937
         </div>
       </div>
 
-      {/* المحتوى الرئيسي */}
-      <div className="flex flex-1 overflow-hidden" style={{ gap: '4px', paddingTop: '16px' }}>
+      {/* المحتوى */}
+      <div className="flex flex-1 overflow-hidden p-4 gap-4">
         <UnifiedTabsSidebar tabs={TABS_CONFIG} activeTab={activeTab} onTabChange={setActiveTab} />
-
-        <div className="flex-1 overflow-auto px-6">{renderTabContent()}</div>
+        <div className="flex-1 overflow-y-auto">
+          {renderTabContent()}
+        </div>
       </div>
 
-      {/* النوافذ المنبثقة */}
-      {renderDetailsDialog()}
+      {/* نافذة التفاصيل */}
+      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+        <DialogContent className="max-w-3xl font-tajawal">
+          <DialogHeader>
+            <DialogTitle>تفاصيل المعقب</DialogTitle>
+            <DialogDescription>عرض المعلومات التفصيلية للمعقب</DialogDescription>
+          </DialogHeader>
+          
+          {selectedAgent && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-xs text-gray-500">الاسم</p>
+                  <p className="font-bold">{selectedAgent.name}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-xs text-gray-500">النوع</p>
+                  <p className="font-bold">{selectedAgent.type === 'individual' ? 'فرد' : 'كيان'}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-xs text-gray-500">الجوال</p>
+                  <p className="font-bold font-mono">{selectedAgent.phone}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-xs text-gray-500">البريد</p>
+                  <p className="font-bold font-mono">{selectedAgent.email || '-'}</p>
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-sm font-bold mb-2">التخصصات</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedAgent.specialization?.map((spec, idx) => (
+                    <Badge key={idx} variant="secondary">{spec}</Badge>
+                  )) || <p className="text-sm text-gray-400">لا يوجد تخصصات محددة</p>}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-bold mb-2">الجهات الحكومية</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedAgent.governmentEntities?.map((entity, idx) => (
+                    <Badge key={idx} variant="outline">{entity}</Badge>
+                  )) || <p className="text-sm text-gray-400">لا يوجد جهات محددة</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>إغلاق</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
